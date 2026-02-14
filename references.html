@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>디자인 레퍼런스 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/neodgm/neodgm-webfont@1.532/neodgm/neodgm-woff2.css">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'NeoDunggeunmo', 'Courier New', monospace;
+      background-color: #e8f4fd;
+      color: #333;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      padding: 20px;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    a { color: #4a8aad; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .container {
+      width: 100%;
+      max-width: 900px;
+      background-color: #fff;
+      border: 2px solid #b8d4e3;
+      box-shadow: 4px 4px 0px rgba(0,0,0,0.08);
+    }
+
+    /* ── 배너 ── */
+    .banner {
+      width: 100%;
+      height: 100px;
+      background: linear-gradient(135deg, #d4eaf7 0%, #a8cce0 50%, #c4e0f0 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      border-bottom: 2px solid #b8d4e3;
+    }
+
+    .banner-title {
+      font-size: 22px;
+      color: #4a7a99;
+      text-shadow: 2px 2px 0px rgba(255,255,255,0.6);
+    }
+
+    .banner-subtitle {
+      font-size: 12px;
+      color: #6a9ab8;
+      margin-top: 3px;
+    }
+
+    /* ── 탭 ── */
+    .tabs {
+      display: flex;
+      background: #c4e0f0;
+      border-bottom: 2px solid #b8d4e3;
+    }
+
+    .tab {
+      flex: 1;
+      text-align: center;
+      padding: 10px;
+      cursor: pointer;
+      border: none;
+      border-right: 1px solid #b8d4e3;
+      background: transparent;
+      font-family: 'NeoDunggeunmo', monospace;
+      font-size: 14px;
+      color: #333;
+      transition: background 0.15s;
+    }
+
+    .tab:last-child { border-right: none; }
+    .tab:hover { background: #a8d0e8; }
+    .tab.active { background: #8bbdd4; font-weight: bold; }
+
+    /* ── 콘텐츠 ── */
+    .content { padding: 20px; }
+
+    .section { display: none; }
+    .section.active { display: block; }
+
+    .section-intro {
+      padding: 12px 15px;
+      margin-bottom: 20px;
+      background: #f0f8ff;
+      border: 1px dashed #b8d4e3;
+      font-size: 13px;
+      line-height: 1.8;
+    }
+
+    .section-intro strong { color: #2a6a8a; }
+
+    .section-title {
+      font-size: 18px;
+      margin-bottom: 15px;
+      padding-bottom: 8px;
+      border-bottom: 1px dashed #b8d4e3;
+    }
+
+    /* ── 카드 ── */
+    .card {
+      border: 2px solid #b8d4e3;
+      margin-bottom: 20px;
+      background: #fff;
+    }
+
+    .card-header {
+      background: #c4e0f0;
+      padding: 8px 12px;
+      border-bottom: 1px solid #b8d4e3;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .card-num {
+      background: #8bbdd4;
+      color: #fff;
+      padding: 1px 8px;
+      font-size: 11px;
+      font-weight: bold;
+    }
+
+    .card-name {
+      font-size: 15px;
+      font-weight: bold;
+      color: #2a6a8a;
+    }
+
+    .card-body { padding: 15px; }
+
+    .card-url {
+      display: inline-block;
+      font-size: 12px;
+      color: #4a8aad;
+      margin-bottom: 10px;
+      padding: 2px 8px;
+      background: #f0f8ff;
+      border: 1px solid #b8d4e3;
+    }
+
+    .card-desc {
+      font-size: 13px;
+      line-height: 1.8;
+      margin-bottom: 12px;
+    }
+
+    .card-desc strong { color: #2a6a8a; }
+
+    .card-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-bottom: 10px;
+    }
+
+    .tag {
+      font-size: 11px;
+      padding: 2px 8px;
+      background: #c4e0f0;
+      border: 1px solid #b8d4e3;
+      color: #4a7a99;
+    }
+
+    /* 코지 테마 태그 */
+    .cozy-section .tag {
+      background: #fdf2e9;
+      border-color: #edcbb0;
+      color: #5d4037;
+    }
+
+    .cozy-section .card-header {
+      background: #fdf2e9;
+      border-color: #edcbb0;
+    }
+
+    .cozy-section .card {
+      border-color: #edcbb0;
+    }
+
+    .cozy-section .card-num {
+      background: #d4a07a;
+    }
+
+    .cozy-section .card-name {
+      color: #5d4037;
+    }
+
+    .cozy-section .card-url {
+      background: #fef9f4;
+      border-color: #edcbb0;
+      color: #e17055;
+    }
+
+    .cozy-section .card-desc strong {
+      color: #c0392b;
+    }
+
+    .color-row {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      margin-bottom: 10px;
+    }
+
+    .color-label {
+      font-size: 11px;
+      color: #888;
+    }
+
+    .color-dot {
+      width: 18px;
+      height: 18px;
+      border: 1px solid #b8d4e3;
+    }
+
+    .visit-btn {
+      display: inline-block;
+      padding: 5px 15px;
+      background: #c4e0f0;
+      border: 2px solid #b8d4e3;
+      color: #333;
+      font-family: 'NeoDunggeunmo', monospace;
+      font-size: 12px;
+      cursor: pointer;
+      box-shadow: 2px 2px 0px rgba(0,0,0,0.08);
+      transition: all 0.15s;
+      text-decoration: none;
+    }
+
+    .visit-btn:hover {
+      background: #a8d0e8;
+      text-decoration: none;
+    }
+
+    .visit-btn:active {
+      box-shadow: none;
+      transform: translate(1px, 1px);
+    }
+
+    .cozy-section .visit-btn {
+      background: #fdf2e9;
+      border-color: #edcbb0;
+    }
+
+    .cozy-section .visit-btn:hover {
+      background: #edcbb0;
+    }
+
+    /* ── 관련성 표시 ── */
+    .relevance {
+      font-size: 11px;
+      padding: 3px 8px;
+      border: 1px dashed;
+      display: inline-block;
+      margin-bottom: 10px;
+    }
+
+    .relevance-high {
+      background: #e8fde8;
+      border-color: #5abf5a;
+      color: #2a7a2a;
+    }
+
+    .relevance-mid {
+      background: #fdf5e8;
+      border-color: #bf9b5a;
+      color: #7a6a2a;
+    }
+
+    /* ── 요약 박스 ── */
+    .summary-box {
+      margin-top: 25px;
+      padding: 15px;
+      background: #f0f8ff;
+      border: 2px solid #b8d4e3;
+    }
+
+    .summary-box h3 {
+      font-size: 15px;
+      margin-bottom: 12px;
+      padding-bottom: 6px;
+      border-bottom: 1px dashed #b8d4e3;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .summary-item {
+      padding: 10px;
+      background: #fff;
+      border: 1px solid #b8d4e3;
+      font-size: 12px;
+    }
+
+    .summary-item strong {
+      display: block;
+      color: #2a6a8a;
+      margin-bottom: 4px;
+      font-size: 12px;
+    }
+
+    .summary-item p {
+      color: #666;
+      line-height: 1.6;
+    }
+
+    .cozy-section .summary-box {
+      background: #fef9f4;
+      border-color: #edcbb0;
+    }
+
+    .cozy-section .summary-item {
+      border-color: #edcbb0;
+    }
+
+    .cozy-section .summary-item strong {
+      color: #c0392b;
+    }
+
+    /* ── 기존 레퍼런스 알림 ── */
+    .existing-refs {
+      background: #fff8e1;
+      border: 1px solid #ffe082;
+      padding: 10px 15px;
+      margin-bottom: 20px;
+      font-size: 12px;
+    }
+
+    .existing-refs strong { color: #f57f17; }
+
+    /* ── 푸터 ── */
+    .footer {
+      text-align: center;
+      padding: 12px;
+      font-size: 11px;
+      color: #888;
+      border-top: 2px solid #b8d4e3;
+    }
+
+    @media (max-width: 700px) {
+      .summary-grid { grid-template-columns: 1fr; }
+      .card-body { padding: 12px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">Design References</div>
+      <div class="banner-subtitle">nbh의 갠홈 디자인 참고 자료</div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" data-tab="tech" onclick="switchTab('tech')">기술블로그 (nbuntu)</button>
+      <button class="tab" data-tab="cozy" onclick="switchTab('cozy')">코지 (뜨개 공방)</button>
+    </div>
+
+    <div class="content">
+
+      <!-- ==================== 기술블로그 ==================== -->
+      <div id="tech" class="section active">
+        <h2 class="section-title">기술블로그 레퍼런스</h2>
+
+        <div class="section-intro">
+          <strong>nbuntu 테마</strong>를 발전시키기 위한 외부 레퍼런스.<br>
+          레트로 갠홈 감성 + 터미널/개발자 블로그 + 픽셀 폰트의 교집합을 찾았습니다.<br>
+          기존 나루 내부 레퍼런스(duboo, hamkki, hihihirobot)와 <strong>다른 방향의 영감</strong>을 줄 수 있는 사이트들.
+        </div>
+
+        <div class="existing-refs">
+          <strong>기존 나루 레퍼런스:</strong>
+          <a href="https://duboo.naru.pub" target="_blank">duboo.naru.pub</a> (파스텔 2단) /
+          <a href="https://hamkki.naru.pub" target="_blank">hamkki.naru.pub</a> (동숲 테마, 메인 레퍼) /
+          <a href="https://hihihirobot.naru.pub" target="_blank">hihihirobot.naru.pub</a> (Win98)
+        </div>
+
+        <!-- 1. localghost.dev -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-num">01</span>
+            <span class="card-name">localghost.dev</span>
+          </div>
+          <div class="card-body">
+            <a class="card-url" href="https://localghost.dev/" target="_blank">https://localghost.dev</a>
+            <div class="relevance relevance-high">nbh 갠홈과 가장 유사한 방향</div>
+            <div class="card-desc">
+              Sophie Koonin의 개발자 블로그. <strong>레트로 갠홈 + 개발 블로그의 완벽한 조합</strong>.
+              1999, 2003, vaporwave, garden 등 <strong>7개 테마 전환</strong> 기능이 있음.
+              웹링(Webring) 참여, animated GIF 구분선, 마키(marquee), 커서 트레일 등 올드웹 요소를 현대적 접근성과 결합.
+              "갠홈에서 개발 글을 쓴다"는 nbh의 컨셉과 정확히 일치하는 레퍼런스.
+            </div>
+            <div class="card-tags">
+              <span class="tag">레트로 갠홈</span>
+              <span class="tag">멀티 테마</span>
+              <span class="tag">웹링</span>
+              <span class="tag">Eleventy</span>
+              <span class="tag">접근성</span>
+            </div>
+            <div class="color-row">
+              <span class="color-label">테마별 상이 (1999 테마):</span>
+              <div class="color-dot" style="background: #000080"></div>
+              <div class="color-dot" style="background: #c0c0c0"></div>
+              <div class="color-dot" style="background: #ff00ff"></div>
+              <div class="color-dot" style="background: #00ff00"></div>
+            </div>
+            <a class="visit-btn" href="https://localghost.dev/" target="_blank">방문하기 &rarr;</a>
+          </div>
+        </div>
+
+        <!-- 2. petrapixel -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-num">02</span>
+            <span class="card-name">petrapixel.neocities.org</span>
+          </div>
+          <div class="card-body">
+            <a class="card-url" href="https://petrapixel.neocities.org/" target="_blank">https://petrapixel.neocities.org</a>
+            <div class="relevance relevance-high">갠홈 꾸미기 리소스 보물창고</div>
+            <div class="card-desc">
+              Neocities 대표 갠홈. <strong>2단 레이아웃 + 픽셀아트 + 88x31 버튼월</strong>.
+              다크/라이트 토글, 블링키(blinkie), animated GIF 구분선 등 올드웹 장식 요소를 풍부하게 활용.
+              갠홈 코딩 도움말과 리소스를 제공하는 사이트이기도 함.
+              nbh 갠홈의 배경 패턴, 88x31 배너 교환, 시즌 이펙트 등 로드맵 아이템에 직접적 영감.
+            </div>
+            <div class="card-tags">
+              <span class="tag">Neocities</span>
+              <span class="tag">2단 레이아웃</span>
+              <span class="tag">픽셀아트</span>
+              <span class="tag">88x31 버튼</span>
+              <span class="tag">블링키</span>
+            </div>
+            <div class="color-row">
+              <span class="color-label">파스텔 + 다크:</span>
+              <div class="color-dot" style="background: #ffb6c1"></div>
+              <div class="color-dot" style="background: #dda0dd"></div>
+              <div class="color-dot" style="background: #2d2d3f"></div>
+              <div class="color-dot" style="background: #f0e0f0"></div>
+            </div>
+            <a class="visit-btn" href="https://petrapixel.neocities.org/" target="_blank">방문하기 &rarr;</a>
+          </div>
+        </div>
+
+        <!-- 3. sadgrl.online -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-num">03</span>
+            <span class="card-name">sadgrl.online</span>
+          </div>
+          <div class="card-body">
+            <a class="card-url" href="https://sadgrl.online/" target="_blank">https://sadgrl.online</a>
+            <div class="relevance relevance-high">갠홈 제작 도구 + 올드웹 리소스</div>
+            <div class="card-desc">
+              올드웹 감성 갠홈 제작의 허브. <strong>레이아웃 빌더</strong>로 반응형 갠홈 HTML/CSS를 자동 생성해주고,
+              Neocities/갠홈 초보자를 위한 <strong>HTML·CSS 가이드</strong>와 CodePen 데모(호버 애니메이션, 레이아웃 트릭, JS 효과) 제공.
+              방명록(guestbook) 기능도 있어 nbh 갠홈의 방명록 UI 참고 가능.
+              갠홈 꾸미기에 바로 쓸 수 있는 <strong>실용적 리소스</strong>가 핵심.
+            </div>
+            <div class="card-tags">
+              <span class="tag">레이아웃 빌더</span>
+              <span class="tag">갠홈 가이드</span>
+              <span class="tag">CodePen 데모</span>
+              <span class="tag">방명록</span>
+              <span class="tag">올드웹</span>
+            </div>
+            <div class="color-row">
+              <span class="color-label">퍼플 톤:</span>
+              <div class="color-dot" style="background: #6b4c8a"></div>
+              <div class="color-dot" style="background: #f0e8f5"></div>
+              <div class="color-dot" style="background: #d4a0c0"></div>
+              <div class="color-dot" style="background: #2d2d3f"></div>
+            </div>
+            <a class="visit-btn" href="https://sadgrl.online/" target="_blank">방문하기 &rarr;</a>
+          </div>
+        </div>
+
+        <!-- 4. naruter.naru.pub -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-num">04</span>
+            <span class="card-name">naruter.naru.pub</span>
+          </div>
+          <div class="card-body">
+            <a class="card-url" href="https://naruter.naru.pub/" target="_blank">https://naruter.naru.pub</a>
+            <div class="relevance relevance-mid">나루 생태계 구조 참고</div>
+            <div class="card-desc">
+              <strong>나루 공식 갠홈 템플릿</strong>. 두 가지 레이아웃 제공:
+              A안(풀스크린 + 좌측 네비) / B안(제한 폭 + 상단 네비).
+              나루 환경에서 동작하는 갠홈의 기본 구조와 파일 구성을 참고할 수 있음.
+              오픈소스(GitHub 공개)로 코드를 직접 뜯어볼 수 있다는 점이 장점.
+              현재 nbh 갠홈은 B안(900px 제한 + 상단 네비)과 유사한 구조.
+            </div>
+            <div class="card-tags">
+              <span class="tag">나루 템플릿</span>
+              <span class="tag">오픈소스</span>
+              <span class="tag">2가지 레이아웃</span>
+              <span class="tag">기본 구조</span>
+            </div>
+            <div class="color-row">
+              <span class="color-label">깔끔한 블루:</span>
+              <div class="color-dot" style="background: #639BFF"></div>
+              <div class="color-dot" style="background: #ffffff"></div>
+              <div class="color-dot" style="background: #f5f5f5"></div>
+              <div class="color-dot" style="background: #333333"></div>
+            </div>
+            <a class="visit-btn" href="https://naruter.naru.pub/" target="_blank">방문하기 &rarr;</a>
+          </div>
+        </div>
+
+        <!-- 5. retroweird -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-num">05</span>
+            <span class="card-name">retroweird (Eleventy 테마)</span>
+          </div>
+          <div class="card-body">
+            <a class="card-url" href="https://github.com/brennanbrown/retroweird" target="_blank">github.com/brennanbrown/retroweird</a>
+            <div class="relevance relevance-mid">레트로 블로그 구조/위젯 참고</div>
+            <div class="card-desc">
+              GeoCities, MySpace, AngelFire에서 영감받은 <strong>레트로 블로그 테마</strong>.
+              6가지 프리빌트 테마(Default, Vaporwave, GeoCities, MySpace, Brutalist, Academia).
+              <strong>88x31 배지월, 모듈형 위젯 시스템</strong>(시계, 방문자 카운터, 날씨 등).
+              nbh 갠홈 로드맵에 있는 위젯(달력, 방문자 카운터, 배너 교환)의 구현 방식을 참고하기 좋음.
+            </div>
+            <div class="card-tags">
+              <span class="tag">GeoCities</span>
+              <span class="tag">위젯 시스템</span>
+              <span class="tag">88x31 배지월</span>
+              <span class="tag">6가지 테마</span>
+              <span class="tag">오픈소스</span>
+            </div>
+            <div class="color-row">
+              <span class="color-label">테마별 상이 (GeoCities):</span>
+              <div class="color-dot" style="background: #0000ff"></div>
+              <div class="color-dot" style="background: #ffff00"></div>
+              <div class="color-dot" style="background: #ff00ff"></div>
+              <div class="color-dot" style="background: #00ffff"></div>
+            </div>
+            <a class="visit-btn" href="https://github.com/brennanbrown/retroweird" target="_blank">GitHub 보기 &rarr;</a>
+          </div>
+        </div>
+
+        <!-- 기술블로그 요약 -->
+        <div class="summary-box">
+          <h3>nbuntu 테마에 가져올 포인트</h3>
+          <div class="summary-grid">
+            <div class="summary-item">
+              <strong>localghost에서</strong>
+              <p>레트로 갠홈에서 개발 글 쓰는 톤 & 무드. 멀티테마 전환 아이디어</p>
+            </div>
+            <div class="summary-item">
+              <strong>petrapixel에서</strong>
+              <p>88x31 배너 교환 시스템, 블링키, 픽셀아트 장식, 갠홈 꾸미기 소스</p>
+            </div>
+            <div class="summary-item">
+              <strong>sadgrl.online에서</strong>
+              <p>레이아웃 빌더 구조, 방명록 UI, CodePen 데모(호버/애니메이션/JS 효과)</p>
+            </div>
+            <div class="summary-item">
+              <strong>retroweird에서</strong>
+              <p>위젯 모듈 구조(달력, 카운터 등). 로드맵 아이템 구현 시 코드 참고</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== 코지 ==================== -->
+      <div id="cozy" class="section cozy-section">
+        <h2 class="section-title">코지 레퍼런스</h2>
+
+        <div class="section-intro" style="background: #fef9f4; border-color: #edcbb0;">
+          <strong style="color: #c0392b;">뜨개 공방 테마</strong>를 발전시키기 위한 외부 레퍼런스.<br>
+          현재 knitting 테마의 <strong>Gaegu+Gowun Dodum 폰트, 코랄/브라운 컬러, 둥근 모서리, 뜨개질 이모지</strong>를
+          더 풍성하게 만들 수 있는 영감을 찾았습니다.<br>
+          따뜻한 핸드메이드/크래프트 감성 + 코지한 개인 공간 디자인 중심.
+        </div>
+
+        <!-- 1. Tin Can Knits -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-num">01</span>
+            <span class="card-name">Tin Can Knits</span>
+          </div>
+          <div class="card-body">
+            <a class="card-url" href="https://blog.tincanknits.com/" target="_blank">https://blog.tincanknits.com</a>
+            <div class="relevance relevance-high">뜨개 공방 테마의 직접적 레퍼런스</div>
+            <div class="card-desc">
+              캐나다 디자이너 듀오의 뜨개질 패턴 블로그. <strong>"joyful seamless knitting patterns"</strong>.
+              카드형 그리드 레이아웃에 완성된 작품 사진이 주인공.
+              어스톤(earth tone) + Cabin 폰트의 따뜻한 조합.
+              "deliciously textured", "vest of my dreams" 같은 감성적 카피라이팅.
+              nbh 뜨개 공방의 글 목록 레이아웃과 톤에 직접 참고 가능.
+            </div>
+            <div class="card-tags">
+              <span class="tag">뜨개질 블로그</span>
+              <span class="tag">카드 그리드</span>
+              <span class="tag">어스톤</span>
+              <span class="tag">작품 사진</span>
+            </div>
+            <div class="color-row">
+              <span class="color-label">자연스러운 어스톤:</span>
+              <div class="color-dot" style="background: #e8dcc8"></div>
+              <div class="color-dot" style="background: #8b7355"></div>
+              <div class="color-dot" style="background: #c4a882"></div>
+              <div class="color-dot" style="background: #f5f0e8"></div>
+            </div>
+            <a class="visit-btn" href="https://blog.tincanknits.com/" target="_blank">방문하기 &rarr;</a>
+          </div>
+        </div>
+
+        <!-- 2. Life Is Cozy -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-num">02</span>
+            <span class="card-name">Life Is Cozy</span>
+          </div>
+          <div class="card-body">
+            <a class="card-url" href="https://lifeiscozy.com/" target="_blank">https://lifeiscozy.com</a>
+            <div class="relevance relevance-high">"코지"라는 단어의 웹 디자인 구현</div>
+            <div class="card-desc">
+              <strong>"A lot about CRAFting. Everything about cozy"</strong>.
+              패턴, 스티치, 재료 섹션으로 구성된 핸드크래프트 블로그.
+              넉넉한 여백 + 따뜻한 사진 + 인스타그램 갤러리 연동.
+              "You are welcome here" 메시지로 포용적 커뮤니티 분위기.
+              nbh 뜨개 공방의 "한 코 한 코, 따뜻하게" 감성과 일맥상통.
+            </div>
+            <div class="card-tags">
+              <span class="tag">크래프트</span>
+              <span class="tag">코지 미니멀</span>
+              <span class="tag">포용적 톤</span>
+              <span class="tag">갤러리</span>
+            </div>
+            <div class="color-row">
+              <span class="color-label">따뜻한 뉴트럴:</span>
+              <div class="color-dot" style="background: #f8f4ef"></div>
+              <div class="color-dot" style="background: #d4a07a"></div>
+              <div class="color-dot" style="background: #8b6f5e"></div>
+              <div class="color-dot" style="background: #fff8f0"></div>
+            </div>
+            <a class="visit-btn" href="https://lifeiscozy.com/" target="_blank">방문하기 &rarr;</a>
+          </div>
+        </div>
+
+        <!-- 3. Maggie Appleton -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-num">03</span>
+            <span class="card-name">Maggie Appleton</span>
+          </div>
+          <div class="card-body">
+            <a class="card-url" href="https://maggieappleton.com/" target="_blank">https://maggieappleton.com</a>
+            <div class="relevance relevance-mid">디지털 가든 + 따뜻한 컬러 시스템</div>
+            <div class="card-desc">
+              <strong>"지적인 아늑함(intellectual coziness)"</strong>의 대표 사이트.
+              크림색 배경 + 크림슨 악센트 + 시블루 하이라이트.
+              에세이/노트/패턴/라이브러리로 나뉜 "디지털 가든" 구조.
+              세리프 헤딩과 넉넉한 여백이 인쇄물 같은 에디토리얼 감성.
+              뜨개 공방의 Gowun Dodum 폰트 + 코랄 악센트 방향과 유사한 따뜻한 디자인 시스템.
+            </div>
+            <div class="card-tags">
+              <span class="tag">디지털 가든</span>
+              <span class="tag">크림+크림슨</span>
+              <span class="tag">에디토리얼</span>
+              <span class="tag">일러스트</span>
+            </div>
+            <div class="color-row">
+              <span class="color-label">지적인 따뜻함:</span>
+              <div class="color-dot" style="background: #faf8f4"></div>
+              <div class="color-dot" style="background: #c1403d"></div>
+              <div class="color-dot" style="background: #4a8ba8"></div>
+              <div class="color-dot" style="background: #e8dcc8"></div>
+            </div>
+            <a class="visit-btn" href="https://maggieappleton.com/" target="_blank">방문하기 &rarr;</a>
+          </div>
+        </div>
+
+        <!-- 4. Rach Smith -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-num">04</span>
+            <span class="card-name">Rach Smith</span>
+          </div>
+          <div class="card-body">
+            <a class="card-url" href="https://rachsmith.com/" target="_blank">https://rachsmith.com</a>
+            <div class="relevance relevance-mid">개인 공간 + 놀이 요소</div>
+            <div class="card-desc">
+              <strong>레인보우 컬러 시스템</strong>의 디지털 가든.
+              빨강~보라 순환하는 악센트 컬러. 다크 모드, 레인보우 테마, 커서 트레일 등 방문자 커스텀 옵션.
+              2017년부터 이어온 <strong>개인 일기장 같은 친밀감</strong>.
+              모노스페이스 폰트 + 리스트 기반 심플 구조.
+              nbh 갠홈의 "숨겨진 게 있을지도?" 이스터에그 감성과 통하는 놀이 요소.
+            </div>
+            <div class="card-tags">
+              <span class="tag">레인보우</span>
+              <span class="tag">디지털 가든</span>
+              <span class="tag">커스텀 테마</span>
+              <span class="tag">이스터에그</span>
+            </div>
+            <div class="color-row">
+              <span class="color-label">레인보우 악센트:</span>
+              <div class="color-dot" style="background: #ff6b6b"></div>
+              <div class="color-dot" style="background: #ffa94d"></div>
+              <div class="color-dot" style="background: #ffd43b"></div>
+              <div class="color-dot" style="background: #69db7c"></div>
+              <div class="color-dot" style="background: #9775fa"></div>
+            </div>
+            <a class="visit-btn" href="https://rachsmith.com/" target="_blank">방문하기 &rarr;</a>
+          </div>
+        </div>
+
+        <!-- 5. Cozy Blue Handmade -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-num">05</span>
+            <span class="card-name">Cozy Blue Handmade</span>
+          </div>
+          <div class="card-body">
+            <a class="card-url" href="https://cozybluehandmade.com/" target="_blank">https://cozybluehandmade.com</a>
+            <div class="relevance relevance-mid">핸드메이드 브랜딩 참고</div>
+            <div class="card-desc">
+              <strong>"한 땀 한 땀, 차분하고 행복하게"</strong>. 핸드 자수 도구와 영감을 주는 소규모 크래프트 브랜드.
+              "small, simple acts of creativity can make the world calmer and happier".
+              핸드메이드 감성의 웹 디자인 — 자연스러운 사진, 부드러운 색감, 친근한 톤.
+              뜨개 공방의 슬로건("한 코 한 코, 따뜻하게")과 비슷한 브랜딩 방식 참고.
+            </div>
+            <div class="card-tags">
+              <span class="tag">핸드메이드</span>
+              <span class="tag">자수/크래프트</span>
+              <span class="tag">소규모 브랜딩</span>
+              <span class="tag">부드러운 톤</span>
+            </div>
+            <div class="color-row">
+              <span class="color-label">소프트 블루+크래프트:</span>
+              <div class="color-dot" style="background: #a8c8d8"></div>
+              <div class="color-dot" style="background: #f0e8d8"></div>
+              <div class="color-dot" style="background: #d4a07a"></div>
+              <div class="color-dot" style="background: #faf8f4"></div>
+            </div>
+            <a class="visit-btn" href="https://cozybluehandmade.com/" target="_blank">방문하기 &rarr;</a>
+          </div>
+        </div>
+
+        <!-- 코지 요약 -->
+        <div class="summary-box">
+          <h3>뜨개 공방 테마에 가져올 포인트</h3>
+          <div class="summary-grid">
+            <div class="summary-item">
+              <strong>Tin Can Knits에서</strong>
+              <p>카드형 글 목록 + 작품 사진 중심 레이아웃. 뜨개질 블로그의 톤 참고</p>
+            </div>
+            <div class="summary-item">
+              <strong>Life Is Cozy에서</strong>
+              <p>"코지" 분위기의 컬러+여백+타이포 시스템. 패턴/스티치/재료 구분 방식</p>
+            </div>
+            <div class="summary-item">
+              <strong>Maggie Appleton에서</strong>
+              <p>크림+악센트 컬러 시스템. 콘텐츠를 "정원"처럼 구성하는 구조</p>
+            </div>
+            <div class="summary-item">
+              <strong>Rach Smith에서</strong>
+              <p>커서 트레일, 테마 커스텀 등 방문자 놀이 요소. 이스터에그 아이디어</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 페이지는 디자인 참고용입니다
+    </footer>
+
+  </div>
+
+  <script>
+    function switchTab(tab) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+      document.querySelector(`.tab[data-tab="${tab}"]`).classList.add('active');
+      document.getElementById(tab).classList.add('active');
+    }
+  </script>
+</body>
+</html>

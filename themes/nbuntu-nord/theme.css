@@ -1,0 +1,335 @@
+/* ========================================
+   nbuntu-nord — Arctic Developer
+
+   "Freeze bugs, ship features."
+
+   Nord 컬러 팔레트 기반 라이트 테마.
+   차가운 북극 블루 톤으로 깔끔하고 차분한 느낌.
+   Polar Night + Snow Storm + Frost 조합.
+   ======================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&display=swap');
+
+:root {
+  /* ── 본문 ── */
+  --post-font: 'IBM Plex Mono', 'NeoDunggeunmo', 'Courier New', monospace;
+  --post-font-size: 14px;
+  --post-line-height: 1.95;
+  --post-paragraph-gap: 14px;
+  --post-heading-color: #2e3440;
+  --post-strong-color: #5e81ac;
+  --post-em-color: #4c566a;
+  --post-mark-bg: rgba(235, 203, 139, 0.25);
+  --post-link-color: #5e81ac;
+
+  /* ── 코드 — 스노우 에디터 ── */
+  --post-code-bg: #eceff4;
+  --post-code-border: #d8dee9;
+  --post-pre-bg: #eceff4;
+  --post-pre-color: #2e3440;
+
+  /* ── 인용 ── */
+  --post-quote-bg: #e5e9f0;
+  --post-quote-border: #81a1c1;
+  --post-quote-color: #3b4252;
+
+  /* ── 콜아웃 ── */
+  --callout-info-bg: rgba(136, 192, 208, 0.12);
+  --callout-info-border: #88c0d0;
+  --callout-info-icon: '❄️';
+  --callout-tip-bg: rgba(163, 190, 140, 0.12);
+  --callout-tip-border: #a3be8c;
+  --callout-tip-icon: '🌲';
+  --callout-warning-bg: rgba(235, 203, 139, 0.15);
+  --callout-warning-border: #ebcb8b;
+  --callout-warning-icon: '🔥';
+  --callout-question-bg: rgba(180, 142, 173, 0.12);
+  --callout-question-border: #b48ead;
+  --callout-question-icon: '🧊';
+
+  /* ── 테이블 ── */
+  --post-table-header-bg: #e5e9f0;
+  --post-table-stripe-bg: #f5f7fa;
+
+  /* ── 태그 ── */
+  --post-tag-bg: #e5e9f0;
+
+  /* ── 테두리 ── */
+  --post-border-radius: 6px;
+}
+
+
+/* ═══════════════════════════════════
+   커스텀 스타일
+   ═══════════════════════════════════ */
+
+/* ── 제목 — 차분한 언더라인 ── */
+.post-content h2 {
+  position: relative;
+  padding-left: 20px;
+  margin-top: 45px;
+  padding-top: 25px;
+  padding-bottom: 8px;
+  border-top: 1px solid #d8dee9;
+  border-bottom: 2px solid #d8dee9;
+  letter-spacing: 0.3px;
+}
+
+.post-content h2:first-of-type {
+  border-top: none;
+  margin-top: 25px;
+  padding-top: 0;
+}
+
+.post-content h2::before {
+  content: '—';
+  position: absolute;
+  left: 0;
+  color: #81a1c1;
+  font-weight: bold;
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+.post-content h3 {
+  position: relative;
+  padding-left: 18px;
+  color: #434c5e;
+}
+
+.post-content h3::before {
+  content: '·';
+  position: absolute;
+  left: 4px;
+  color: #88c0d0;
+  font-size: 18px;
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+/* ── 인라인 코드 — 서리 칩 ── */
+.post-content code {
+  color: #5e81ac;
+  font-weight: 600;
+  font-family: 'IBM Plex Mono', 'NeoDunggeunmo', monospace;
+  font-size: 12.5px;
+  border-radius: 4px;
+}
+
+/* ── 코드 블록 — 깨끗한 스노우 ── */
+.post-content pre {
+  position: relative;
+  border: 1px solid #d8dee9;
+  padding-top: 36px;
+  tab-size: 4;
+  box-shadow: 0 1px 4px rgba(46, 52, 64, 0.06);
+}
+
+.post-content pre::before {
+  content: 'nbh@nord:~$';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 7px 14px;
+  background: #e5e9f0;
+  border-bottom: 1px solid #d8dee9;
+  color: #81a1c1;
+  font-size: 11px;
+  font-family: 'IBM Plex Mono', monospace;
+  letter-spacing: 0.5px;
+  opacity: 0.7;
+}
+
+.post-content pre code {
+  font-family: 'IBM Plex Mono', 'NeoDunggeunmo', monospace;
+  font-size: 13px;
+}
+
+/* ── 콜아웃 ── */
+.callout {
+  border-width: 1px;
+  border-style: solid;
+  box-shadow: 0 1px 3px rgba(46, 52, 64, 0.04);
+}
+
+.callout-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  font-family: 'IBM Plex Mono', 'NeoDunggeunmo', monospace;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* ── 링크 ── */
+.post-content a {
+  transition: all 0.2s ease;
+  border-bottom-color: rgba(94, 129, 172, 0.3);
+}
+
+.post-content a:hover {
+  color: #88c0d0;
+  border-bottom-color: #88c0d0;
+}
+
+/* ── 하이라이트 ── */
+.post-content mark {
+  border-radius: 3px;
+}
+
+/* ── 태그 ── */
+.post-tags span {
+  border: 1px solid #d8dee9;
+  background: #e5e9f0;
+  color: #5e81ac;
+  font-family: 'IBM Plex Mono', 'NeoDunggeunmo', monospace;
+  font-size: 11px;
+  border-radius: 12px;
+  transition: all 0.2s ease;
+}
+
+.post-tags span:hover {
+  background: #81a1c1;
+  color: #eceff4;
+  border-color: #81a1c1;
+}
+
+/* ── 구분선 ── */
+.post-content hr {
+  border-top: 1px solid #d8dee9;
+  position: relative;
+}
+
+.post-content hr::after {
+  content: '· · ·';
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #fff;
+  padding: 0 12px;
+  color: #88c0d0;
+  font-size: 12px;
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+/* ── 테이블 ── */
+.post-content table {
+  border: 1px solid #d8dee9;
+}
+
+.post-content th {
+  color: #2e3440;
+  font-family: 'IBM Plex Mono', 'NeoDunggeunmo', monospace;
+  font-size: 12px;
+}
+
+.post-content td {
+  font-size: 13px;
+}
+
+/* ── 머메이드 ── */
+.mermaid {
+  margin: 15px 0;
+  padding: 15px;
+  background: #f5f7fa;
+  border: 1px solid #d8dee9;
+  border-radius: 6px;
+  text-align: center;
+}
+
+/* ── 이미지 ── */
+.post-content img {
+  border: 1px solid #d8dee9;
+  box-shadow: 0 2px 8px rgba(46, 52, 64, 0.06);
+}
+
+/* ── 글 메타 ── */
+.post-meta {
+  font-family: 'IBM Plex Mono', 'NeoDunggeunmo', monospace;
+  letter-spacing: 0.3px;
+}
+
+.post-meta .meta-category {
+  background: rgba(136, 192, 208, 0.15);
+  color: #5e81ac;
+  border-color: #d8dee9;
+  font-size: 11px;
+  border-radius: 4px;
+}
+
+/* ── 글 네비게이션 ── */
+.post-nav a {
+  font-family: 'IBM Plex Mono', 'NeoDunggeunmo', monospace;
+  font-size: 12px;
+  transition: all 0.2s ease;
+}
+
+.post-nav a:hover {
+  color: #88c0d0;
+}
+
+
+/* ═══════════════════════════════════
+   Prism.js — Nord Light
+   ═══════════════════════════════════ */
+
+.post-content .token.comment,
+.post-content .token.prolog,
+.post-content .token.doctype,
+.post-content .token.cdata {
+  color: #4c566a;
+  font-style: italic;
+}
+
+.post-content .token.punctuation {
+  color: #2e3440;
+}
+
+.post-content .token.property,
+.post-content .token.tag,
+.post-content .token.boolean,
+.post-content .token.number,
+.post-content .token.constant,
+.post-content .token.symbol {
+  color: #b48ead;
+}
+
+.post-content .token.selector,
+.post-content .token.attr-name,
+.post-content .token.string,
+.post-content .token.char,
+.post-content .token.builtin {
+  color: #a3be8c;
+}
+
+.post-content .token.operator,
+.post-content .token.entity,
+.post-content .token.url {
+  color: #81a1c1;
+}
+
+.post-content .token.atrule,
+.post-content .token.attr-value,
+.post-content .token.keyword {
+  color: #5e81ac;
+}
+
+.post-content .token.function,
+.post-content .token.class-name {
+  color: #88c0d0;
+}
+
+.post-content .token.regex,
+.post-content .token.important,
+.post-content .token.variable {
+  color: #d08770;
+}
+
+.post-content .token.important,
+.post-content .token.bold {
+  font-weight: bold;
+}
+
+.post-content .token.italic {
+  font-style: italic;
+}

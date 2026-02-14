@@ -1,0 +1,343 @@
+/* ========================================
+   knitting-lavender — 라벤더 공방
+
+   "보라빛 향기 속에서 뜨개질"
+
+   바이올렛 + 라일락 + 연보라.
+   프로방스 라벤더 밭에서 영감받은
+   차분하고 몽환적인 크래프트 테마.
+   ======================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Gowun+Dodum&display=swap');
+
+:root {
+  /* ── 본문 ── */
+  --post-font: 'Gowun Batang', 'Apple SD Gothic Neo', serif;
+  --post-font-size: 15px;
+  --post-line-height: 2.0;
+  --post-paragraph-gap: 16px;
+  --post-heading-color: #3a2d4a;
+  --post-strong-color: #7c5caa;
+  --post-em-color: #9080a0;
+  --post-mark-bg: rgba(180, 150, 220, 0.2);
+  --post-link-color: #7c5caa;
+
+  /* ── 코드 ── */
+  --post-code-bg: #f3eef8;
+  --post-code-border: #ddd0e8;
+  --post-pre-bg: #f8f4fc;
+  --post-pre-color: #3a2d4a;
+
+  /* ── 인용 ── */
+  --post-quote-bg: #f5f0fa;
+  --post-quote-border: #a890c0;
+  --post-quote-color: #4a3d5a;
+
+  /* ── 콜아웃 ── */
+  --callout-info-bg: #f5f0fa;
+  --callout-info-border: #a890c0;
+  --callout-info-icon: '💜';
+  --callout-tip-bg: #f0f5f0;
+  --callout-tip-border: #80a880;
+  --callout-tip-icon: '🪻';
+  --callout-warning-bg: #fdf5f0;
+  --callout-warning-border: #c8a070;
+  --callout-warning-icon: '🕯️';
+  --callout-question-bg: #f0f0f8;
+  --callout-question-border: #8888b8;
+  --callout-question-icon: '🔮';
+
+  /* ── 테이블 ── */
+  --post-table-header-bg: #f3eef8;
+  --post-table-stripe-bg: #faf8fc;
+
+  /* ── 태그 ── */
+  --post-tag-bg: #f3eef8;
+
+  /* ── 테두리 ── */
+  --post-border-radius: 14px;
+}
+
+
+/* ═══════════════════════════════════
+   커스텀 스타일
+   ═══════════════════════════════════ */
+
+/* ── 제목 — 엘레강트 라벤더 ── */
+.post-content h2 {
+  font-family: 'Gowun Batang', serif;
+  font-weight: 700;
+  font-size: 20px;
+  margin-top: 50px;
+  padding-top: 30px;
+  padding-bottom: 12px;
+  border-top: 1px solid #e8e0f0;
+  border-bottom: none;
+  position: relative;
+}
+
+.post-content h2:first-of-type {
+  border-top: none;
+  margin-top: 25px;
+  padding-top: 0;
+}
+
+.post-content h2::after {
+  content: '';
+  display: block;
+  width: 30px;
+  height: 2px;
+  background: linear-gradient(90deg, #a890c0, #ddd0e8);
+  margin-top: 10px;
+  border-radius: 1px;
+}
+
+.post-content h3 {
+  font-family: 'Gowun Batang', serif;
+  font-weight: 700;
+  font-size: 17px;
+  color: #5a4a6a;
+  position: relative;
+  padding-left: 16px;
+}
+
+.post-content h3::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 5px;
+  width: 3px;
+  height: 14px;
+  background: linear-gradient(180deg, #a890c0, #ddd0e8);
+  border-radius: 2px;
+}
+
+/* ── 인라인 코드 ── */
+.post-content code {
+  color: #7c5caa;
+  font-size: 13px;
+  border-radius: 6px;
+}
+
+/* ── 코드 블록 ── */
+.post-content pre {
+  border: 1px solid #ddd0e8;
+  border-radius: 14px;
+  box-shadow: 0 2px 10px rgba(60, 45, 74, 0.05);
+}
+
+.post-content pre::before {
+  content: none;
+}
+
+.post-content pre code {
+  font-size: 13px;
+}
+
+/* ── 인용문 — 향기로운 글 ── */
+.post-content blockquote {
+  border-left: 3px solid #a890c0;
+  border-radius: 0 14px 14px 0;
+  padding: 16px 20px;
+  font-family: 'Gowun Batang', serif;
+  font-style: italic;
+  box-shadow: 0 2px 8px rgba(60, 45, 74, 0.04);
+}
+
+/* ── 콜아웃 — 몽환적 카드 ── */
+.callout {
+  border-width: 1px;
+  border-style: solid;
+  box-shadow: 0 2px 10px rgba(60, 45, 74, 0.05);
+  border-radius: 14px;
+}
+
+.callout-title {
+  font-family: 'Gowun Batang', serif;
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* ── 링크 ── */
+.post-content a {
+  border-bottom: 1px solid rgba(124, 92, 170, 0.3);
+  transition: all 0.3s ease;
+}
+
+.post-content a:hover {
+  color: #5a3a8a;
+  border-bottom-color: #5a3a8a;
+}
+
+/* ── 하이라이트 ── */
+.post-content mark {
+  background: rgba(180, 150, 220, 0.25);
+  border-radius: 4px;
+}
+
+/* ── 태그 ── */
+.post-tags span {
+  border: 1px solid #ddd0e8;
+  background: #f3eef8;
+  color: #7c5caa;
+  font-family: 'Gowun Batang', serif;
+  font-size: 12px;
+  border-radius: 18px;
+  padding: 3px 12px;
+  transition: all 0.3s ease;
+}
+
+.post-tags span:hover {
+  background: #a890c0;
+  color: #fff;
+  border-color: #a890c0;
+}
+
+/* ── 구분선 ── */
+.post-content hr {
+  border: none;
+  border-top: 1px solid #e8e0f0;
+  position: relative;
+  margin: 35px 0;
+}
+
+.post-content hr::after {
+  content: '🪻';
+  position: absolute;
+  top: -11px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #fff;
+  padding: 0 10px;
+  font-size: 14px;
+}
+
+/* ── 테이블 ── */
+.post-content table {
+  border: 1px solid #ddd0e8;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.post-content th {
+  font-family: 'Gowun Batang', serif;
+  font-weight: 700;
+  color: #3a2d4a;
+  font-size: 13px;
+  border-color: #ddd0e8;
+}
+
+.post-content td {
+  border-color: #e8e0f0;
+}
+
+/* ── 머메이드 ── */
+.mermaid {
+  margin: 15px 0;
+  padding: 15px;
+  background: #faf8fc;
+  border: 1px solid #ddd0e8;
+  border-radius: 14px;
+  text-align: center;
+}
+
+/* ── 이미지 ── */
+.post-content img {
+  border: 1px solid #ddd0e8;
+  border-radius: 14px;
+  box-shadow: 0 3px 12px rgba(60, 45, 74, 0.06);
+}
+
+/* ── 리스트 ── */
+.post-content ul li::marker {
+  color: #a890c0;
+}
+
+.post-content ol li::marker {
+  color: #7c5caa;
+  font-family: 'Gowun Batang', serif;
+}
+
+/* ── 글 메타 ── */
+.post-meta {
+  font-family: 'Gowun Dodum', sans-serif;
+}
+
+.post-meta .meta-category {
+  background: #f3eef8;
+  border: 1px solid #ddd0e8;
+  border-radius: 10px;
+  color: #7c5caa;
+  font-family: 'Gowun Batang', serif;
+}
+
+/* ── 글 네비게이션 ── */
+.post-nav a {
+  font-family: 'Gowun Batang', serif;
+  font-size: 14px;
+  transition: all 0.3s ease;
+}
+
+.post-nav a:hover {
+  color: #7c5caa;
+}
+
+
+/* ═══════════════════════════════════
+   Prism.js — Lavender
+   ═══════════════════════════════════ */
+
+.post-content .token.comment,
+.post-content .token.prolog,
+.post-content .token.doctype,
+.post-content .token.cdata {
+  color: #9080a0;
+  font-style: italic;
+}
+
+.post-content .token.punctuation {
+  color: #3a2d4a;
+}
+
+.post-content .token.property,
+.post-content .token.tag,
+.post-content .token.boolean,
+.post-content .token.number,
+.post-content .token.constant,
+.post-content .token.symbol {
+  color: #7c5caa;
+}
+
+.post-content .token.selector,
+.post-content .token.attr-name,
+.post-content .token.string,
+.post-content .token.char,
+.post-content .token.builtin {
+  color: #80a880;
+}
+
+.post-content .token.operator,
+.post-content .token.entity,
+.post-content .token.url {
+  color: #aa6688;
+}
+
+.post-content .token.atrule,
+.post-content .token.attr-value,
+.post-content .token.keyword {
+  color: #8888b8;
+}
+
+.post-content .token.function,
+.post-content .token.class-name {
+  color: #a890c0;
+}
+
+.post-content .token.regex,
+.post-content .token.important,
+.post-content .token.variable {
+  color: #c8a070;
+}

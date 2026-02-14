@@ -1,0 +1,340 @@
+/* ========================================
+   knitting-sakura — 벚꽃 공방
+
+   "벚꽃이 지듯, 한 코 한 코 피어나다"
+
+   소프트 핑크 + 화이트 + 연회색.
+   일본 젠(Zen) 미학에서 영감받은
+   조용하고 우아한 크래프트 테마.
+   ======================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;700&family=Gowun+Dodum&display=swap');
+
+:root {
+  /* ── 본문 — 세리프 폰트로 우아하게 ── */
+  --post-font: 'Noto Serif KR', 'Apple SD Gothic Neo', serif;
+  --post-font-size: 15px;
+  --post-line-height: 2.0;
+  --post-paragraph-gap: 16px;
+  --post-heading-color: #4a3040;
+  --post-strong-color: #c45b84;
+  --post-em-color: #a08090;
+  --post-mark-bg: rgba(255, 182, 193, 0.3);
+  --post-link-color: #c45b84;
+
+  /* ── 코드 — 벚꽃잎 위 ── */
+  --post-code-bg: #fdf2f5;
+  --post-code-border: #f0d0d8;
+  --post-pre-bg: #fdf6f8;
+  --post-pre-color: #4a3040;
+
+  /* ── 인용 ── */
+  --post-quote-bg: #fef8fa;
+  --post-quote-border: #e8a0b0;
+  --post-quote-color: #6d4c5c;
+
+  /* ── 콜아웃 ── */
+  --callout-info-bg: #fef6f8;
+  --callout-info-border: #e8a0b0;
+  --callout-info-icon: '🌸';
+  --callout-tip-bg: #fdf6f0;
+  --callout-tip-border: #dba888;
+  --callout-tip-icon: '🎐';
+  --callout-warning-bg: #fef9f0;
+  --callout-warning-border: #d4a860;
+  --callout-warning-icon: '🍡';
+  --callout-question-bg: #f8f0fe;
+  --callout-question-border: #c8a0d8;
+  --callout-question-icon: '🎋';
+
+  /* ── 테이블 ── */
+  --post-table-header-bg: #fdf2f5;
+  --post-table-stripe-bg: #fefbfc;
+
+  /* ── 태그 ── */
+  --post-tag-bg: #fdf2f5;
+
+  /* ── 테두리 ── */
+  --post-border-radius: 16px;
+}
+
+
+/* ═══════════════════════════════════
+   커스텀 스타일
+   ═══════════════════════════════════ */
+
+/* ── 제목 — 꽃잎이 떨어지듯 ── */
+.post-content h2 {
+  font-family: 'Noto Serif KR', serif;
+  font-weight: 700;
+  font-size: 20px;
+  text-align: center;
+  margin-top: 50px;
+  padding-top: 30px;
+  padding-bottom: 12px;
+  border-top: none;
+  border-bottom: none;
+  position: relative;
+}
+
+.post-content h2:first-of-type {
+  margin-top: 25px;
+  padding-top: 0;
+}
+
+.post-content h2::before {
+  content: '— ';
+  color: #e8a0b0;
+  font-weight: normal;
+}
+
+.post-content h2::after {
+  content: ' —';
+  color: #e8a0b0;
+  font-weight: normal;
+}
+
+/* 첫 번째가 아닌 h2 위에 꽃잎 구분 */
+.post-content h2 + * {
+  /* noop */
+}
+
+.post-content h3 {
+  font-family: 'Noto Serif KR', serif;
+  font-weight: 700;
+  font-size: 17px;
+  color: #6d4c5c;
+  margin-top: 25px;
+}
+
+/* ── 인라인 코드 ── */
+.post-content code {
+  color: #c45b84;
+  font-size: 13px;
+  border-radius: 8px;
+  background: #fdf2f5;
+}
+
+/* ── 코드 블록 — 부드러운 종이 ── */
+.post-content pre {
+  border: 1px solid #f0d0d8;
+  box-shadow: 0 2px 12px rgba(196, 91, 132, 0.05);
+  border-radius: 16px;
+}
+
+.post-content pre::before {
+  content: none;
+}
+
+.post-content pre code {
+  font-size: 13px;
+}
+
+/* ── 인용문 — 와시(和紙) 위의 글 ── */
+.post-content blockquote {
+  border-left: 3px solid #e8a0b0;
+  border-radius: 0 16px 16px 0;
+  padding: 16px 20px;
+  font-family: 'Noto Serif KR', serif;
+  font-size: 15px;
+  font-style: italic;
+  box-shadow: 0 2px 8px rgba(196, 91, 132, 0.04);
+}
+
+/* ── 콜아웃 — 부드러운 카드 ── */
+.callout {
+  border-width: 1px;
+  border-style: solid;
+  box-shadow: 0 2px 10px rgba(196, 91, 132, 0.05);
+  border-radius: 16px;
+}
+
+.callout-title {
+  font-family: 'Noto Serif KR', serif;
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* ── 링크 ── */
+.post-content a {
+  border-bottom: 1px solid rgba(196, 91, 132, 0.3);
+  transition: all 0.3s ease;
+}
+
+.post-content a:hover {
+  color: #a04070;
+  border-bottom-color: #a04070;
+}
+
+/* ── 하이라이트 ── */
+.post-content mark {
+  background: rgba(255, 182, 193, 0.35);
+  border-radius: 4px;
+}
+
+/* ── 태그 — 꽃잎 뱃지 ── */
+.post-tags span {
+  border: 1px solid #f0d0d8;
+  background: #fdf2f5;
+  color: #c45b84;
+  font-family: 'Noto Serif KR', serif;
+  font-size: 12px;
+  border-radius: 20px;
+  padding: 3px 12px;
+  transition: all 0.3s ease;
+}
+
+.post-tags span:hover {
+  background: #c45b84;
+  color: #fff;
+  border-color: #c45b84;
+}
+
+/* ── 구분선 — 벚꽃 ── */
+.post-content hr {
+  border: none;
+  border-top: 1px solid #f0d0d8;
+  position: relative;
+  margin: 35px 0;
+}
+
+.post-content hr::after {
+  content: '🌸';
+  position: absolute;
+  top: -11px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #fff;
+  padding: 0 10px;
+  font-size: 14px;
+}
+
+/* ── 테이블 ── */
+.post-content table {
+  border: 1px solid #f0d0d8;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.post-content th {
+  font-family: 'Noto Serif KR', serif;
+  color: #4a3040;
+  font-size: 13px;
+  border-color: #f0d0d8;
+}
+
+.post-content td {
+  border-color: #f0d0d8;
+}
+
+/* ── 머메이드 ── */
+.mermaid {
+  margin: 15px 0;
+  padding: 15px;
+  background: #fefbfc;
+  border: 1px solid #f0d0d8;
+  border-radius: 16px;
+  text-align: center;
+}
+
+/* ── 이미지 ── */
+.post-content img {
+  border: 1px solid #f0d0d8;
+  border-radius: 16px;
+  box-shadow: 0 3px 12px rgba(196, 91, 132, 0.06);
+}
+
+/* ── 리스트 ── */
+.post-content ul li::marker {
+  color: #e8a0b0;
+}
+
+.post-content ol li::marker {
+  color: #c45b84;
+  font-family: 'Noto Serif KR', serif;
+}
+
+/* ── 글 메타 ── */
+.post-meta {
+  font-family: 'Gowun Dodum', sans-serif;
+  text-align: center;
+}
+
+.post-meta .meta-category {
+  background: #fdf2f5;
+  border: 1px solid #f0d0d8;
+  border-radius: 12px;
+  color: #c45b84;
+  font-family: 'Noto Serif KR', serif;
+}
+
+/* ── 글 네비게이션 ── */
+.post-nav a {
+  font-family: 'Noto Serif KR', serif;
+  font-size: 14px;
+  transition: all 0.3s ease;
+}
+
+.post-nav a:hover {
+  color: #c45b84;
+}
+
+
+/* ═══════════════════════════════════
+   Prism.js — Sakura (라이트 핑크)
+   ═══════════════════════════════════ */
+
+.post-content .token.comment,
+.post-content .token.prolog,
+.post-content .token.doctype,
+.post-content .token.cdata {
+  color: #a08090;
+  font-style: italic;
+}
+
+.post-content .token.punctuation {
+  color: #4a3040;
+}
+
+.post-content .token.property,
+.post-content .token.tag,
+.post-content .token.boolean,
+.post-content .token.number,
+.post-content .token.constant,
+.post-content .token.symbol {
+  color: #c45b84;
+}
+
+.post-content .token.selector,
+.post-content .token.attr-name,
+.post-content .token.string,
+.post-content .token.char,
+.post-content .token.builtin {
+  color: #7a8060;
+}
+
+.post-content .token.operator,
+.post-content .token.entity,
+.post-content .token.url {
+  color: #a04070;
+}
+
+.post-content .token.atrule,
+.post-content .token.attr-value,
+.post-content .token.keyword {
+  color: #8060a0;
+}
+
+.post-content .token.function,
+.post-content .token.class-name {
+  color: #5080a0;
+}
+
+.post-content .token.regex,
+.post-content .token.important,
+.post-content .token.variable {
+  color: #d4a860;
+}

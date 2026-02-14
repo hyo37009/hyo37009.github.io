@@ -1,0 +1,338 @@
+/* ========================================
+   knitting-forest — 숲속 공방
+
+   "나무 사이로 스며드는 햇살 아래 뜨개질"
+
+   딥 그린 + 브라운 + 모스.
+   숲속 오두막에서 손뜨개하는 자연 감성.
+   나뭇결과 이끼, 풀잎의 색감.
+   ======================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@400;700&family=Gowun+Dodum&display=swap');
+
+:root {
+  /* ── 본문 — 명조체 자연 감성 ── */
+  --post-font: 'Nanum Myeongjo', 'Apple SD Gothic Neo', serif;
+  --post-font-size: 15px;
+  --post-line-height: 2.0;
+  --post-paragraph-gap: 16px;
+  --post-heading-color: #2d3a2e;
+  --post-strong-color: #4a7c59;
+  --post-em-color: #7a8a70;
+  --post-mark-bg: rgba(160, 200, 120, 0.2);
+  --post-link-color: #4a7c59;
+
+  /* ── 코드 — 나뭇잎 위 ── */
+  --post-code-bg: #eef3e8;
+  --post-code-border: #c8d8b8;
+  --post-pre-bg: #f4f8f0;
+  --post-pre-color: #2d3a2e;
+
+  /* ── 인용 ── */
+  --post-quote-bg: #f0f5ea;
+  --post-quote-border: #7a9a68;
+  --post-quote-color: #3d4a3e;
+
+  /* ── 콜아웃 ── */
+  --callout-info-bg: #f0f5ea;
+  --callout-info-border: #7a9a68;
+  --callout-info-icon: '🌿';
+  --callout-tip-bg: #f5f0ea;
+  --callout-tip-border: #a08060;
+  --callout-tip-icon: '🍄';
+  --callout-warning-bg: #fef8f0;
+  --callout-warning-border: #c8a050;
+  --callout-warning-icon: '🐿️';
+  --callout-question-bg: #eef0f5;
+  --callout-question-border: #607890;
+  --callout-question-icon: '🦉';
+
+  /* ── 테이블 ── */
+  --post-table-header-bg: #eef3e8;
+  --post-table-stripe-bg: #f8faf5;
+
+  /* ── 태그 ── */
+  --post-tag-bg: #eef3e8;
+
+  /* ── 테두리 ── */
+  --post-border-radius: 8px;
+}
+
+
+/* ═══════════════════════════════════
+   커스텀 스타일
+   ═══════════════════════════════════ */
+
+/* ── 제목 — 나무 기둥 ── */
+.post-content h2 {
+  font-family: 'Nanum Myeongjo', serif;
+  font-weight: 700;
+  font-size: 20px;
+  margin-top: 50px;
+  padding-top: 30px;
+  padding-bottom: 10px;
+  border-top: 1px solid #c8d8b8;
+  border-bottom: 2px solid #c8d8b8;
+  position: relative;
+  padding-left: 18px;
+}
+
+.post-content h2:first-of-type {
+  border-top: none;
+  margin-top: 25px;
+  padding-top: 0;
+}
+
+.post-content h2::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 6px;
+  height: 6px;
+  background: #7a9a68;
+  border-radius: 50%;
+}
+
+.post-content h3 {
+  font-family: 'Nanum Myeongjo', serif;
+  font-weight: 700;
+  font-size: 17px;
+  color: #4a6050;
+  padding-left: 14px;
+  border-left: 2px solid #a0c880;
+}
+
+/* ── 인라인 코드 ── */
+.post-content code {
+  color: #4a7c59;
+  font-size: 13px;
+  border-radius: 4px;
+}
+
+/* ── 코드 블록 — 나무판 ── */
+.post-content pre {
+  border: 1px solid #c8d8b8;
+  border-left: 4px solid #7a9a68;
+  border-radius: 0 8px 8px 0;
+  box-shadow: 0 2px 8px rgba(45, 58, 46, 0.06);
+}
+
+.post-content pre::before {
+  content: none;
+}
+
+.post-content pre code {
+  font-size: 13px;
+}
+
+/* ── 인용문 ── */
+.post-content blockquote {
+  border-left: 3px solid #7a9a68;
+  border-radius: 0 8px 8px 0;
+  padding: 14px 18px;
+  font-family: 'Nanum Myeongjo', serif;
+  font-style: italic;
+  box-shadow: 0 2px 8px rgba(45, 58, 46, 0.04);
+}
+
+/* ── 콜아웃 — 나뭇잎 카드 ── */
+.callout {
+  border-width: 1px;
+  border-style: solid;
+  border-left-width: 4px;
+  border-radius: 0 8px 8px 0;
+  box-shadow: 0 2px 8px rgba(45, 58, 46, 0.04);
+}
+
+.callout-title {
+  font-family: 'Nanum Myeongjo', serif;
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* ── 링크 ── */
+.post-content a {
+  border-bottom: 1px dashed #7a9a68;
+  transition: all 0.2s ease;
+}
+
+.post-content a:hover {
+  color: #2d5a3e;
+  border-bottom-style: solid;
+}
+
+/* ── 하이라이트 ── */
+.post-content mark {
+  background: rgba(160, 200, 120, 0.25);
+  border-radius: 3px;
+}
+
+/* ── 태그 — 잎사귀 뱃지 ── */
+.post-tags span {
+  border: 1px solid #c8d8b8;
+  background: #eef3e8;
+  color: #4a7c59;
+  font-family: 'Gowun Dodum', sans-serif;
+  font-size: 12px;
+  border-radius: 14px;
+  padding: 3px 10px;
+  transition: all 0.2s ease;
+}
+
+.post-tags span:hover {
+  background: #7a9a68;
+  color: #fff;
+  border-color: #7a9a68;
+}
+
+/* ── 구분선 — 나뭇잎 ── */
+.post-content hr {
+  border: none;
+  border-top: 1px solid #c8d8b8;
+  position: relative;
+  margin: 30px 0;
+}
+
+.post-content hr::after {
+  content: '🌿';
+  position: absolute;
+  top: -11px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #fff;
+  padding: 0 8px;
+  font-size: 14px;
+}
+
+/* ── 테이블 ── */
+.post-content table {
+  border: 1px solid #c8d8b8;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.post-content th {
+  font-family: 'Nanum Myeongjo', serif;
+  font-weight: 700;
+  color: #2d3a2e;
+  font-size: 13px;
+  border-color: #c8d8b8;
+}
+
+.post-content td {
+  border-color: #c8d8b8;
+}
+
+/* ── 머메이드 ── */
+.mermaid {
+  margin: 15px 0;
+  padding: 15px;
+  background: #f8faf5;
+  border: 1px solid #c8d8b8;
+  border-radius: 8px;
+  text-align: center;
+}
+
+/* ── 이미지 ── */
+.post-content img {
+  border: 1px solid #c8d8b8;
+  border-radius: 8px;
+  box-shadow: 0 3px 12px rgba(45, 58, 46, 0.08);
+}
+
+/* ── 리스트 ── */
+.post-content ul li::marker {
+  color: #7a9a68;
+}
+
+.post-content ol li::marker {
+  color: #a08060;
+  font-family: 'Nanum Myeongjo', serif;
+  font-weight: 700;
+}
+
+/* ── 글 메타 ── */
+.post-meta {
+  font-family: 'Gowun Dodum', sans-serif;
+}
+
+.post-meta .meta-category {
+  background: #eef3e8;
+  border: 1px solid #c8d8b8;
+  border-radius: 8px;
+  color: #4a7c59;
+  font-family: 'Nanum Myeongjo', serif;
+}
+
+/* ── 글 네비게이션 ── */
+.post-nav a {
+  font-family: 'Nanum Myeongjo', serif;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.post-nav a:hover {
+  color: #4a7c59;
+}
+
+
+/* ═══════════════════════════════════
+   Prism.js — Forest (자연 팔레트)
+   ═══════════════════════════════════ */
+
+.post-content .token.comment,
+.post-content .token.prolog,
+.post-content .token.doctype,
+.post-content .token.cdata {
+  color: #7a8a70;
+  font-style: italic;
+}
+
+.post-content .token.punctuation {
+  color: #2d3a2e;
+}
+
+.post-content .token.property,
+.post-content .token.tag,
+.post-content .token.boolean,
+.post-content .token.number,
+.post-content .token.constant,
+.post-content .token.symbol {
+  color: #a08060;
+}
+
+.post-content .token.selector,
+.post-content .token.attr-name,
+.post-content .token.string,
+.post-content .token.char,
+.post-content .token.builtin {
+  color: #4a7c59;
+}
+
+.post-content .token.operator,
+.post-content .token.entity,
+.post-content .token.url {
+  color: #8a5030;
+}
+
+.post-content .token.atrule,
+.post-content .token.attr-value,
+.post-content .token.keyword {
+  color: #607890;
+}
+
+.post-content .token.function,
+.post-content .token.class-name {
+  color: #7a9a68;
+}
+
+.post-content .token.regex,
+.post-content .token.important,
+.post-content .token.variable {
+  color: #c8a050;
+}

@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Spring] 1. 설정 관리와 @ConfigurationProperties - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Spring] 1. 설정 관리와 @ConfigurationProperties</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.02.13
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">스프링 리팩토링 패턴 시리즈 (1/5)</div>
+            <p>이 시리즈는 스프링 프로젝트에서 자주 발생하는 리팩토링 포인트를 정리합니다.</p>
+            <p>다음 편: <a href="refactoring-2-transaction.html">트랜잭션과 데이터 일관성</a></p>
+          </div>
+
+          <p>스프링 애플리케이션을 개발하다 보면 설정값을 다루는 코드가 여기저기 흩어지기 마련이다. AWS 키, 유효성 검증 규칙, 관리자 정보... 이런 값들을 어떻게 관리하느냐에 따라 코드의 유지보수성이 크게 달라진다.</p>
+
+          <h2>@Value의 한계</h2>
+
+          <p><code>@Value</code>는 스프링에서 설정값을 주입받는 가장 기본적인 방법이다.</p>
+
+<pre><code class="language-java">@Component
+public class StorageConfig {
+    @Value("${aws.s3.access-key}")
+    private String accessKey;
+
+    @Value("${aws.s3.secret-key}")
+    private String secretKey;
+
+    @Value("${aws.s3.region}")
+    private String region;
+}</code></pre>
+
+          <p>간단해 보이지만 실제 프로젝트에서는 문제가 금방 드러난다.</p>
+
+          <h4>타입 안전성 부재</h4>
+
+          <p><code>@Value</code>는 문자열 기반이다. <code>${aws.s3.regoin}</code>처럼 오타가 있어도 <strong>컴파일 시점에는 아무 경고가 없다.</strong> 애플리케이션을 띄워야 비로소 실패하고, 그마저도 기본값이 설정돼 있으면 잘못된 값으로 조용히 동작한다.</p>
+
+          <h4>설정 분산</h4>
+
+          <p>하나의 논리적 설정 그룹(예: AWS S3 관련 설정)이 여러 클래스에 흩어질 수 있다. 설정 키가 바뀌면 프로젝트 전체를 뒤져야 한다.</p>
+
+          <h4>검증 불가</h4>
+
+          <p><code>@Value</code>만으로는 주입된 값이 유효한지 검증할 방법이 없다. 비밀번호 최소 길이가 음수여도 그대로 주입된다.</p>
+
+          <h2>@ConfigurationProperties로 전환하기</h2>
+
+          <p><code>@ConfigurationProperties</code>는 설정값을 <mark>타입 안전한 자바 객체</mark>로 바인딩한다. 이것이 스프링 팀이 공식적으로 권장하는 방식이다.</p>
+
+<pre><code class="language-java">@ConfigurationProperties(prefix = "aws.s3")
+public class AwsS3Properties {
+    private String accessKey;
+    private String secretKey;
+    private String region;
+    private String bucket;
+    private Long presignedUrlExpiration;
+
+    // getter, setter
+}</code></pre>
+
+          <ul>
+            <li><code>prefix = "aws.s3"</code> — <code>application.yml</code>의 <code>aws.s3</code> 아래 프로퍼티들이 자동으로 매핑된다.</li>
+            <li>필드명과 yml 키가 <mark>자동으로 매칭</mark>된다. <code>accessKey</code> → <code>access-key</code> (relaxed binding).</li>
+          </ul>
+
+          <h4>활성화 방법</h4>
+
+          <p><code>@ConfigurationProperties</code> 클래스를 스프링이 인식하려면 두 가지 방법 중 하나를 택한다.</p>
+
+<pre><code class="language-java">// 방법 1: 메인 클래스나 설정 클래스에서 스캔
+@SpringBootApplication
+@ConfigurationPropertiesScan
+public class Application { }
+
+// 방법 2: 특정 프로퍼티 클래스를 명시적으로 등록
+@Configuration
+@EnableConfigurationProperties(AwsS3Properties.class)
+public class AppConfig { }</code></pre>
+
+          <h4>사용하는 쪽</h4>
+
+<pre><code class="language-java">@Configuration
+@RequiredArgsConstructor
+public class S3Config {
+    private final AwsS3Properties awsS3Properties;
+
+    @Bean
+    public S3Client s3Client() {
+        return S3Client.builder()
+                .region(Region.of(awsS3Properties.getRegion()))
+                .credentialsProvider(credentialsProvider())
+                .build();
+    }
+
+    private StaticCredentialsProvider credentialsProvider() {
+        return StaticCredentialsProvider.create(
+                AwsBasicCredentials.create(
+                        awsS3Properties.getAccessKey(),
+                        awsS3Properties.getSecretKey()));
+    }
+}</code></pre>
+
+          <ul>
+            <li><code>@Value</code> 어노테이션이 완전히 사라졌다.</li>
+            <li>설정값의 출처가 <code>AwsS3Properties</code> 하나로 집중된다.</li>
+            <li>생성자 주입으로 <strong>불변성</strong>까지 보장할 수 있다.</li>
+          </ul>
+
+          <h2>불변 프로퍼티 클래스</h2>
+
+          <p>스프링 부트 2.2+부터는 <code>@ConstructorBinding</code>을 사용해 불변 프로퍼티 클래스를 만들 수 있다. 스프링 부트 3.x에서는 <strong>생성자가 하나뿐이면 자동으로 생성자 바인딩</strong>이 적용된다.</p>
+
+<pre><code class="language-java">@ConfigurationProperties(prefix = "aws.s3")
+public record AwsS3Properties(
+        String accessKey,
+        String secretKey,
+        String region,
+        String bucket,
+        Long presignedUrlExpiration
+) { }</code></pre>
+
+          <ul>
+            <li>Java <code>record</code>를 사용하면 getter, equals, hashCode, toString이 자동 생성된다.</li>
+            <li>필드가 <code>final</code>이므로 런타임에 값이 바뀔 위험이 없다.</li>
+          </ul>
+
+          <h2>유효성 검증 통합</h2>
+
+          <p><code>@ConfigurationProperties</code>의 진짜 강점은 <mark>Bean Validation과 결합</mark>할 수 있다는 점이다.</p>
+
+<pre><code class="language-java">@Validated
+@ConfigurationProperties(prefix = "aws.s3")
+public record AwsS3Properties(
+        @NotBlank String accessKey,
+        @NotBlank String secretKey,
+        @NotBlank String region,
+        @NotBlank String bucket,
+        @Positive Long presignedUrlExpiration
+) { }</code></pre>
+
+          <ul>
+            <li>애플리케이션 시작 시점에 설정값이 검증된다. 빈 문자열이나 음수가 들어오면 <strong>즉시 실패</strong>한다.</li>
+            <li>"Fast Fail" 원칙 — 잘못된 설정은 배포 전에 잡는 것이 가장 좋다.</li>
+          </ul>
+
+<pre><code>***************************
+APPLICATION FAILED TO START
+***************************
+Binding to target AwsS3Properties failed:
+
+    Property: aws.s3.access-key
+    Value:
+    Reason: must not be blank</code></pre>
+
+          <h2>설정 그룹화 전략</h2>
+
+          <p>프로젝트 규모가 커지면 설정값도 많아진다. 이때 어떤 기준으로 프로퍼티 클래스를 나눌지가 중요하다.</p>
+
+          <div class="mermaid">
+graph TD
+    A[application.yml] --> B[AwsS3Properties]
+    A --> C[AdminProperties]
+    A --> D[ValidationProperties]
+    A --> E[SecurityProperties]
+
+    B --> B1["prefix: aws.s3"]
+    C --> C1["prefix: admin"]
+    D --> D1["prefix: validation.user"]
+    E --> E1["prefix: remember-me"]
+          </div>
+
+          <p>핵심 원칙은 <strong>하나의 프로퍼티 클래스가 하나의 설정 관심사</strong>를 담당하는 것이다.</p>
+
+          <ul>
+            <li><code>AwsS3Properties</code> — S3 접속 정보와 버킷 설정</li>
+            <li><code>AdminProperties</code> — 초기 관리자 계정 정보</li>
+            <li><code>ValidationProperties</code> — 사용자 입력 검증 규칙</li>
+            <li><code>SecurityProperties</code> — Remember-Me 같은 보안 관련 설정</li>
+          </ul>
+
+          <p>이렇게 나누면 특정 설정을 변경할 때 <strong>영향 범위가 명확</strong>해진다.</p>
+
+          <h2>심화 분석</h2>
+
+          <h4>@Value와 @ConfigurationProperties 비교</h4>
+
+          <p><code>@Value</code>는 SpEL(Spring Expression Language)을 지원한다. 단순 주입을 넘어 <code>#{systemProperties['user.home']}</code>이나 <code>${value:default}</code> 같은 표현식을 사용할 수 있다. 이것이 <code>@Value</code>가 여전히 유용한 유일한 시나리오다.</p>
+
+          <p>반면 <code>@ConfigurationProperties</code>는 다음을 추가로 제공한다.</p>
+
+          <ul>
+            <li><strong>Relaxed Binding</strong> — <code>camelCase</code>, <code>kebab-case</code>, <code>UPPER_CASE</code> 모두 자동 매핑</li>
+            <li><strong>중첩 객체</strong> — <code>@NestedConfigurationProperties</code>로 계층형 설정 표현 가능</li>
+            <li><strong>IDE 지원</strong> — <code>spring-boot-configuration-processor</code>를 추가하면 yml 편집 시 자동완성 제공</li>
+            <li><strong>프로파일별 오버라이드</strong> — 프로퍼티 클래스 자체가 빈이므로, <code>@Profile</code>과 자연스럽게 결합</li>
+          </ul>
+
+          <h4>spring-boot-configuration-processor</h4>
+
+<pre><code class="language-groovy">dependencies {
+    annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+}</code></pre>
+
+          <p>이 의존성을 추가하면 빌드 시 <code>META-INF/spring-configuration-metadata.json</code>이 생성되어, IDE에서 <code>application.yml</code> 편집 시 <strong>프로퍼티 자동완성과 타입 힌트</strong>를 사용할 수 있다.</p>
+
+          <h2>자주 하는 실수</h2>
+
+          <h4>static 필드에 @Value setter로 주입</h4>
+
+<pre><code class="language-java">@Component
+public class ValidationProperties {
+    public static int ID_MIN_LENGTH;
+
+    @Value("${validation.user.id.min-length}")
+    public void setIdMinLength(int value) {
+        ID_MIN_LENGTH = value;  // static 필드에 주입
+    }
+}</code></pre>
+
+          <p>이 패턴은 세 가지 문제가 있다.</p>
+
+          <ol>
+            <li><strong>멀티스레드 불안전</strong> — static 필드 쓰기에 동기화가 없다. 빈 초기화 시점에 다른 스레드가 이 값을 읽으면 0(int 기본값)을 볼 수 있다.</li>
+            <li><strong>테스트 어려움</strong> — static 필드는 테스트 간에 상태가 공유되어 테스트 격리가 깨진다.</li>
+            <li><strong>스프링 생명주기와 충돌</strong> — <code>@Value</code> setter가 호출되기 전에 static 필드를 참조하는 코드가 실행될 수 있다.</li>
+          </ol>
+
+          <p>올바른 해결책은 <code>@ConfigurationProperties</code>로 전환하고, 해당 빈을 필요한 곳에 <strong>주입</strong>하는 것이다.</p>
+
+          <h4>하드코딩된 설정값</h4>
+
+<pre><code class="language-java">public class OnlineThreshold {
+    public static final Duration ONLINE_THRESHOLD = Duration.ofMinutes(5);
+}</code></pre>
+
+          <p><code>application.yml</code>에 설정값이 있는데도 하드코딩하는 경우가 있다. 이렇게 하면 환경별로 다른 값을 적용할 수 없고, 설정 변경 시 재컴파일이 필요하다.</p>
+
+<pre><code class="language-yaml">user-status:
+  online-threshold-minutes: 5</code></pre>
+
+          <p>이미 yml에 값이 정의되어 있다면, <code>@ConfigurationProperties</code>로 읽어와야 한다.</p>
+
+          <h4>prefix 누락</h4>
+
+<pre><code class="language-java">@ConfigurationProperties  // prefix가 없으면 모든 프로퍼티를 매핑 시도
+public class AppProperties { }</code></pre>
+
+          <p>반드시 <code>prefix</code>를 지정해서 매핑 범위를 한정해야 한다.</p>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Spring</span>
+          <span>#ConfigurationProperties</span>
+          <span>#설정관리</span>
+          <span>#리팩토링</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+          <a href="refactoring-2-transaction.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js — 문법 하이라이팅 -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid — 다이어그램 -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

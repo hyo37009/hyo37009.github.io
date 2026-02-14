@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Spring] 4. REST API 설계 원칙 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Spring] 4. REST API 설계 원칙</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.02.13
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">스프링 리팩토링 패턴 시리즈 (4/5)</div>
+            <p>이전 편: <a href="refactoring-3-exception-handling.html">예외 처리 전략 설계</a></p>
+            <p>다음 편: <a href="refactoring-5-code-consistency.html">코드 일관성과 쿼리 최적화</a></p>
+          </div>
+
+          <p>REST API는 클라이언트와 서버 사이의 <mark>계약</mark>이다. 일관성 없는 API는 프론트엔드 개발자를 혼란에 빠뜨리고, 유지보수 비용을 기하급수적으로 늘린다. 스프링 MVC에서 REST API를 설계할 때 지켜야 할 원칙들을 정리한다.</p>
+
+          <h2>HTTP 메서드와 매핑 어노테이션</h2>
+
+          <p>스프링은 HTTP 메서드별로 전용 어노테이션을 제공한다.</p>
+
+<pre><code class="language-java">@GetMapping("/users")       // GET
+@PostMapping("/users")      // POST
+@PutMapping("/users/{id}")  // PUT
+@PatchMapping("/users/{id}")// PATCH
+@DeleteMapping("/users/{id}")// DELETE</code></pre>
+
+          <p>이것들은 <code>@RequestMapping(method = RequestMethod.GET)</code>의 <strong>축약형</strong>이다.</p>
+
+          <h4>왜 축약형을 써야 하는가</h4>
+
+<pre><code class="language-java">// Before: 장황하고 실수하기 쉬움
+@RequestMapping(value = "/public", method = RequestMethod.POST)
+public ResponseEntity&lt;ChannelDto&gt; createPublic(...) { }
+
+@RequestMapping(value = "/{channelId}", method = RequestMethod.DELETE)
+public ResponseEntity&lt;Void&gt; removeChannel(...) { }
+
+// After: 의도가 명확함
+@PostMapping("/public")
+public ResponseEntity&lt;ChannelDto&gt; createPublic(...) { }
+
+@DeleteMapping("/{channelId}")
+public ResponseEntity&lt;Void&gt; removeChannel(...) { }</code></pre>
+
+          <ul>
+            <li><strong>가독성</strong> — 메서드의 HTTP 동사가 어노테이션 이름에 바로 드러난다.</li>
+            <li><strong>일관성</strong> — 팀 전체가 동일한 스타일을 유지하기 쉽다.</li>
+            <li><strong>실수 방지</strong> — <code>method = RequestMethod.GET</code>을 빼먹으면 모든 HTTP 메서드에 매핑되는 사고가 발생할 수 있다.</li>
+          </ul>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">혼용 금지</div>
+            <p>한 프로젝트에서 <code>@RequestMapping(method = ...)</code>과 <code>@GetMapping</code> 등을 섞어 쓰면 코드의 일관성이 무너진다. 팀에서 하나의 스타일을 정하고 전체에 적용해야 한다.</p>
+          </div>
+
+          <h2>@PathVariable vs @RequestParam</h2>
+
+          <p>이 두 어노테이션의 혼용은 REST API에서 가장 흔한 설계 실수 중 하나다.</p>
+
+          <h4>@PathVariable</h4>
+
+          <p><mark>리소스를 식별</mark>할 때 사용한다. URL 경로의 일부로 포함된다.</p>
+
+<pre><code class="language-java">@DeleteMapping("/{userId}")
+public ResponseEntity&lt;Void&gt; delete(@PathVariable UUID userId) { }
+// DELETE /api/users/550e8400-e29b-41d4-a716-446655440000</code></pre>
+
+          <ul>
+            <li><code>/users/{userId}</code> — "이 사용자"를 지칭하는 고유 식별자</li>
+          </ul>
+
+          <h4>@RequestParam</h4>
+
+          <p><mark>필터링, 검색, 페이징</mark> 등 리소스를 어떻게 조회할지를 지정할 때 사용한다.</p>
+
+<pre><code class="language-java">@GetMapping
+public ResponseEntity&lt;List&lt;MessageDto&gt;&gt; getByChannelId(
+        @RequestParam UUID channelId,
+        @RequestParam(defaultValue = "0") int page) { }
+// GET /api/messages?channelId=...&amp;page=0</code></pre>
+
+          <ul>
+            <li><code>?channelId=...</code> — 메시지 목록을 필터링하는 조건</li>
+          </ul>
+
+          <h4>잘못된 사용 예시</h4>
+
+<pre><code class="language-java">// 문제: 경로에 {userId}가 있는데 @RequestParam으로 받음
+@DeleteMapping("/{userId}")
+public ResponseEntity&lt;Void&gt; delete(@RequestParam UUID userId) { }
+// DELETE /api/users/550e...?userId=550e...  ← URL에 ID가 두 번!</code></pre>
+
+          <p>경로 변수(<code>/{userId}</code>)와 <code>@RequestParam</code>이 동시에 존재하면, 경로의 값은 <strong>무시</strong>되고 쿼리 파라미터에서만 값을 읽는다. 클라이언트는 <code>/users/abc</code>로 요청했는데 실제로는 <code>?userId=xyz</code>의 값이 사용되는 혼란이 발생한다.</p>
+
+          <div class="mermaid">
+graph LR
+    A["DELETE /api/users/{userId}"] --> B{"어떤 어노테이션?"}
+    B -->|"@PathVariable"| C["경로에서 추출"]
+    B -->|"@RequestParam"| D["쿼리에서 추출"]
+
+    style C fill:#c8e6c9
+    style D fill:#ffcdd2
+          </div>
+
+          <p><strong>원칙</strong>: 경로에 변수가 있으면 반드시 <code>@PathVariable</code>, 쿼리 스트링이면 <code>@RequestParam</code>.</p>
+
+          <h2>HTTP 상태 코드</h2>
+
+          <p>적절한 HTTP 상태 코드는 API의 <mark>자기 설명성</mark>을 높인다.</p>
+
+          <h4>성공 응답</h4>
+
+          <ul>
+            <li><strong>200 OK</strong> — 일반적인 성공 응답. <code>GET</code>, <code>PUT</code>, <code>PATCH</code> 요청의 성공.</li>
+            <li><strong>201 Created</strong> — 새 리소스가 생성됨. <code>POST</code> 요청의 성공.</li>
+            <li><strong>204 No Content</strong> — 성공했지만 응답 본문이 없음. <code>DELETE</code> 요청의 성공.</li>
+          </ul>
+
+          <h4>클라이언트 오류</h4>
+
+          <ul>
+            <li><strong>400 Bad Request</strong> — 잘못된 요청. 유효성 검증 실패.</li>
+            <li><strong>401 Unauthorized</strong> — 인증되지 않음. 로그인이 필요.</li>
+            <li><strong>403 Forbidden</strong> — 권한 없음. 인증은 되었지만 권한이 부족.</li>
+            <li><strong>404 Not Found</strong> — 리소스가 존재하지 않음.</li>
+            <li><strong>409 Conflict</strong> — 충돌. 이미 존재하는 리소스 생성 시도.</li>
+          </ul>
+
+          <h4>비표준 상태 코드 주의</h4>
+
+<pre><code class="language-java">// 안티패턴: 비표준 상태 코드
+return ResponseEntity.status(HttpStatus.valueOf(203)).build();</code></pre>
+
+          <p>203은 <code>Non-Authoritative Information</code>으로, 프록시 서버가 응답을 변환했을 때 사용하는 코드다. CSRF 토큰 반환에 203을 사용하는 것은 HTTP 스펙에 맞지 않다.</p>
+
+<pre><code class="language-java">// 올바른 사용
+return ResponseEntity.ok().build();          // 200
+return ResponseEntity.noContent().build();   // 204</code></pre>
+
+          <h2>RESTful URL 설계</h2>
+
+<pre><code># 리소스 컬렉션
+GET    /api/users          → 전체 사용자 목록
+POST   /api/users          → 사용자 생성
+
+# 개별 리소스
+GET    /api/users/{id}     → 특정 사용자 조회
+PUT    /api/users/{id}     → 전체 수정
+PATCH  /api/users/{id}     → 부분 수정
+DELETE /api/users/{id}     → 삭제
+
+# 하위 리소스
+GET    /api/channels/{id}/messages → 특정 채널의 메시지 목록</code></pre>
+
+          <h4>핵심 원칙</h4>
+
+          <ol>
+            <li><strong>명사 사용</strong> — URL에는 동사가 아닌 명사를 쓴다. <code>/getUsers</code> ❌ → <code>/users</code> ✅</li>
+            <li><strong>복수형</strong> — 컬렉션은 복수형. <code>/user</code> ❌ → <code>/users</code> ✅</li>
+            <li><strong>계층 구조</strong> — 리소스 간 관계를 URL 경로로 표현. <code>/channels/{id}/messages</code></li>
+            <li><strong>소문자</strong> — URL은 대소문자를 구분하므로 소문자로 통일.</li>
+          </ol>
+
+          <h2>심화 분석</h2>
+
+          <h4>컨트롤러 레이어의 책임</h4>
+
+          <p>컨트롤러는 <strong>HTTP 요청/응답 변환</strong>만 담당해야 한다. 비즈니스 로직이 컨트롤러에 들어가면 테스트가 어려워지고, 로직이 서비스와 컨트롤러에 분산된다.</p>
+
+<pre><code class="language-java">// 안티패턴: 컨트롤러에 비즈니스 로직
+@GetMapping
+public ResponseEntity&lt;List&lt;ChannelDto&gt;&gt; getVisibleChannels(@RequestParam UUID userId) {
+    User user = userRepository.findById(userId).orElseThrow();
+    List&lt;Channel&gt; channels = channelRepository.findAllPublic();
+    channels.addAll(channelRepository.findAllPrivateByUser(user));
+    return ResponseEntity.ok(channels.stream().map(ChannelMapper::toDto).toList());
+}
+
+// 모범 사례: 서비스에 위임
+@GetMapping
+public ResponseEntity&lt;List&lt;ChannelDto&gt;&gt; getVisibleChannels(@RequestParam UUID userId) {
+    return ResponseEntity.ok(channelService.getAllVisibleByUser(userId));
+}</code></pre>
+
+          <h4>ResponseEntity 일관성</h4>
+
+<pre><code class="language-java">// 일관성 없는 반환 스타일
+@GetMapping("/me")
+public UserDto getMe(...) { }  // ResponseEntity 없음
+
+@GetMapping
+public ResponseEntity&lt;List&lt;UserDto&gt;&gt; getAll() { }  // ResponseEntity 있음</code></pre>
+
+          <p>같은 컨트롤러 내에서 <code>ResponseEntity</code>를 쓸지 말지 통일해야 한다. 일반적으로 <code>ResponseEntity</code>를 사용하는 것이 상태 코드와 헤더를 명시적으로 제어할 수 있어 권장된다.</p>
+
+          <h2>자주 하는 실수</h2>
+
+          <h4>@RequestMapping을 클래스와 메서드에 혼용</h4>
+
+<pre><code class="language-java">@RestController
+@RequestMapping("/api/channels")
+public class ChannelController {
+
+    @RequestMapping(value = "/public", method = RequestMethod.POST)  // 구식
+    public ResponseEntity&lt;ChannelDto&gt; createPublic(...) { }
+
+    @GetMapping  // 현대적
+    public ResponseEntity&lt;List&lt;ChannelDto&gt;&gt; getAll(...) { }
+}</code></pre>
+
+          <p>한 컨트롤러 안에서 <code>@RequestMapping(method=...)</code>과 <code>@GetMapping</code>이 혼재하면, 코드 리뷰 시 "이 팀의 컨벤션이 뭔가?"라는 의문이 생긴다. <strong>전부 축약형으로 통일</strong>하는 것이 바람직하다.</p>
+
+          <h4>경로 변수와 파라미터 불일치</h4>
+
+<pre><code class="language-java">@DeleteMapping("/{messageId}")
+public ResponseEntity&lt;Void&gt; remove(@RequestParam UUID messageId) { }</code></pre>
+
+          <p>경로에 <code>{messageId}</code>가 있지만 <code>@RequestParam</code>으로 받고 있다. 이러면 클라이언트가 <code>DELETE /api/messages/123</code>으로 요청해도, 실제로는 <code>?messageId=123</code>이 없으면 400 에러가 발생한다.</p>
+
+          <h4>PATCH와 PUT 혼동</h4>
+
+          <ul>
+            <li><strong>PUT</strong> — 리소스 <mark>전체를 교체</mark>. 보내지 않은 필드는 null이 된다.</li>
+            <li><strong>PATCH</strong> — 리소스 <mark>일부만 수정</mark>. 보낸 필드만 변경된다.</li>
+          </ul>
+
+          <p>사용자 이름만 바꾸고 싶은데 PUT을 쓰면, 이메일이나 비밀번호까지 함께 보내야 한다.</p>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Spring</span>
+          <span>#REST</span>
+          <span>#API설계</span>
+          <span>#HTTP</span>
+          <span>#리팩토링</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+          <a href="refactoring-5-code-consistency.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js — 문법 하이라이팅 -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid — 다이어그램 -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

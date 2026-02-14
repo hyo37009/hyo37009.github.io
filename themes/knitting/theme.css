@@ -1,0 +1,438 @@
+/* ========================================
+   뜨개 공방 테마 — Cozy Craft Studio
+
+   "한 코 한 코, 따뜻하게"
+
+   실과 바늘이 만드는 아날로그 감성.
+
+   커스터마이징:
+   - 변수 값을 바꾸면 전체 스타일이 바뀜
+   - icons/ 폴더에 아이콘 넣으면 콜아웃 아이콘 교체됨
+     (파일명: info.png, tip.png, warning.png, question.png)
+   ======================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&family=Gowun+Dodum&display=swap');
+
+:root {
+  /* ── 셸 — 따뜻한 코지 톤 ── */
+  --bg-color: #fdf2e9;
+  --container-bg: #fffbf7;
+  --border-color: #edcbb0;
+  --nav-bg: #f5e1d0;
+  --nav-hover: #edcbb0;
+  --nav-active: #e0b89a;
+  --text-color: #4a3228;
+  --text-light: #a0887a;
+  --accent: #d4a07a;
+  --link-color: #c07850;
+
+  /* ── 본문 — 부드러운 둥근 폰트 ── */
+  --post-font: 'Gowun Dodum', 'Apple SD Gothic Neo', sans-serif;
+  --post-font-size: 15px;
+  --post-line-height: 2.0;
+  --post-paragraph-gap: 16px;
+  --post-heading-color: #4a3228;
+  --post-strong-color: #c0392b;
+  --post-em-color: #a0887a;
+  --post-mark-bg: #ffeaa7;
+  --post-link-color: #e17055;
+
+  /* ── 코드 — 다크 우드 ── */
+  --post-code-bg: #fdf2e9;
+  --post-code-border: #edcbb0;
+  --post-pre-bg: #2c1810;
+  --post-pre-color: #f4c7a3;
+
+  /* ── 인용 ── */
+  --post-quote-bg: #fef9f4;
+  --post-quote-border: #d4a07a;
+  --post-quote-color: #6d4c41;
+
+  /* ── 콜아웃 — 뜨개질 감성 아이콘 ── */
+  --callout-info-bg: #fef9f4;
+  --callout-info-border: #d4a07a;
+  --callout-info-icon: '🧶';
+  --callout-tip-bg: #fdf2e9;
+  --callout-tip-border: #e17055;
+  --callout-tip-icon: '✨';
+  --callout-warning-bg: #fff8e1;
+  --callout-warning-border: #f9a825;
+  --callout-warning-icon: '🪡';
+  --callout-question-bg: #fce4ec;
+  --callout-question-border: #ec407a;
+  --callout-question-icon: '💭';
+
+  /* ── 테이블 ── */
+  --post-table-header-bg: #fdf2e9;
+  --post-table-stripe-bg: #fdfbf9;
+
+  /* ── 태그 ── */
+  --post-tag-bg: #fdf2e9;
+
+  /* ── 테두리 — 부드럽게 ── */
+  --post-border-radius: 10px;
+}
+
+
+/* ═══════════════════════════════════
+   커스텀 스타일
+   ═══════════════════════════════════ */
+
+/* ── 제목 — 손글씨 감성 ── */
+.post-content h2 {
+  font-family: 'Gaegu', 'Gowun Dodum', sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  border-bottom: 2px dashed #edcbb0;
+  padding-bottom: 8px;
+}
+
+.post-content h2::after {
+  content: ' ~';
+  color: #edcbb0;
+  font-weight: normal;
+}
+
+.post-content h3 {
+  font-family: 'Gaegu', 'Gowun Dodum', sans-serif;
+  font-size: 19px;
+  font-weight: 700;
+  color: #5d4037;
+}
+
+.post-content h4 {
+  font-family: 'Gaegu', 'Gowun Dodum', sans-serif;
+  font-weight: 700;
+}
+
+/* ── 인라인 코드 — 따뜻한 칩 ── */
+.post-content code {
+  color: #c0392b;
+  font-size: 13px;
+  border-radius: 4px;
+}
+
+/* ── 코드 블록 — 다크 우드 ── */
+.post-content pre {
+  border: none;
+  border-left: 4px solid #d4a07a;
+  border-radius: 0 10px 10px 0;
+  box-shadow: 0 3px 12px rgba(44, 24, 16, 0.1);
+}
+
+.post-content pre::before {
+  content: none;
+}
+
+.post-content pre code {
+  font-size: 13px;
+}
+
+/* ── 인용문 — 핀 노트 ── */
+.post-content blockquote {
+  border-left: 4px solid #d4a07a;
+  border-radius: 0 10px 10px 0;
+  padding: 14px 18px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  font-family: 'Gaegu', 'Gowun Dodum', sans-serif;
+  font-size: 16px;
+}
+
+/* ── 콜아웃 — 레시피 카드 ── */
+.callout {
+  border-width: 1px;
+  border-style: dashed;
+  border-left-width: 4px;
+  border-left-style: solid;
+  border-radius: 0 10px 10px 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.callout-title {
+  font-family: 'Gaegu', 'Gowun Dodum', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: none;
+}
+
+/* ── 테이블 ── */
+.post-content table {
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #edcbb0;
+}
+
+.post-content th {
+  font-family: 'Gaegu', 'Gowun Dodum', sans-serif;
+  font-weight: 700;
+  color: #5d4037;
+  font-size: 14px;
+  border-color: #edcbb0;
+}
+
+.post-content td {
+  border-color: #edcbb0;
+}
+
+/* ── 링크 — 코랄 밑줄 ── */
+.post-content a {
+  border-bottom: 1px dashed #e17055;
+  transition: all 0.2s ease;
+}
+
+.post-content a:hover {
+  color: #c0392b;
+  border-bottom-style: solid;
+  border-bottom-color: #c0392b;
+}
+
+/* ── 하이라이트 — 노란 형광펜 ── */
+.post-content mark {
+  background: #ffeaa7;
+  padding: 2px 5px;
+  border-radius: 3px;
+}
+
+/* ── 태그 — 부드러운 뱃지 ── */
+.post-tags span {
+  background: #fdf2e9;
+  border: 1px dashed #edcbb0;
+  border-radius: 16px;
+  color: #5d4037;
+  font-family: 'Gaegu', 'Gowun Dodum', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 3px 10px;
+  transition: all 0.2s ease;
+}
+
+.post-tags span:hover {
+  background: #edcbb0;
+  color: #fff;
+  border-color: #edcbb0;
+}
+
+/* ── 구분선 — 실 패턴 ── */
+.post-content hr {
+  border: none;
+  border-top: 3px dotted #edcbb0;
+  position: relative;
+  margin: 30px 0;
+}
+
+.post-content hr::after {
+  content: '🧶';
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #fff;
+  padding: 0 8px;
+  font-size: 14px;
+}
+
+/* ── 이미지 — 둥근 모서리 + 따뜻한 그림자 ── */
+.post-content img {
+  border-radius: 10px;
+  border: 2px solid #edcbb0;
+  box-shadow: 0 3px 12px rgba(93, 64, 55, 0.08);
+}
+
+/* ── 리스트 ── */
+.post-content ul li::marker {
+  color: #e17055;
+}
+
+.post-content ol li::marker {
+  color: #d4a07a;
+  font-family: 'Gaegu', sans-serif;
+  font-weight: 700;
+}
+
+/* ── 체크리스트 ── */
+.post-content .task-list input[type="checkbox"] {
+  accent-color: #e17055;
+}
+
+/* ── 글 메타 ── */
+.post-meta .meta-category {
+  background: #fdf2e9;
+  border: 1px dashed #edcbb0;
+  border-radius: 12px;
+  color: #5d4037;
+  font-family: 'Gaegu', 'Gowun Dodum', sans-serif;
+  font-weight: 700;
+}
+
+/* ── 글 네비게이션 ── */
+.post-nav a {
+  font-family: 'Gaegu', 'Gowun Dodum', sans-serif;
+  font-weight: 700;
+  font-size: 15px;
+  transition: all 0.2s ease;
+}
+
+.post-nav a:hover {
+  color: #c0392b;
+}
+
+/* ── 이미지 캡션 ── */
+.post-content .img-caption {
+  font-family: 'Gaegu', 'Gowun Dodum', sans-serif;
+  font-size: 14px;
+  color: #a0887a;
+}
+
+
+/* ═══════════════════════════════════
+   셸 스타일 오버라이드
+   ═══════════════════════════════════ */
+
+/* ── 배너 — 따뜻한 도트 패턴 ── */
+.banner {
+  background:
+    radial-gradient(circle, rgba(255,255,255,0.35) 1px, transparent 1px),
+    linear-gradient(135deg, #f5e1d0 0%, #edcbb0 50%, #f0d5be 100%);
+  background-size: 18px 18px, 100% 100%;
+}
+
+.banner::before {
+  background: linear-gradient(90deg, #d4a07a, #e0b89a, #d4a07a);
+}
+
+.banner-title {
+  color: #6d4c41;
+  text-shadow: 2px 2px 0 #fffbf7, 3px 3px 0 rgba(0,0,0,0.04);
+}
+
+.banner-subtitle {
+  color: #8d6e63;
+  background: rgba(255,251,247,0.6);
+}
+
+/* ── 네비게이션 — 따뜻한 탭 ── */
+.nav {
+  background: #f0d5be;
+}
+
+.nav a:hover {
+  background: #edcbb0;
+  border-bottom-color: #f0d5be;
+}
+
+.nav a.active {
+  background: #fffbf7;
+  border-bottom-color: #fffbf7;
+}
+
+.nav a.active:hover {
+  background: #fffbf7;
+  border-bottom-color: #fffbf7;
+}
+
+/* ── 사이드바 ── */
+.sidebar {
+  background: #fef9f4;
+}
+
+.profile-img {
+  background: linear-gradient(135deg, #fef9f4, #f5e1d0);
+}
+
+.profile-bio {
+  background: #fef9f4;
+}
+
+.sidebar-section {
+  background: #fffbf7;
+}
+
+.sidebar-section h3 {
+  background: var(--nav-bg);
+}
+
+/* ── 티커 ── */
+.ticker {
+  background: #fef9f4;
+}
+
+.ticker::before {
+  background: linear-gradient(90deg, #fef9f4, transparent);
+}
+
+.ticker::after {
+  background: linear-gradient(90deg, transparent, #fef9f4);
+}
+
+/* ── 환영 박스 ── */
+.welcome-box {
+  background: linear-gradient(135deg, #fef9f4 0%, #fffbf7 100%);
+}
+
+/* ── 글 목록 ── */
+.post-list li {
+  background: #fef9f4;
+}
+
+.post-list li:hover {
+  background: #fdf2e9;
+}
+
+/* ── 푸터 ── */
+.footer::before {
+  color: #d4a07a;
+}
+
+
+/* ========================================
+   커스텀 아이콘 사용법
+
+   icons/ 폴더에 아이콘 파일을 넣고
+   아래 주석을 해제하면 이모지 대신 이미지가 적용됨
+
+   지원 파일: png, jpg, gif, svg
+   권장 크기: 20x20px
+   ======================================== */
+
+/*
+.callout-info .callout-title::before {
+  content: '';
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  margin-right: 6px;
+  vertical-align: middle;
+  background: url('icons/info.png') center/contain no-repeat;
+}
+
+.callout-tip .callout-title::before {
+  content: '';
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  margin-right: 6px;
+  vertical-align: middle;
+  background: url('icons/tip.png') center/contain no-repeat;
+}
+
+.callout-warning .callout-title::before {
+  content: '';
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  margin-right: 6px;
+  vertical-align: middle;
+  background: url('icons/warning.png') center/contain no-repeat;
+}
+
+.callout-question .callout-title::before {
+  content: '';
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  margin-right: 6px;
+  vertical-align: middle;
+  background: url('icons/question.png') center/contain no-repeat;
+}
+*/

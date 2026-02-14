@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Spring] 2. 트랜잭션과 데이터 일관성 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Spring] 2. 트랜잭션과 데이터 일관성</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.02.13
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">스프링 리팩토링 패턴 시리즈 (2/5)</div>
+            <p>이전 편: <a href="refactoring-1-configuration-properties.html">설정 관리와 @ConfigurationProperties</a></p>
+            <p>다음 편: <a href="refactoring-3-exception-handling.html">예외 처리 전략 설계</a></p>
+          </div>
+
+          <p>데이터베이스를 다루는 서비스 코드에서 트랜잭션을 빠뜨리면, 겉보기에는 잘 돌아가다가 운영 환경에서 <strong>데이터 불일치</strong>라는 최악의 버그를 만나게 된다. <em>"테스트할 땐 괜찮았는데..."</em> 라는 말이 나오는 대표적인 원인이다.</p>
+
+          <h2>트랜잭션이란</h2>
+
+          <p>트랜잭션은 <mark>여러 작업을 하나의 논리적 단위로 묶는 것</mark>이다. "전부 성공하거나, 전부 실패하거나" — 이것이 트랜잭션의 핵심이다.</p>
+
+          <p>은행 송금을 떠올려보자. A 계좌에서 출금하고 B 계좌에 입금하는 두 작업은 반드시 함께 성공하거나 함께 실패해야 한다. 출금만 되고 입금이 실패하면 돈이 사라진다.</p>
+
+          <h4>ACID 속성</h4>
+
+          <ul>
+            <li><strong>Atomicity(원자성)</strong> — 트랜잭션의 모든 작업이 하나의 단위. 하나라도 실패하면 전체 롤백.</li>
+            <li><strong>Consistency(일관성)</strong> — 트랜잭션 전후로 데이터의 무결성 제약이 유지됨.</li>
+            <li><strong>Isolation(격리성)</strong> — 동시에 실행되는 트랜잭션들이 서로 간섭하지 않음.</li>
+            <li><strong>Durability(지속성)</strong> — 커밋된 데이터는 시스템 장애가 발생해도 유지됨.</li>
+          </ul>
+
+          <h2>스프링의 @Transactional</h2>
+
+          <p>스프링은 <code>@Transactional</code> 어노테이션으로 선언적 트랜잭션 관리를 제공한다.</p>
+
+<pre><code class="language-java">@Service
+@RequiredArgsConstructor
+public class OrderService {
+    private final OrderRepository orderRepository;
+    private final PaymentRepository paymentRepository;
+
+    @Transactional
+    public Order createOrder(OrderRequest request) {
+        Order order = orderRepository.save(new Order(request));
+        paymentRepository.save(new Payment(order));  // 여기서 실패하면?
+        return order;  // order도 롤백된다
+    }
+}</code></pre>
+
+          <ul>
+            <li><code>@Transactional</code>이 붙은 메서드가 호출되면 트랜잭션이 시작된다.</li>
+            <li>메서드가 정상 종료되면 <strong>커밋</strong>, 예외가 발생하면 <strong>롤백</strong>된다.</li>
+            <li>메서드 내의 모든 DB 작업이 하나의 트랜잭션으로 묶인다.</li>
+          </ul>
+
+          <h2>트랜잭션 전파(Propagation)</h2>
+
+          <p>메서드 A가 메서드 B를 호출할 때, B의 트랜잭션은 어떻게 될까? 이것을 결정하는 것이 <mark>전파 속성</mark>이다.</p>
+
+          <div class="mermaid">
+graph LR
+    A["serviceA.methodA()"] -->|호출| B["serviceB.methodB()"]
+
+    style A fill:#e1f5fe
+    style B fill:#fff3e0
+          </div>
+
+          <h4>주요 전파 옵션</h4>
+
+          <ul>
+            <li><strong>REQUIRED (기본값)</strong> — 기존 트랜잭션이 있으면 참여, 없으면 새로 생성. 대부분 이것으로 충분하다.</li>
+            <li><strong>REQUIRES_NEW</strong> — 항상 새 트랜잭션 생성. 기존 트랜잭션은 일시 중단. <em>로깅처럼 호출자의 실패와 무관하게 기록을 남겨야 할 때</em> 사용한다.</li>
+            <li><strong>SUPPORTS</strong> — 기존 트랜잭션이 있으면 참여, 없으면 트랜잭션 없이 실행.</li>
+            <li><strong>MANDATORY</strong> — 기존 트랜잭션이 반드시 있어야 함. 없으면 예외 발생.</li>
+          </ul>
+
+<pre><code class="language-java">@Transactional(propagation = Propagation.REQUIRES_NEW)
+public void logActivity(Activity activity) {
+    // 메인 트랜잭션이 롤백되더라도 이 로그는 남는다
+    activityLogRepository.save(activity);
+}</code></pre>
+
+          <h2>읽기 전용 트랜잭션</h2>
+
+          <p>조회만 하는 메서드에는 <code>readOnly = true</code>를 설정하는 것이 좋다.</p>
+
+<pre><code class="language-java">@Service
+@Transactional(readOnly = true)  // 클래스 레벨 기본값
+@RequiredArgsConstructor
+public class UserService {
+    private final UserRepository userRepository;
+
+    public List&lt;UserDto&gt; getAllUsers() {
+        return userRepository.findAll().stream()
+                .map(UserMapper::toDto)
+                .toList();
+    }
+
+    @Transactional  // 쓰기 작업은 메서드 레벨에서 오버라이드
+    public UserDto createUser(UserCreateRequest request) {
+        User user = userRepository.save(new User(request));
+        return UserMapper.toDto(user);
+    }
+}</code></pre>
+
+          <ul>
+            <li>클래스 레벨에 <code>readOnly = true</code>를 선언하고, 쓰기 작업 메서드에만 <code>@Transactional</code>을 붙여 오버라이드하는 패턴이 실무에서 가장 흔하다.</li>
+            <li><code>readOnly = true</code>의 이점
+              <ul>
+                <li>Hibernate의 dirty checking을 비활성화하여 <strong>성능 최적화</strong></li>
+                <li>DB에 따라 읽기 전용 연결을 사용하여 <strong>리소스 절약</strong></li>
+                <li>실수로 데이터를 변경하는 코드가 있으면 예외 발생</li>
+              </ul>
+            </li>
+          </ul>
+
+          <h2>롤백 규칙</h2>
+
+          <p>스프링의 기본 롤백 규칙은 <strong>언체크 예외</strong>(RuntimeException 포함)에서만 롤백하고, <strong>체크 예외</strong>(Exception)에서는 커밋한다.</p>
+
+<pre><code class="language-java">@Transactional
+public void processPayment() {
+    // RuntimeException → 롤백 O (기본)
+    // IOException → 롤백 X (기본)
+}
+
+@Transactional(rollbackFor = Exception.class)
+public void processPayment() {
+    // 모든 예외에서 롤백
+}</code></pre>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">체크 예외와 롤백</div>
+            <p>체크 예외를 던지는 코드가 트랜잭션 안에 있다면, <code>rollbackFor</code>를 명시적으로 지정하지 않으면 <strong>예외가 발생해도 커밋</strong>된다. 이것은 많은 개발자가 놓치는 함정이다.</p>
+          </div>
+
+          <h2>심화 분석</h2>
+
+          <h4>@Transactional의 동작 원리</h4>
+
+          <p><code>@Transactional</code>은 <mark>스프링 AOP 프록시</mark>를 통해 동작한다.</p>
+
+          <div class="mermaid">
+sequenceDiagram
+    participant Client
+    participant Proxy as 프록시 객체
+    participant Target as 실제 서비스
+
+    Client->>Proxy: createOrder()
+    Proxy->>Proxy: 트랜잭션 시작
+    Proxy->>Target: createOrder()
+    Target-->>Proxy: 결과 반환
+    alt 성공
+        Proxy->>Proxy: 커밋
+    else 예외 발생
+        Proxy->>Proxy: 롤백
+    end
+    Proxy-->>Client: 결과 반환
+          </div>
+
+          <p>스프링이 <code>@Transactional</code>이 붙은 빈을 감지하면, 원본 객체 대신 <strong>프록시 객체</strong>를 생성한다. 외부에서 메서드를 호출하면 프록시가 먼저 트랜잭션을 시작하고, 원본 메서드를 호출한 뒤, 결과에 따라 커밋 또는 롤백한다.</p>
+
+          <h4>JPA의 변경 감지와 트랜잭션</h4>
+
+          <p>JPA를 사용할 때 <code>@Transactional</code>이 특히 중요한 이유가 있다. JPA의 <strong>변경 감지(Dirty Checking)</strong> 메커니즘은 트랜잭션이 있어야만 동작한다.</p>
+
+<pre><code class="language-java">@Transactional
+public void updateUsername(UUID id, String newName) {
+    User user = userRepository.findById(id)
+            .orElseThrow(() -&gt; new UserNotFoundException(id));
+    user.setUsername(newName);
+    // save()를 호출하지 않아도 트랜잭션 커밋 시 자동으로 UPDATE 쿼리 발생
+}</code></pre>
+
+          <p>트랜잭션이 없으면 변경 감지가 동작하지 않고, 엔티티를 수정한 뒤 반드시 <code>save()</code>를 명시적으로 호출해야 한다. 트랜잭션을 선언하면 JPA가 자동으로 변경사항을 감지하여 DB에 반영하므로 코드가 더 간결해진다.</p>
+
+          <h4>삭제 순서와 FK 제약</h4>
+
+          <p>관계가 있는 엔티티를 삭제할 때는 <mark>외래 키 제약 조건</mark>을 반드시 고려해야 한다.</p>
+
+<pre><code class="language-java">// 위험한 삭제 순서
+public void deleteChannel(UUID channelId) {
+    channelRepository.deleteById(channelId);   // 채널 먼저 삭제
+    messageRepository.deleteByChannelId(channelId);  // FK 위반 가능!
+    readStatusRepository.deleteByChannelId(channelId);
+}
+
+// 올바른 삭제 순서
+@Transactional
+public void deleteChannel(UUID channelId) {
+    readStatusRepository.deleteByChannelId(channelId);  // 자식 먼저
+    messageRepository.deleteByChannelId(channelId);     // 자식 먼저
+    channelRepository.deleteById(channelId);            // 부모 마지막
+}</code></pre>
+
+          <p>자식 테이블(FK를 가진 쪽)을 먼저 삭제하고, 부모 테이블을 마지막에 삭제해야 한다. 그리고 이 전체 과정을 <code>@Transactional</code>로 묶어야 중간에 실패했을 때 일관성이 보장된다.</p>
+
+          <h2>자주 하는 실수</h2>
+
+          <h4>@Transactional 누락</h4>
+
+          <p>서비스 클래스에 <code>@Transactional</code>을 아예 사용하지 않는 경우. 단일 쿼리라면 DB가 자체적으로 트랜잭션을 관리하지만, 여러 쿼리를 실행하는 메서드에서는 <strong>부분 실패</strong>가 발생할 수 있다.</p>
+
+          <p>특히 "사용자 생성 → 프로필 이미지 저장 → 읽기 상태 초기화"처럼 여러 테이블에 걸친 작업에서 트랜잭션 없이는 중간에 실패 시 <strong>좀비 데이터</strong>가 남는다.</p>
+
+          <h4>같은 클래스 내부 호출</h4>
+
+<pre><code class="language-java">@Service
+public class UserService {
+    public void outer() {
+        this.inner();  // 프록시를 거치지 않으므로 @Transactional 무시!
+    }
+
+    @Transactional
+    public void inner() {
+        // 트랜잭션이 적용되지 않음
+    }
+}</code></pre>
+
+          <p>같은 클래스 내에서 <code>this</code>로 호출하면 프록시를 거치지 않기 때문에 <code>@Transactional</code>이 동작하지 않는다. 해결 방법은 다음과 같다.</p>
+
+          <ol>
+            <li>트랜잭션이 필요한 메서드를 <strong>별도의 서비스 클래스</strong>로 분리</li>
+            <li><code>TransactionTemplate</code>을 사용한 <strong>프로그래매틱 트랜잭션</strong> 적용</li>
+          </ol>
+
+          <h4>private 메서드에 @Transactional</h4>
+
+<pre><code class="language-java">@Transactional  // 무시됨!
+private void saveInternal(User user) {
+    userRepository.save(user);
+}</code></pre>
+
+          <p>스프링 AOP 프록시는 <code>public</code> 메서드에서만 동작한다. <code>private</code>, <code>protected</code> 메서드의 <code>@Transactional</code>은 <strong>조용히 무시</strong>된다.</p>
+
+          <h4>프로필 저장 누락 버그</h4>
+
+<pre><code class="language-java">public UserDto update(UUID id, UserUpdateRequest dto, MultipartFile profile) {
+    User user = userRepository.findById(id).orElseThrow();
+
+    if (profile != null) {
+        BinaryContent saved = new BinaryContent(...);
+        binaryContentStorage.put(saved.getId(), profile.getBytes());
+        // user.setProfile(saved)가 빠져 있음! → DB에 프로필 연결 누락
+    }
+    userRepository.save(user);
+    return UserMapper.toDto(user);
+}</code></pre>
+
+          <p><code>BinaryContent</code>를 저장소에 업로드했지만 User 엔티티와 연결하지 않으면, 파일은 존재하지만 사용자와 연결되지 않은 <strong>고아 데이터</strong>가 된다. 이 역시 트랜잭션으로 묶어야 롤백 시 일관성이 유지된다.</p>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Spring</span>
+          <span>#Transaction</span>
+          <span>#Transactional</span>
+          <span>#데이터일관성</span>
+          <span>#리팩토링</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+          <a href="refactoring-3-exception-handling.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js — 문법 하이라이팅 -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid — 다이어그램 -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

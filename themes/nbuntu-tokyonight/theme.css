@@ -1,0 +1,426 @@
+/* ========================================
+   nbuntu-tokyonight — Neon City Developer
+
+   "Coding under the neon lights."
+
+   Tokyo Night 팔레트 기반 다크 테마.
+   보라+블루+사이안 네온 감성.
+   밤의 도쿄 거리에서 코딩하는 느낌.
+   ======================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap');
+
+:root {
+  /* ── 본문 ── */
+  --post-font: 'JetBrains Mono', 'NeoDunggeunmo', 'Courier New', monospace;
+  --post-font-size: 14px;
+  --post-line-height: 1.9;
+  --post-paragraph-gap: 14px;
+  --post-heading-color: #c0caf5;
+  --post-strong-color: #9ece6a;
+  --post-em-color: #565f89;
+  --post-mark-bg: rgba(224, 175, 104, 0.2);
+  --post-link-color: #7dcfff;
+
+  /* ── 코드 ── */
+  --post-code-bg: #292e42;
+  --post-code-border: #3b4261;
+  --post-pre-bg: #1a1b26;
+  --post-pre-color: #a9b1d6;
+
+  /* ── 인용 ── */
+  --post-quote-bg: rgba(41, 46, 66, 0.6);
+  --post-quote-border: #7aa2f7;
+  --post-quote-color: #a9b1d6;
+
+  /* ── 콜아웃 ── */
+  --callout-info-bg: rgba(122, 162, 247, 0.08);
+  --callout-info-border: #7aa2f7;
+  --callout-info-icon: '🌃';
+  --callout-tip-bg: rgba(158, 206, 106, 0.08);
+  --callout-tip-border: #9ece6a;
+  --callout-tip-icon: '💫';
+  --callout-warning-bg: rgba(224, 175, 104, 0.1);
+  --callout-warning-border: #e0af68;
+  --callout-warning-icon: '🏮';
+  --callout-question-bg: rgba(187, 154, 247, 0.1);
+  --callout-question-border: #bb9af7;
+  --callout-question-icon: '🔭';
+
+  /* ── 테이블 ── */
+  --post-table-header-bg: #292e42;
+  --post-table-stripe-bg: rgba(41, 46, 66, 0.3);
+
+  /* ── 태그 ── */
+  --post-tag-bg: #292e42;
+
+  /* ── 테두리 ── */
+  --post-border-radius: 8px;
+}
+
+
+/* ═══════════════════════════════════
+   커스텀 스타일
+   ═══════════════════════════════════ */
+
+/* ── 다크 배경 ── */
+.container {
+  background-color: #1a1b26;
+  border-color: #292e42;
+}
+
+.banner {
+  background: linear-gradient(135deg, #16161e 0%, #1a1b26 50%, #1f2030 100%);
+  border-bottom-color: #292e42;
+}
+
+.banner-title { color: #7aa2f7; text-shadow: none; }
+.banner-subtitle { color: #565f89; }
+
+.nav {
+  background-color: #16161e;
+  border-bottom-color: #292e42;
+}
+
+.nav a {
+  color: #a9b1d6;
+  border-right-color: #292e42;
+}
+
+.nav a:hover { background-color: #292e42; }
+.nav a.active { background-color: #292e42; }
+
+.sidebar {
+  border-right-color: #292e42;
+  background: #16161e;
+}
+
+.profile-img { background-color: #1a1b26; color: #565f89; border-color: #292e42; }
+.profile-name { color: #c0caf5; }
+.profile-bio { color: #565f89; }
+.sidebar-section { border-top-color: #292e42; color: #565f89; }
+.sidebar-section h3 { color: #c0caf5; }
+
+.main {
+  background: #1a1b26;
+}
+
+.main h2 {
+  color: #c0caf5;
+  border-bottom-color: #292e42;
+}
+
+.page-header { color: #c0caf5; }
+.page-description { color: #565f89; border-bottom-color: #292e42; }
+
+.ticker {
+  background: #16161e;
+  border-bottom-color: #292e42;
+  color: #565f89;
+}
+
+.footer {
+  border-top-color: #292e42;
+  color: #565f89;
+}
+
+.post-meta {
+  border-bottom-color: #292e42;
+}
+
+.post-nav {
+  border-top-color: #292e42;
+}
+
+.post-content {
+  color: #a9b1d6;
+}
+
+/* ── 제목 — 네온 사인 ── */
+.post-content h2 {
+  position: relative;
+  padding-left: 24px;
+  margin-top: 45px;
+  padding-top: 25px;
+  padding-bottom: 8px;
+  border-top: 1px solid #292e42;
+  border-bottom: none;
+  letter-spacing: 0.5px;
+  color: #c0caf5;
+}
+
+.post-content h2:first-of-type {
+  border-top: none;
+  margin-top: 25px;
+  padding-top: 0;
+}
+
+.post-content h2::before {
+  content: '//';
+  position: absolute;
+  left: 0;
+  color: #7aa2f7;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: bold;
+  opacity: 0.6;
+}
+
+.post-content h2::after {
+  content: '';
+  display: block;
+  width: 100%;
+  height: 1px;
+  background: linear-gradient(90deg, #7aa2f7, #bb9af7, transparent);
+  margin-top: 8px;
+}
+
+.post-content h3 {
+  color: #bb9af7;
+  position: relative;
+  padding-left: 22px;
+}
+
+.post-content h3::before {
+  content: '>';
+  position: absolute;
+  left: 2px;
+  color: #9ece6a;
+  font-family: 'JetBrains Mono', monospace;
+  opacity: 0.6;
+}
+
+/* ── 인라인 코드 ── */
+.post-content code {
+  color: #ff9e64;
+  font-weight: normal;
+  font-family: 'JetBrains Mono', 'NeoDunggeunmo', monospace;
+  font-size: 12.5px;
+  border-radius: 4px;
+  border-color: #3b4261;
+}
+
+/* ── 코드 블록 — 도쿄 터미널 ── */
+.post-content pre {
+  position: relative;
+  border: 1px solid #292e42;
+  padding-top: 38px;
+  tab-size: 4;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3),
+              0 0 1px rgba(122, 162, 247, 0.1);
+}
+
+.post-content pre::before {
+  content: '🌃 nbh@tokyo:~$';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 8px 14px;
+  background: #16161e;
+  border-bottom: 1px solid #292e42;
+  color: #7aa2f7;
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.5px;
+  border-radius: 8px 8px 0 0;
+}
+
+.post-content pre code {
+  font-family: 'JetBrains Mono', 'NeoDunggeunmo', monospace;
+  font-size: 13px;
+}
+
+/* ── 콜아웃 ── */
+.callout {
+  border-width: 1px;
+  border-style: solid;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+}
+
+.callout-title {
+  font-size: 15px;
+  font-weight: bold;
+  margin-bottom: 8px;
+  font-family: 'JetBrains Mono', 'NeoDunggeunmo', monospace;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* ── 링크 — 사이안 글로우 ── */
+.post-content a {
+  transition: all 0.2s ease;
+  border-bottom: 1px dashed rgba(125, 207, 255, 0.4);
+}
+
+.post-content a:hover {
+  color: #bb9af7;
+  border-bottom-color: #bb9af7;
+  text-shadow: 0 0 10px rgba(187, 154, 247, 0.3);
+}
+
+/* ── 하이라이트 ── */
+.post-content mark {
+  border-radius: 3px;
+  background: rgba(224, 175, 104, 0.25);
+  color: #e0af68;
+}
+
+/* ── 태그 — 네온 필 ── */
+.post-tags span {
+  border: 1px solid #3b4261;
+  background: #292e42;
+  color: #7dcfff;
+  font-family: 'JetBrains Mono', 'NeoDunggeunmo', monospace;
+  font-size: 11px;
+  border-radius: 14px;
+  transition: all 0.25s ease;
+}
+
+.post-tags span:hover {
+  background: rgba(122, 162, 247, 0.15);
+  border-color: #7aa2f7;
+  color: #7aa2f7;
+  box-shadow: 0 0 8px rgba(122, 162, 247, 0.2);
+}
+
+/* ── 구분선 — 그라데이션 ── */
+.post-content hr {
+  border: none;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #3b4261, #7aa2f7, #3b4261, transparent);
+}
+
+/* ── 테이블 ── */
+.post-content table {
+  border: 1px solid #292e42;
+}
+
+.post-content th {
+  color: #c0caf5;
+  font-family: 'JetBrains Mono', 'NeoDunggeunmo', monospace;
+  font-size: 12px;
+  border-color: #3b4261;
+}
+
+.post-content td {
+  font-size: 13px;
+  color: #a9b1d6;
+  border-color: #292e42;
+}
+
+/* ── 머메이드 ── */
+.mermaid {
+  margin: 15px 0;
+  padding: 15px;
+  background: #1a1b26;
+  border: 1px solid #292e42;
+  border-radius: 8px;
+  text-align: center;
+}
+
+/* ── 이미지 ── */
+.post-content img {
+  border: 1px solid #292e42;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+}
+
+/* ── 글 메타 ── */
+.post-meta {
+  font-family: 'JetBrains Mono', 'NeoDunggeunmo', monospace;
+  color: #565f89;
+}
+
+.post-meta .meta-category {
+  background: rgba(122, 162, 247, 0.12);
+  color: #7aa2f7;
+  border-color: #3b4261;
+  font-size: 11px;
+  border-radius: 4px;
+}
+
+/* ── 글 네비게이션 ── */
+.post-nav a {
+  font-family: 'JetBrains Mono', 'NeoDunggeunmo', monospace;
+  font-size: 12px;
+  transition: all 0.2s ease;
+}
+
+.post-nav a:hover {
+  color: #bb9af7;
+}
+
+/* ── 리스트 마커 ── */
+.post-content ul li::marker {
+  color: #9ece6a;
+}
+
+.post-content ol li::marker {
+  color: #7aa2f7;
+}
+
+
+/* ═══════════════════════════════════
+   Prism.js — Tokyo Night
+   ═══════════════════════════════════ */
+
+.post-content .token.comment,
+.post-content .token.prolog,
+.post-content .token.doctype,
+.post-content .token.cdata {
+  color: #565f89;
+  font-style: italic;
+}
+
+.post-content .token.punctuation {
+  color: #a9b1d6;
+}
+
+.post-content .token.property,
+.post-content .token.tag,
+.post-content .token.boolean,
+.post-content .token.number,
+.post-content .token.constant,
+.post-content .token.symbol {
+  color: #ff9e64;
+}
+
+.post-content .token.selector,
+.post-content .token.attr-name,
+.post-content .token.string,
+.post-content .token.char,
+.post-content .token.builtin {
+  color: #9ece6a;
+}
+
+.post-content .token.operator,
+.post-content .token.entity,
+.post-content .token.url {
+  color: #89ddff;
+}
+
+.post-content .token.atrule,
+.post-content .token.attr-value,
+.post-content .token.keyword {
+  color: #bb9af7;
+}
+
+.post-content .token.function,
+.post-content .token.class-name {
+  color: #7aa2f7;
+}
+
+.post-content .token.regex,
+.post-content .token.important,
+.post-content .token.variable {
+  color: #e0af68;
+}
+
+.post-content .token.important,
+.post-content .token.bold {
+  font-weight: bold;
+}
+
+.post-content .token.italic {
+  font-style: italic;
+}

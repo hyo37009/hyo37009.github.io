@@ -1,0 +1,419 @@
+/* ========================================
+   nbuntu-dracula — Vampire Developer
+
+   "I don't bite... I commit."
+
+   Dracula 공식 컬러 팔레트 기반.
+   어두운 배경에 보라/사이안/핑크가 어우러진
+   뱀파이어 감성 개발자 테마.
+   ======================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&display=swap');
+
+:root {
+  /* ── 본문 ── */
+  --post-font: 'Fira Code', 'NeoDunggeunmo', 'Courier New', monospace;
+  --post-font-size: 14px;
+  --post-line-height: 1.9;
+  --post-paragraph-gap: 14px;
+  --post-heading-color: #f8f8f2;
+  --post-strong-color: #50fa7b;
+  --post-em-color: #6272a4;
+  --post-mark-bg: rgba(241, 250, 140, 0.2);
+  --post-link-color: #8be9fd;
+
+  /* ── 코드 ── */
+  --post-code-bg: #44475a;
+  --post-code-border: #6272a4;
+  --post-pre-bg: #282a36;
+  --post-pre-color: #f8f8f2;
+
+  /* ── 인용 ── */
+  --post-quote-bg: rgba(98, 114, 164, 0.15);
+  --post-quote-border: #bd93f9;
+  --post-quote-color: #f8f8f2;
+
+  /* ── 콜아웃 ── */
+  --callout-info-bg: rgba(139, 233, 253, 0.08);
+  --callout-info-border: #8be9fd;
+  --callout-info-icon: '🧛';
+  --callout-tip-bg: rgba(80, 250, 123, 0.08);
+  --callout-tip-border: #50fa7b;
+  --callout-tip-icon: '⚡';
+  --callout-warning-bg: rgba(255, 184, 108, 0.1);
+  --callout-warning-border: #ffb86c;
+  --callout-warning-icon: '🦇';
+  --callout-question-bg: rgba(189, 147, 249, 0.1);
+  --callout-question-border: #bd93f9;
+  --callout-question-icon: '🔮';
+
+  /* ── 테이블 ── */
+  --post-table-header-bg: #44475a;
+  --post-table-stripe-bg: rgba(68, 71, 90, 0.3);
+
+  /* ── 태그 ── */
+  --post-tag-bg: #44475a;
+
+  /* ── 테두리 ── */
+  --post-border-radius: 10px;
+}
+
+
+/* ═══════════════════════════════════
+   커스텀 스타일
+   ═══════════════════════════════════ */
+
+/* ── 다크 배경 적용 ── */
+.container {
+  background-color: #282a36;
+  border-color: #44475a;
+}
+
+.banner {
+  background: linear-gradient(135deg, #1e1f29 0%, #282a36 50%, #2d2f3f 100%);
+  border-bottom-color: #44475a;
+}
+
+.banner-title { color: #bd93f9; text-shadow: none; }
+.banner-subtitle { color: #6272a4; }
+
+.nav {
+  background-color: #21222c;
+  border-bottom-color: #44475a;
+}
+
+.nav a {
+  color: #f8f8f2;
+  border-right-color: #44475a;
+}
+
+.nav a:hover { background-color: #44475a; }
+.nav a.active { background-color: #44475a; }
+
+.sidebar {
+  border-right-color: #44475a;
+  background: #21222c;
+}
+
+.profile-img { background-color: #282a36; color: #6272a4; border-color: #44475a; }
+.profile-name { color: #f8f8f2; }
+.profile-bio { color: #6272a4; }
+.sidebar-section { border-top-color: #44475a; color: #6272a4; }
+.sidebar-section h3 { color: #f8f8f2; }
+
+.main {
+  background: #282a36;
+}
+
+.main h2 {
+  color: #f8f8f2;
+  border-bottom-color: #44475a;
+}
+
+.page-header { color: #f8f8f2; }
+.page-description { color: #6272a4; border-bottom-color: #44475a; }
+
+.ticker {
+  background: #21222c;
+  border-bottom-color: #44475a;
+  color: #6272a4;
+}
+
+.footer {
+  border-top-color: #44475a;
+  color: #6272a4;
+}
+
+.post-meta {
+  border-bottom-color: #44475a;
+}
+
+.post-nav {
+  border-top-color: #44475a;
+}
+
+.post-content {
+  color: #f8f8f2;
+}
+
+/* ── 제목 — 보라 그라데이션 밑줄 ── */
+.post-content h2 {
+  position: relative;
+  padding-left: 0;
+  margin-top: 45px;
+  padding-top: 25px;
+  padding-bottom: 10px;
+  border-top: 1px solid #44475a;
+  border-bottom: 2px solid transparent;
+  background-image: linear-gradient(#282a36, #282a36), linear-gradient(90deg, #bd93f9, #ff79c6, #8be9fd);
+  background-size: 100% 100%, 100% 2px;
+  background-position: 0 0, 0 100%;
+  background-repeat: no-repeat;
+  background-clip: padding-box, border-box;
+  letter-spacing: 0.5px;
+}
+
+.post-content h2:first-of-type {
+  border-top: none;
+  margin-top: 25px;
+  padding-top: 0;
+}
+
+.post-content h2::before {
+  content: '>';
+  color: #50fa7b;
+  font-weight: bold;
+  font-family: 'Fira Code', monospace;
+  margin-right: 10px;
+}
+
+.post-content h3 {
+  position: relative;
+  padding-left: 22px;
+  color: #bd93f9;
+}
+
+.post-content h3::before {
+  content: '#';
+  position: absolute;
+  left: 0;
+  color: #ff79c6;
+  font-family: 'Fira Code', monospace;
+  opacity: 0.7;
+}
+
+/* ── 인라인 코드 ── */
+.post-content code {
+  color: #ff79c6;
+  font-weight: normal;
+  font-family: 'Fira Code', 'NeoDunggeunmo', monospace;
+  font-size: 12.5px;
+  border-radius: 4px;
+  border-color: #6272a4;
+}
+
+/* ── 코드 블록 — 드라큘라 터미널 ── */
+.post-content pre {
+  position: relative;
+  border: 1px solid #44475a;
+  padding-top: 38px;
+  tab-size: 4;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  border-radius: 10px;
+}
+
+.post-content pre::before {
+  content: '🧛 nbh@dracula:~$';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 8px 14px;
+  background: #21222c;
+  border-bottom: 1px solid #44475a;
+  color: #bd93f9;
+  font-size: 11px;
+  font-family: 'Fira Code', monospace;
+  letter-spacing: 0.5px;
+  border-radius: 10px 10px 0 0;
+}
+
+.post-content pre code {
+  font-family: 'Fira Code', 'NeoDunggeunmo', monospace;
+  font-size: 13px;
+}
+
+/* ── 콜아웃 ── */
+.callout {
+  border-width: 1px;
+  border-style: solid;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  background-clip: padding-box;
+}
+
+.callout-title {
+  font-size: 15px;
+  font-weight: bold;
+  margin-bottom: 8px;
+  font-family: 'Fira Code', 'NeoDunggeunmo', monospace;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* ── 링크 ── */
+.post-content a {
+  transition: all 0.2s ease;
+  border-bottom: 1px dashed rgba(139, 233, 253, 0.4);
+}
+
+.post-content a:hover {
+  color: #ff79c6;
+  border-bottom-color: #ff79c6;
+  text-shadow: 0 0 8px rgba(255, 121, 198, 0.3);
+}
+
+/* ── 하이라이트 ── */
+.post-content mark {
+  border-radius: 3px;
+  color: #282a36;
+  background: rgba(241, 250, 140, 0.4);
+}
+
+/* ── 태그 ── */
+.post-tags span {
+  border: 1px solid #6272a4;
+  background: #44475a;
+  color: #bd93f9;
+  font-family: 'Fira Code', 'NeoDunggeunmo', monospace;
+  font-size: 11px;
+  border-radius: 14px;
+  transition: all 0.2s ease;
+}
+
+.post-tags span:hover {
+  background: #bd93f9;
+  color: #282a36;
+  border-color: #bd93f9;
+}
+
+/* ── 구분선 ── */
+.post-content hr {
+  border-top: 1px solid #44475a;
+  position: relative;
+}
+
+.post-content hr::after {
+  content: '🦇';
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0 12px;
+  font-size: 14px;
+}
+
+/* ── 테이블 ── */
+.post-content table {
+  border: 1px solid #44475a;
+}
+
+.post-content th {
+  color: #f8f8f2;
+  font-family: 'Fira Code', 'NeoDunggeunmo', monospace;
+  font-size: 12px;
+  border-color: #6272a4;
+}
+
+.post-content td {
+  font-size: 13px;
+  color: #f8f8f2;
+  border-color: #44475a;
+}
+
+/* ── 이미지 ── */
+.post-content img {
+  border: 1px solid #44475a;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  border-radius: 10px;
+}
+
+/* ── 머메이드 ── */
+.mermaid {
+  margin: 15px 0;
+  padding: 15px;
+  background: #282a36;
+  border: 1px solid #44475a;
+  border-radius: 10px;
+  text-align: center;
+}
+
+/* ── 글 메타 ── */
+.post-meta {
+  font-family: 'Fira Code', 'NeoDunggeunmo', monospace;
+  color: #6272a4;
+}
+
+.post-meta .meta-category {
+  background: rgba(189, 147, 249, 0.15);
+  color: #bd93f9;
+  border-color: #6272a4;
+  font-size: 11px;
+  border-radius: 4px;
+}
+
+/* ── 글 네비게이션 ── */
+.post-nav a {
+  font-family: 'Fira Code', 'NeoDunggeunmo', monospace;
+  font-size: 12px;
+  transition: all 0.2s ease;
+}
+
+.post-nav a:hover {
+  color: #ff79c6;
+}
+
+/* ── 리스트 마커 ── */
+.post-content ul li::marker {
+  color: #50fa7b;
+}
+
+.post-content ol li::marker {
+  color: #bd93f9;
+}
+
+
+/* ═══════════════════════════════════
+   Prism.js — Dracula
+   ═══════════════════════════════════ */
+
+.post-content .token.comment,
+.post-content .token.prolog,
+.post-content .token.doctype,
+.post-content .token.cdata {
+  color: #6272a4;
+  font-style: italic;
+}
+
+.post-content .token.punctuation {
+  color: #f8f8f2;
+}
+
+.post-content .token.property,
+.post-content .token.tag,
+.post-content .token.boolean,
+.post-content .token.number,
+.post-content .token.constant,
+.post-content .token.symbol {
+  color: #bd93f9;
+}
+
+.post-content .token.selector,
+.post-content .token.attr-name,
+.post-content .token.string,
+.post-content .token.char,
+.post-content .token.builtin {
+  color: #f1fa8c;
+}
+
+.post-content .token.operator,
+.post-content .token.entity,
+.post-content .token.url {
+  color: #ff79c6;
+}
+
+.post-content .token.atrule,
+.post-content .token.attr-value,
+.post-content .token.keyword {
+  color: #ff79c6;
+}
+
+.post-content .token.function,
+.post-content .token.class-name {
+  color: #50fa7b;
+}
+
+.post-content .token.regex,
+.post-content .token.important,
+.post-content .token.variable {
+  color: #ffb86c;
+}

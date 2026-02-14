@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>nbh의 갠홈</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<!-- 이 소스코드를 보고 있는 당신, 혹시 개발자? -->
+<body>
+  <div class="container">
+
+    <!-- 배너 -->
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <!-- 티커 -->
+    <div class="ticker">
+      <span>환영합니다! 이 홈페이지는 공사중입니다. 버그가 아니라 기능입니다. 아마도요.</span>
+    </div>
+
+    <!-- 네비게이션 -->
+    <nav class="nav">
+      <a href="index.html" class="active">home</a>
+      <a href="pages/nbuntu.html">nbuntu</a>
+      <a href="pages/knitting.html">뜨개 공방</a>
+      <a href="pages/guestbook.html">방명록</a>
+    </nav>
+
+    <!-- 콘텐츠 -->
+    <div class="content">
+
+      <!-- 사이드바 -->
+      <aside class="sidebar">
+        <div class="profile-img">
+          사진 준비중
+        </div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+
+        <div class="sidebar-section">
+          <h3>오늘의 한마디</h3>
+          <p id="daily-quote">로딩중...</p>
+        </div>
+
+        <div class="sidebar-section">
+          <h3>카테고리</h3>
+          <div class="sidebar-categories">
+            <a href="pages/nbuntu.html">nbuntu <span class="cat-count">5</span></a>
+            <a href="pages/knitting.html">뜨개 공방 <span class="cat-count">1</span></a>
+          </div>
+        </div>
+
+        <div class="sidebar-section sidebar-counter">
+          <span class="counter-label">you are</span>
+          <span class="counter-num" id="visitor-count">000,142</span>
+          <span class="counter-label">th visitor</span>
+        </div>
+
+      </aside>
+
+      <!-- 메인 -->
+      <div class="main">
+        <div class="welcome-box">
+          안녕하세요, <strong>nbh</strong>의 갠홈에 오신 걸 환영합니다!<br>
+          개발 이야기와 뜨개질을 기록하는 공간입니다.<br>
+          천천히 둘러보세요. 숨겨진 게 있을지도...?
+        </div>
+
+        <h2>최근 글</h2>
+
+        <ul class="post-list">
+          <li>
+            <span class="post-category">뜨개 공방</span>
+            <a href="posts/knitting-first-scarf.html">첫 목도리 도전기</a>
+            <span class="post-date">2026.02.14</span>
+          </li>
+          <li>
+            <span class="post-category">nbuntu</span>
+            <a href="posts/refactoring-5-code-consistency.html">[Spring] 5. 코드 일관성과 쿼리 최적화</a>
+            <span class="post-date">2026.02.13</span>
+          </li>
+          <li>
+            <span class="post-category">nbuntu</span>
+            <a href="posts/refactoring-4-rest-api.html">[Spring] 4. REST API 설계 원칙</a>
+            <span class="post-date">2026.02.13</span>
+          </li>
+          <li>
+            <span class="post-category">nbuntu</span>
+            <a href="posts/refactoring-3-exception-handling.html">[Spring] 3. 예외 처리 전략 설계</a>
+            <span class="post-date">2026.02.13</span>
+          </li>
+          <li>
+            <span class="post-category">nbuntu</span>
+            <a href="posts/refactoring-2-transaction.html">[Spring] 2. 트랜잭션과 데이터 일관성</a>
+            <span class="post-date">2026.02.13</span>
+          </li>
+          <li>
+            <span class="post-category">nbuntu</span>
+            <a href="posts/refactoring-1-configuration-properties.html">[Spring] 1. 설정 관리와 @ConfigurationProperties</a>
+            <span class="post-date">2026.02.13</span>
+          </li>
+        </ul>
+
+      </div>
+    </div>
+
+    <!-- 푸터 -->
+    <footer class="footer">
+      &copy; 2026 nbh · 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

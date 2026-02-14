@@ -1,0 +1,363 @@
+/* ========================================
+   knitting-autumn — 가을 공방
+
+   "단풍잎이 떨어지는 창가에서"
+
+   오렌지 + 딥 레드 + 골드 + 브라운.
+   가을 오후, 모닥불 옆에서 뜨개질하는 감성.
+   따뜻한 단풍색과 스파이스 톤.
+   ======================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&family=Gowun+Dodum&display=swap');
+
+:root {
+  /* ── 본문 ── */
+  --post-font: 'Gowun Dodum', 'Apple SD Gothic Neo', sans-serif;
+  --post-font-size: 15px;
+  --post-line-height: 2.0;
+  --post-paragraph-gap: 16px;
+  --post-heading-color: #3a2010;
+  --post-strong-color: #c0541e;
+  --post-em-color: #8a7060;
+  --post-mark-bg: rgba(230, 160, 50, 0.2);
+  --post-link-color: #b0602a;
+
+  /* ── 코드 — 마른 잎 위 ── */
+  --post-code-bg: #faf0e6;
+  --post-code-border: #e8d0b0;
+  --post-pre-bg: #fdf6ee;
+  --post-pre-color: #3a2010;
+
+  /* ── 인용 ── */
+  --post-quote-bg: #faf4ea;
+  --post-quote-border: #c88040;
+  --post-quote-color: #4a3020;
+
+  /* ── 콜아웃 ── */
+  --callout-info-bg: #faf4ea;
+  --callout-info-border: #c88040;
+  --callout-info-icon: '🍂';
+  --callout-tip-bg: #f8f0e0;
+  --callout-tip-border: #a07030;
+  --callout-tip-icon: '🔥';
+  --callout-warning-bg: #fdf0e0;
+  --callout-warning-border: #d06030;
+  --callout-warning-icon: '🍁';
+  --callout-question-bg: #f5f0ea;
+  --callout-question-border: #8a7a60;
+  --callout-question-icon: '🌰';
+
+  /* ── 테이블 ── */
+  --post-table-header-bg: #faf0e6;
+  --post-table-stripe-bg: #fdf9f4;
+
+  /* ── 태그 ── */
+  --post-tag-bg: #faf0e6;
+
+  /* ── 테두리 ── */
+  --post-border-radius: 10px;
+}
+
+
+/* ═══════════════════════════════════
+   커스텀 스타일
+   ═══════════════════════════════════ */
+
+/* ── 제목 — 가을 나뭇가지 ── */
+.post-content h2 {
+  font-family: 'Gaegu', 'Gowun Dodum', sans-serif;
+  font-weight: 700;
+  font-size: 22px;
+  margin-top: 50px;
+  padding-top: 25px;
+  padding-bottom: 10px;
+  border-top: none;
+  border-bottom: 2px dotted #e8d0b0;
+  position: relative;
+}
+
+.post-content h2:first-of-type {
+  margin-top: 25px;
+  padding-top: 0;
+}
+
+/* 단풍잎 구분 */
+.post-content h2:not(:first-of-type)::before {
+  content: '🍁 · 🍂 · 🍁';
+  display: block;
+  position: absolute;
+  top: 5px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  letter-spacing: 3px;
+  color: #d0a060;
+}
+
+.post-content h3 {
+  font-family: 'Gaegu', 'Gowun Dodum', sans-serif;
+  font-weight: 700;
+  font-size: 19px;
+  color: #5a3a20;
+  padding-left: 16px;
+  border-left: 3px solid #d0a060;
+}
+
+.post-content h4 {
+  font-family: 'Gaegu', 'Gowun Dodum', sans-serif;
+  font-weight: 700;
+  color: #6a4a30;
+}
+
+/* ── 인라인 코드 ── */
+.post-content code {
+  color: #c0541e;
+  font-size: 13px;
+  border-radius: 4px;
+}
+
+/* ── 코드 블록 — 나뭇잎 종이 ── */
+.post-content pre {
+  border: 1px solid #e8d0b0;
+  border-left: 4px solid #c88040;
+  border-radius: 0 10px 10px 0;
+  box-shadow: 0 3px 10px rgba(58, 32, 16, 0.06);
+}
+
+.post-content pre::before {
+  content: none;
+}
+
+.post-content pre code {
+  font-size: 13px;
+}
+
+/* ── 인용문 — 가을 편지 ── */
+.post-content blockquote {
+  border-left: 4px solid #c88040;
+  border-radius: 0 10px 10px 0;
+  padding: 14px 18px;
+  font-family: 'Gaegu', sans-serif;
+  font-size: 17px;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(58, 32, 16, 0.04);
+}
+
+/* ── 콜아웃 — 단풍 카드 ── */
+.callout {
+  border-width: 1px;
+  border-style: dashed;
+  border-left-width: 4px;
+  border-left-style: solid;
+  border-radius: 0 10px 10px 0;
+  box-shadow: 0 2px 8px rgba(58, 32, 16, 0.04);
+}
+
+.callout-title {
+  font-family: 'Gaegu', 'Gowun Dodum', sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* ── 링크 — 호박색 ── */
+.post-content a {
+  border-bottom: 1px dashed #c88040;
+  transition: all 0.2s ease;
+}
+
+.post-content a:hover {
+  color: #8a3010;
+  border-bottom-style: solid;
+  border-bottom-color: #8a3010;
+}
+
+/* ── 하이라이트 — 골드 형광펜 ── */
+.post-content mark {
+  background: rgba(230, 160, 50, 0.25);
+  border-radius: 3px;
+}
+
+/* ── 태그 — 나뭇잎 뱃지 ── */
+.post-tags span {
+  border: 1px dashed #e8d0b0;
+  background: #faf0e6;
+  color: #b0602a;
+  font-family: 'Gaegu', 'Gowun Dodum', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: 14px;
+  padding: 3px 10px;
+  transition: all 0.2s ease;
+}
+
+.post-tags span:hover {
+  background: #c88040;
+  color: #fff;
+  border-color: #c88040;
+  border-style: solid;
+}
+
+/* ── 구분선 — 단풍잎 ── */
+.post-content hr {
+  border: none;
+  border-top: 3px dotted #e8d0b0;
+  position: relative;
+  margin: 30px 0;
+}
+
+.post-content hr::after {
+  content: '🍂';
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #fff;
+  padding: 0 8px;
+  font-size: 14px;
+}
+
+/* ── 테이블 ── */
+.post-content table {
+  border: 1px solid #e8d0b0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.post-content th {
+  font-family: 'Gaegu', 'Gowun Dodum', sans-serif;
+  font-weight: 700;
+  color: #3a2010;
+  font-size: 14px;
+  border-color: #e8d0b0;
+}
+
+.post-content td {
+  border-color: #f0e0d0;
+}
+
+/* ── 머메이드 ── */
+.mermaid {
+  margin: 15px 0;
+  padding: 15px;
+  background: #fdf9f4;
+  border: 1px solid #e8d0b0;
+  border-radius: 10px;
+  text-align: center;
+}
+
+/* ── 이미지 ── */
+.post-content img {
+  border: 2px solid #e8d0b0;
+  border-radius: 10px;
+  box-shadow: 0 3px 12px rgba(58, 32, 16, 0.08);
+}
+
+/* ── 리스트 ── */
+.post-content ul li::marker {
+  color: #c88040;
+}
+
+.post-content ol li::marker {
+  color: #b0602a;
+  font-family: 'Gaegu', sans-serif;
+  font-weight: 700;
+}
+
+/* ── 체크리스트 ── */
+.post-content .task-list input[type="checkbox"] {
+  accent-color: #c0541e;
+}
+
+/* ── 글 메타 ── */
+.post-meta {
+  font-family: 'Gowun Dodum', sans-serif;
+}
+
+.post-meta .meta-category {
+  background: #faf0e6;
+  border: 1px dashed #e8d0b0;
+  border-radius: 10px;
+  color: #b0602a;
+  font-family: 'Gaegu', sans-serif;
+  font-weight: 700;
+}
+
+/* ── 글 네비게이션 ── */
+.post-nav a {
+  font-family: 'Gaegu', 'Gowun Dodum', sans-serif;
+  font-weight: 700;
+  font-size: 15px;
+  transition: all 0.2s ease;
+}
+
+.post-nav a:hover {
+  color: #c0541e;
+}
+
+/* ── 이미지 캡션 ── */
+.post-content .img-caption {
+  font-family: 'Gaegu', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: #8a7060;
+}
+
+
+/* ═══════════════════════════════════
+   Prism.js — Autumn
+   ═══════════════════════════════════ */
+
+.post-content .token.comment,
+.post-content .token.prolog,
+.post-content .token.doctype,
+.post-content .token.cdata {
+  color: #8a7060;
+  font-style: italic;
+}
+
+.post-content .token.punctuation {
+  color: #3a2010;
+}
+
+.post-content .token.property,
+.post-content .token.tag,
+.post-content .token.boolean,
+.post-content .token.number,
+.post-content .token.constant,
+.post-content .token.symbol {
+  color: #c0541e;
+}
+
+.post-content .token.selector,
+.post-content .token.attr-name,
+.post-content .token.string,
+.post-content .token.char,
+.post-content .token.builtin {
+  color: #6a8040;
+}
+
+.post-content .token.operator,
+.post-content .token.entity,
+.post-content .token.url {
+  color: #d06030;
+}
+
+.post-content .token.atrule,
+.post-content .token.attr-value,
+.post-content .token.keyword {
+  color: #a07030;
+}
+
+.post-content .token.function,
+.post-content .token.class-name {
+  color: #c88040;
+}
+
+.post-content .token.regex,
+.post-content .token.important,
+.post-content .token.variable {
+  color: #8a5020;
+}

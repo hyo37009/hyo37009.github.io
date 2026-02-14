@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>방명록 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <div class="ticker">
+      <span>방명록에 글을 남겨주세요! 악플은... 마음이 아파요.</span>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="nbuntu.html">nbuntu</a>
+      <a href="knitting.html">뜨개 공방</a>
+      <a href="guestbook.html" class="active">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">
+          사진 준비중
+        </div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+        <h1 class="page-header">방명록</h1>
+        <p class="page-description">발자취를 남겨주세요</p>
+
+        <!-- 방명록 작성 폼 -->
+        <div class="guestbook-form">
+          <label for="guest-name">이름</label>
+          <input type="text" id="guest-name" placeholder="닉네임" maxlength="20">
+
+          <label for="guest-message">한마디</label>
+          <textarea id="guest-message" placeholder="하고 싶은 말을 적어주세요"></textarea>
+
+          <button id="guest-submit" onclick="submitGuestbook()">남기기</button>
+        </div>
+
+        <!-- 방명록 목록 -->
+        <ul class="guestbook-entries" id="guestbook-list">
+          <!-- Firebase 연동 전 안내 -->
+          <div class="notice-bar" id="firebase-notice">
+            아직 Firebase가 연결되지 않았습니다. 연결하면 방명록이 동작합니다!
+          </div>
+        </ul>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <script src="../firebase-config.js"></script>
+  <script src="../guestbook.js"></script>
+  <script src="../script.js"></script>
+</body>
+</html>

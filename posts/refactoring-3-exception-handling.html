@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Spring] 3. 예외 처리 전략 설계 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Spring] 3. 예외 처리 전략 설계</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.02.13
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">스프링 리팩토링 패턴 시리즈 (3/5)</div>
+            <p>이전 편: <a href="refactoring-2-transaction.html">트랜잭션과 데이터 일관성</a></p>
+            <p>다음 편: <a href="refactoring-4-rest-api.html">REST API 설계 원칙</a></p>
+          </div>
+
+          <p>예외 처리는 "에러가 나면 try-catch로 잡으면 되지"라는 수준을 넘어, 애플리케이션 전체의 <mark>안정성과 디버깅 효율</mark>을 결정하는 아키텍처적 결정이다. 잘 설계된 예외 전략은 코드를 읽는 사람에게 "이 메서드에서 무엇이 잘못될 수 있는지"를 명확히 전달한다.</p>
+
+          <h2>예외 계층 구조 설계</h2>
+
+          <p>스프링 프로젝트에서 예외를 체계적으로 관리하려면, 도메인별 예외 계층을 만드는 것이 좋다.</p>
+
+          <div class="mermaid">
+graph TD
+    A[RuntimeException] --> B[AppException]
+    B --> C[UserException]
+    B --> D[ChannelException]
+    B --> E[MessageException]
+    C --> C1[UserNotFoundException]
+    C --> C2[UserAlreadyExistsException]
+    D --> D1[ChannelNotFoundException]
+    D --> D2[ChannelModificationNotAllowedException]
+          </div>
+
+          <h4>공통 부모 예외</h4>
+
+<pre><code class="language-java">@Getter
+public abstract class AppException extends RuntimeException {
+    private final ErrorCode errorCode;
+    private final Map&lt;String, Object&gt; details;
+
+    protected AppException(ErrorCode errorCode, Map&lt;String, Object&gt; details) {
+        super(errorCode.getDescription());
+        this.errorCode = errorCode;
+        this.details = details;
+    }
+
+    protected AppException(ErrorCode errorCode) {
+        this(errorCode, new HashMap&lt;&gt;());
+    }
+}</code></pre>
+
+          <ul>
+            <li>모든 도메인 예외의 부모 역할을 한다.</li>
+            <li><code>ErrorCode</code>를 통해 HTTP 상태 코드와 에러 메시지를 일관되게 관리한다.</li>
+            <li><code>details</code> 맵으로 디버깅에 필요한 추가 정보를 전달한다.</li>
+          </ul>
+
+          <h4>ErrorCode Enum</h4>
+
+<pre><code class="language-java">@Getter
+@RequiredArgsConstructor
+public enum ErrorCode {
+    // 4xx
+    USER_NOT_FOUND(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다"),
+    USER_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 존재하는 사용자입니다"),
+    CHANNEL_NOT_FOUND(HttpStatus.NOT_FOUND, "채널을 찾을 수 없습니다"),
+    INVALID_INPUT(HttpStatus.BAD_REQUEST, "잘못된 입력값입니다"),
+
+    // 5xx
+    FILE_UPLOAD_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "파일 업로드에 실패했습니다"),
+    INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다");
+
+    private final HttpStatus httpStatus;
+    private final String description;
+}</code></pre>
+
+          <ul>
+            <li>HTTP 상태 코드와 사용자 메시지를 <strong>한 곳에서</strong> 관리한다.</li>
+            <li>새로운 에러 유형을 추가할 때 enum에 한 줄만 추가하면 된다.</li>
+          </ul>
+
+          <h4>도메인 예외</h4>
+
+<pre><code class="language-java">public class UserNotFoundException extends AppException {
+    public UserNotFoundException(UUID userId) {
+        super(ErrorCode.USER_NOT_FOUND, Map.of("userId", userId));
+    }
+}</code></pre>
+
+          <ul>
+            <li>생성자에서 필요한 컨텍스트(userId)를 받아 details에 담는다.</li>
+            <li>사용하는 쪽에서는 <code>throw new UserNotFoundException(userId)</code>만 하면 된다.</li>
+          </ul>
+
+          <h2>@RestControllerAdvice로 중앙 집중 처리</h2>
+
+          <p>예외를 던지는 것과 HTTP 응답으로 변환하는 것은 <strong>분리</strong>해야 한다. 서비스 계층은 예외를 던지기만 하고, 컨트롤러 어드바이스가 이를 일관된 응답으로 변환한다.</p>
+
+<pre><code class="language-java">@RestControllerAdvice
+@Slf4j
+public class GlobalExceptionHandler {
+
+    @ExceptionHandler(AppException.class)
+    public ResponseEntity&lt;ErrorResponse&gt; handleAppException(AppException ex) {
+        log.error("[{}] {}", ex.getErrorCode(), ex.getDetails(), ex);
+        return ResponseEntity
+                .status(ex.getErrorCode().getHttpStatus())
+                .body(ErrorResponse.from(ex));
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity&lt;ErrorResponse&gt; handleValidation(
+            MethodArgumentNotValidException ex) {
+        Map&lt;String, String&gt; fieldErrors = ex.getBindingResult()
+                .getFieldErrors().stream()
+                .collect(Collectors.toMap(
+                        FieldError::getField,
+                        FieldError::getDefaultMessage,
+                        (a, b) -&gt; a));
+
+        return ResponseEntity.badRequest()
+                .body(ErrorResponse.validation(fieldErrors));
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity&lt;ErrorResponse&gt; handleUnexpected(Exception ex) {
+        log.error("예상치 못한 예외 발생", ex);
+        return ResponseEntity.internalServerError()
+                .body(ErrorResponse.internal());
+    }
+}</code></pre>
+
+          <ul>
+            <li><code>AppException</code>을 잡는 핸들러 하나면 모든 도메인 예외가 처리된다.</li>
+            <li><code>MethodArgumentNotValidException</code>은 Bean Validation 실패 시 스프링이 자동으로 던진다.</li>
+            <li>최하단의 <code>Exception</code> 핸들러는 <strong>예상치 못한 예외의 안전망</strong> 역할을 한다.</li>
+          </ul>
+
+          <h4>ErrorResponse DTO</h4>
+
+<pre><code class="language-java">public record ErrorResponse(
+        Instant timestamp,
+        int status,
+        String error,
+        Map&lt;String, Object&gt; details
+) {
+    public static ErrorResponse from(AppException ex) {
+        return new ErrorResponse(
+                Instant.now(),
+                ex.getErrorCode().getHttpStatus().value(),
+                ex.getErrorCode().getDescription(),
+                ex.getDetails()
+        );
+    }
+}</code></pre>
+
+          <p>API 소비자에게 일관된 형태의 에러 응답을 제공한다.</p>
+
+          <h2>IOException 래핑 전략</h2>
+
+          <p>파일 I/O, 네트워크 통신 등에서 발생하는 <code>IOException</code>을 어떻게 처리할지는 중요한 설계 결정이다.</p>
+
+<pre><code class="language-java">// 안티패턴: 무의미한 RuntimeException 래핑
+try {
+    binaryContentStorage.put(saved.getId(), profile.getBytes());
+} catch (IOException e) {
+    throw new RuntimeException(e);  // 무슨 에러인지 알 수 없다
+}
+
+// 모범 사례: 도메인 예외로 래핑
+try {
+    binaryContentStorage.put(saved.getId(), profile.getBytes());
+} catch (IOException e) {
+    throw new FileStorageException(saved.getId(), e);
+}</code></pre>
+
+          <p><code>RuntimeException</code>으로 래핑하면 세 가지를 잃는다.</p>
+
+          <ol>
+            <li><strong>문맥</strong> — 어떤 작업 중 실패했는지 알 수 없다.</li>
+            <li><strong>처리 기회</strong> — <code>GlobalExceptionHandler</code>에서 <code>RuntimeException</code>은 너무 넓은 범위라 적절한 HTTP 상태 코드를 반환하기 어렵다.</li>
+            <li><strong>로그 가독성</strong> — 스택트레이스에 <code>RuntimeException</code>만 보이면 원인 파악이 힘들다.</li>
+          </ol>
+
+          <h2>심화 분석</h2>
+
+          <h4>@ExceptionHandler의 우선순위</h4>
+
+          <p>여러 <code>@ExceptionHandler</code>가 있을 때, 스프링은 <mark>가장 구체적인 예외 타입</mark>에 매칭되는 핸들러를 선택한다.</p>
+
+          <div class="mermaid">
+graph TD
+    A["throw UserNotFoundException"] --> B{"핸들러 탐색"}
+    B --> C["handleUserNotFound()"]
+    B --> D["handleAppException()"]
+    B --> E["handleException()"]
+    C --> |"매칭!"| F["404 응답"]
+
+    style C fill:#c8e6c9
+    style D fill:#fff9c4
+    style E fill:#ffcdd2
+          </div>
+
+          <p><code>UserNotFoundException</code>이 발생하면 스프링은 <code>UserNotFoundException</code> → <code>AppException</code> → <code>Exception</code> 순으로 핸들러를 탐색한다. 가장 구체적인 핸들러가 있으면 그것을 사용한다.</p>
+
+          <p>따라서 도메인별로 특수한 처리가 필요한 경우 세분화된 핸들러를 추가하고, 나머지는 상위 예외 핸들러에서 일괄 처리하는 <strong>계층적 핸들링</strong>이 효과적이다.</p>
+
+          <h4>예외 vs 비즈니스 로직</h4>
+
+          <p>예외는 말 그대로 <strong>예외적인 상황</strong>에만 사용해야 한다. 정상적인 비즈니스 분기에 예외를 쓰면 성능과 가독성 모두 나빠진다.</p>
+
+<pre><code class="language-java">// 안티패턴: 예외를 흐름 제어에 사용
+public boolean isUserExists(String username) {
+    try {
+        userRepository.findByUsername(username).orElseThrow();
+        return true;
+    } catch (UserNotFoundException e) {
+        return false;
+    }
+}
+
+// 모범 사례: Optional 활용
+public boolean isUserExists(String username) {
+    return userRepository.findByUsername(username).isPresent();
+}</code></pre>
+
+          <h2>자주 하는 실수</h2>
+
+          <h4>예외 클래스에 불필요한 필드</h4>
+
+<pre><code class="language-java">public class AppException extends RuntimeException {
+    private final ErrorCode errorCode;
+    private final Map&lt;String, Object&gt; details;
+    Scanner sc = new Scanner(System.in);  // 왜 예외에 Scanner가?
+}</code></pre>
+
+          <p>예외 클래스는 <strong>에러 정보만</strong> 담아야 한다. 디버깅 도구, I/O 객체 등은 예외 클래스에 절대 포함하면 안 된다. 특히 <code>Scanner(System.in)</code>은 시스템 리소스를 점유하며, 예외가 생성될 때마다 새 <code>Scanner</code> 인스턴스가 만들어져 <mark>리소스 누수</mark>를 일으킨다.</p>
+
+          <h4>catch에서 원본 예외 버리기</h4>
+
+<pre><code class="language-java">// 안티패턴: 원인 예외를 잃어버림
+catch (IOException e) {
+    throw new RuntimeException("파일 저장 실패");  // e가 사라졌다!
+}
+
+// 모범 사례: 원인 예외를 체인으로 보존
+catch (IOException e) {
+    throw new FileStorageException("파일 저장 실패", e);
+}</code></pre>
+
+          <p>원본 예외(<code>e</code>)를 체인에 포함시키지 않으면, 로그에서 <strong>근본 원인(root cause)</strong>을 추적할 수 없다.</p>
+
+          <h4>NullPointerException 전용 핸들러</h4>
+
+<pre><code class="language-java">@ExceptionHandler(NullPointerException.class)
+public ResponseEntity&lt;ErrorResponse&gt; handleNPE(NullPointerException ex) { ... }</code></pre>
+
+          <p><code>NullPointerException</code>은 <strong>코드 버그</strong>의 징후이지, 정상적인 비즈니스 예외가 아니다. 전용 핸들러를 만들어 500으로 반환하는 것보다, 코드에서 null 체크를 제대로 하는 것이 올바른 해결책이다. NPE가 발생한다면 <code>Exception</code> 범용 핸들러에서 잡히도록 두고, 로그를 통해 원인을 수정해야 한다.</p>
+
+          <h4>예외 메시지에 민감 정보 노출</h4>
+
+<pre><code class="language-java">// 위험: 내부 구현 세부사항 노출
+throw new AppException("SQL 쿼리 실행 실패: SELECT * FROM users WHERE...");
+
+// 안전: 사용자에게는 일반적인 메시지
+throw new AppException(ErrorCode.INTERNAL_ERROR);  // "서버 내부 오류"
+// 상세 원인은 로그에만 기록</code></pre>
+
+          <p>API 응답에 SQL 쿼리, 스택트레이스, 내부 경로 등이 포함되면 보안 취약점이 된다.</p>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Spring</span>
+          <span>#예외처리</span>
+          <span>#ExceptionHandler</span>
+          <span>#ErrorCode</span>
+          <span>#리팩토링</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+          <a href="refactoring-4-rest-api.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js — 문법 하이라이팅 -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid — 다이어그램 -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

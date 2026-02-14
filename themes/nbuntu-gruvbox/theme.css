@@ -1,0 +1,344 @@
+/* ========================================
+   nbuntu-gruvbox — Retro Warm Developer
+
+   "Old school code, new school cool."
+
+   Gruvbox Light 팔레트 기반.
+   복고 따뜻한 톤에 높은 가독성.
+   크림 배경에 강한 대비 — 눈이 편한 코딩.
+   ======================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Inconsolata:wght@400;700&display=swap');
+
+:root {
+  /* ── 본문 ── */
+  --post-font: 'Inconsolata', 'NeoDunggeunmo', 'Courier New', monospace;
+  --post-font-size: 14px;
+  --post-line-height: 1.95;
+  --post-paragraph-gap: 14px;
+  --post-heading-color: #3c3836;
+  --post-strong-color: #af3a03;
+  --post-em-color: #7c6f64;
+  --post-mark-bg: rgba(215, 153, 33, 0.2);
+  --post-link-color: #076678;
+
+  /* ── 코드 — 크림 에디터 ── */
+  --post-code-bg: #ebdbb2;
+  --post-code-border: #d5c4a1;
+  --post-pre-bg: #fbf1c7;
+  --post-pre-color: #3c3836;
+
+  /* ── 인용 ── */
+  --post-quote-bg: #f2e5bc;
+  --post-quote-border: #b57614;
+  --post-quote-color: #504945;
+
+  /* ── 콜아웃 ── */
+  --callout-info-bg: rgba(7, 102, 120, 0.08);
+  --callout-info-border: #076678;
+  --callout-info-icon: '📟';
+  --callout-tip-bg: rgba(121, 116, 14, 0.08);
+  --callout-tip-border: #79740e;
+  --callout-tip-icon: '📻';
+  --callout-warning-bg: rgba(175, 58, 3, 0.08);
+  --callout-warning-border: #af3a03;
+  --callout-warning-icon: '📺';
+  --callout-question-bg: rgba(143, 63, 113, 0.08);
+  --callout-question-border: #8f3f71;
+  --callout-question-icon: '💾';
+
+  /* ── 테이블 ── */
+  --post-table-header-bg: #ebdbb2;
+  --post-table-stripe-bg: #f9f0d4;
+
+  /* ── 태그 ── */
+  --post-tag-bg: #ebdbb2;
+
+  /* ── 테두리 — 약간 둥글게 ── */
+  --post-border-radius: 4px;
+}
+
+
+/* ═══════════════════════════════════
+   커스텀 스타일
+   ═══════════════════════════════════ */
+
+/* ── 제목 — 굵은 밑줄 + 레트로 번호 ── */
+.post-content h2 {
+  position: relative;
+  margin-top: 45px;
+  padding-top: 25px;
+  padding-bottom: 8px;
+  border-top: 2px solid #d5c4a1;
+  border-bottom: 3px double #d5c4a1;
+  letter-spacing: 0.5px;
+  font-weight: 700;
+}
+
+.post-content h2:first-of-type {
+  border-top: none;
+  margin-top: 25px;
+  padding-top: 0;
+}
+
+.post-content h3 {
+  color: #504945;
+  font-weight: 700;
+  border-left: 3px solid #b57614;
+  padding-left: 10px;
+}
+
+/* ── 인라인 코드 — 따뜻한 칩 ── */
+.post-content code {
+  color: #9d0006;
+  font-weight: 700;
+  font-family: 'Inconsolata', 'NeoDunggeunmo', monospace;
+  font-size: 13px;
+  border-radius: 3px;
+  background: #ebdbb2;
+}
+
+/* ── 코드 블록 — 크림 종이 ── */
+.post-content pre {
+  position: relative;
+  border: 2px solid #d5c4a1;
+  padding-top: 36px;
+  tab-size: 4;
+  box-shadow: 3px 3px 0px rgba(60, 56, 54, 0.08);
+}
+
+.post-content pre::before {
+  content: 'nbh@gruvbox:~$';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 7px 14px;
+  background: #ebdbb2;
+  border-bottom: 2px solid #d5c4a1;
+  color: #b57614;
+  font-size: 11px;
+  font-family: 'Inconsolata', monospace;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.post-content pre code {
+  font-family: 'Inconsolata', 'NeoDunggeunmo', monospace;
+  font-size: 13px;
+}
+
+/* ── 콜아웃 — 두꺼운 테두리 박스 ── */
+.callout {
+  border-width: 2px;
+  border-style: solid;
+  box-shadow: 2px 2px 0px rgba(60, 56, 54, 0.06);
+}
+
+.callout-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  font-family: 'Inconsolata', 'NeoDunggeunmo', monospace;
+  text-transform: none;
+  letter-spacing: 0.5px;
+}
+
+/* ── 링크 — 블루-그린 ── */
+.post-content a {
+  transition: all 0.15s ease;
+  border-bottom: 2px solid rgba(7, 102, 120, 0.3);
+}
+
+.post-content a:hover {
+  color: #af3a03;
+  border-bottom-color: #af3a03;
+}
+
+/* ── 하이라이트 ── */
+.post-content mark {
+  border-radius: 2px;
+  background: rgba(215, 153, 33, 0.25);
+  border-bottom: 2px solid rgba(215, 153, 33, 0.4);
+}
+
+/* ── 태그 — 레트로 뱃지 ── */
+.post-tags span {
+  border: 2px solid #d5c4a1;
+  background: #ebdbb2;
+  color: #076678;
+  font-family: 'Inconsolata', 'NeoDunggeunmo', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 3px;
+  transition: all 0.15s ease;
+}
+
+.post-tags span:hover {
+  background: #076678;
+  color: #fbf1c7;
+  border-color: #076678;
+}
+
+/* ── 구분선 — 이중선 ── */
+.post-content hr {
+  border-top: 3px double #d5c4a1;
+  position: relative;
+}
+
+.post-content hr::after {
+  content: '§';
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #fff;
+  padding: 0 10px;
+  color: #b57614;
+  font-size: 14px;
+  font-family: serif;
+  font-weight: bold;
+}
+
+/* ── 테이블 ── */
+.post-content table {
+  border: 2px solid #d5c4a1;
+}
+
+.post-content th {
+  color: #3c3836;
+  font-family: 'Inconsolata', 'NeoDunggeunmo', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  border-color: #d5c4a1;
+}
+
+.post-content td {
+  font-size: 13px;
+  border-color: #d5c4a1;
+}
+
+/* ── 머메이드 ── */
+.mermaid {
+  margin: 15px 0;
+  padding: 15px;
+  background: #f9f0d4;
+  border: 2px solid #d5c4a1;
+  border-radius: 4px;
+  text-align: center;
+}
+
+/* ── 이미지 ── */
+.post-content img {
+  border: 2px solid #d5c4a1;
+  box-shadow: 3px 3px 0px rgba(60, 56, 54, 0.08);
+}
+
+/* ── 인용문 ── */
+.post-content blockquote {
+  border-left-width: 4px;
+  font-style: italic;
+}
+
+/* ── 글 메타 ── */
+.post-meta {
+  font-family: 'Inconsolata', 'NeoDunggeunmo', monospace;
+  letter-spacing: 0.3px;
+}
+
+.post-meta .meta-category {
+  background: #ebdbb2;
+  color: #076678;
+  border: 2px solid #d5c4a1;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 3px;
+}
+
+/* ── 글 네비게이션 ── */
+.post-nav a {
+  font-family: 'Inconsolata', 'NeoDunggeunmo', monospace;
+  font-size: 13px;
+  font-weight: 700;
+  transition: all 0.15s ease;
+}
+
+.post-nav a:hover {
+  color: #af3a03;
+}
+
+/* ── 리스트 마커 ── */
+.post-content ul li::marker {
+  color: #b57614;
+}
+
+.post-content ol li::marker {
+  color: #076678;
+  font-weight: 700;
+}
+
+
+/* ═══════════════════════════════════
+   Prism.js — Gruvbox Light
+   ═══════════════════════════════════ */
+
+.post-content .token.comment,
+.post-content .token.prolog,
+.post-content .token.doctype,
+.post-content .token.cdata {
+  color: #928374;
+  font-style: italic;
+}
+
+.post-content .token.punctuation {
+  color: #3c3836;
+}
+
+.post-content .token.property,
+.post-content .token.tag,
+.post-content .token.boolean,
+.post-content .token.number,
+.post-content .token.constant,
+.post-content .token.symbol {
+  color: #8f3f71;
+}
+
+.post-content .token.selector,
+.post-content .token.attr-name,
+.post-content .token.string,
+.post-content .token.char,
+.post-content .token.builtin {
+  color: #79740e;
+}
+
+.post-content .token.operator,
+.post-content .token.entity,
+.post-content .token.url {
+  color: #af3a03;
+}
+
+.post-content .token.atrule,
+.post-content .token.attr-value,
+.post-content .token.keyword {
+  color: #9d0006;
+}
+
+.post-content .token.function,
+.post-content .token.class-name {
+  color: #076678;
+}
+
+.post-content .token.regex,
+.post-content .token.important,
+.post-content .token.variable {
+  color: #b57614;
+}
+
+.post-content .token.important,
+.post-content .token.bold {
+  font-weight: bold;
+}
+
+.post-content .token.italic {
+  font-style: italic;
+}

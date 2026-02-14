@@ -1,0 +1,350 @@
+/* ========================================
+   knitting-ocean — 바다 공방
+
+   "파도 소리를 들으며 한 코, 한 코"
+
+   딥 블루 + 틸 + 모래색.
+   해변 코티지에서 뜨개질하는 감성.
+   바다의 깊이와 모래사장의 따뜻함.
+   ======================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&family=Gowun+Dodum&display=swap');
+
+:root {
+  /* ── 본문 ── */
+  --post-font: 'Gowun Dodum', 'Apple SD Gothic Neo', sans-serif;
+  --post-font-size: 15px;
+  --post-line-height: 2.0;
+  --post-paragraph-gap: 16px;
+  --post-heading-color: #1a3a4a;
+  --post-strong-color: #0e7490;
+  --post-em-color: #6a8a98;
+  --post-mark-bg: rgba(14, 116, 144, 0.12);
+  --post-link-color: #0e7490;
+
+  /* ── 코드 — 조개껍데기 ── */
+  --post-code-bg: #e8f4f8;
+  --post-code-border: #b8d8e8;
+  --post-pre-bg: #f0f8fa;
+  --post-pre-color: #1a3a4a;
+
+  /* ── 인용 ── */
+  --post-quote-bg: #edf6f9;
+  --post-quote-border: #4a9ab8;
+  --post-quote-color: #2a4a5a;
+
+  /* ── 콜아웃 ── */
+  --callout-info-bg: #edf6f9;
+  --callout-info-border: #4a9ab8;
+  --callout-info-icon: '🐚';
+  --callout-tip-bg: #eaf8f0;
+  --callout-tip-border: #3a9a7a;
+  --callout-tip-icon: '⚓';
+  --callout-warning-bg: #fef8ee;
+  --callout-warning-border: #d4a040;
+  --callout-warning-icon: '🦀';
+  --callout-question-bg: #eef0f8;
+  --callout-question-border: #6a7aaa;
+  --callout-question-icon: '🐋';
+
+  /* ── 테이블 ── */
+  --post-table-header-bg: #e8f4f8;
+  --post-table-stripe-bg: #f5fafb;
+
+  /* ── 태그 ── */
+  --post-tag-bg: #e8f4f8;
+
+  /* ── 테두리 ── */
+  --post-border-radius: 10px;
+}
+
+
+/* ═══════════════════════════════════
+   커스텀 스타일
+   ═══════════════════════════════════ */
+
+/* ── 제목 — 파도 물결 ── */
+.post-content h2 {
+  font-family: 'Gaegu', 'Gowun Dodum', sans-serif;
+  font-weight: 700;
+  font-size: 22px;
+  margin-top: 50px;
+  padding-top: 30px;
+  padding-bottom: 12px;
+  border-top: none;
+  border-bottom: none;
+  position: relative;
+}
+
+.post-content h2:first-of-type {
+  margin-top: 25px;
+  padding-top: 0;
+}
+
+/* 파도 물결 구분선 (h2 위) */
+.post-content h2:not(:first-of-type)::before {
+  content: '〰〰〰〰〰〰〰〰';
+  display: block;
+  position: absolute;
+  top: 10px;
+  left: 0;
+  right: 0;
+  color: #b8d8e8;
+  font-size: 10px;
+  letter-spacing: 2px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.post-content h2::after {
+  content: ' ~';
+  color: #4a9ab8;
+  font-weight: normal;
+}
+
+.post-content h3 {
+  font-family: 'Gaegu', 'Gowun Dodum', sans-serif;
+  font-weight: 700;
+  font-size: 19px;
+  color: #2a5a6a;
+}
+
+/* ── 인라인 코드 ── */
+.post-content code {
+  color: #0e7490;
+  font-size: 13px;
+  border-radius: 4px;
+}
+
+/* ── 코드 블록 — 해변 보드 ── */
+.post-content pre {
+  border: 1px solid #b8d8e8;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(26, 58, 74, 0.06);
+}
+
+.post-content pre::before {
+  content: none;
+}
+
+.post-content pre code {
+  font-size: 13px;
+}
+
+/* ── 인용문 ── */
+.post-content blockquote {
+  border-left: 4px solid #4a9ab8;
+  border-radius: 0 10px 10px 0;
+  padding: 14px 18px;
+  font-family: 'Gaegu', sans-serif;
+  font-size: 17px;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(26, 58, 74, 0.04);
+}
+
+/* ── 콜아웃 — 조개 카드 ── */
+.callout {
+  border-width: 1px;
+  border-style: solid;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(26, 58, 74, 0.04);
+}
+
+.callout-title {
+  font-family: 'Gaegu', 'Gowun Dodum', sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* ── 링크 — 바다 밑줄 ── */
+.post-content a {
+  border-bottom: 1px dashed #4a9ab8;
+  transition: all 0.2s ease;
+}
+
+.post-content a:hover {
+  color: #065a6e;
+  border-bottom-style: solid;
+}
+
+/* ── 하이라이트 ── */
+.post-content mark {
+  background: rgba(14, 116, 144, 0.15);
+  border-radius: 3px;
+}
+
+/* ── 태그 — 자갈 뱃지 ── */
+.post-tags span {
+  border: 1px solid #b8d8e8;
+  background: #e8f4f8;
+  color: #0e7490;
+  font-family: 'Gaegu', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: 16px;
+  padding: 3px 10px;
+  transition: all 0.2s ease;
+}
+
+.post-tags span:hover {
+  background: #4a9ab8;
+  color: #fff;
+  border-color: #4a9ab8;
+}
+
+/* ── 구분선 — 파도 ── */
+.post-content hr {
+  border: none;
+  border-top: 3px wavy #b8d8e8;
+  position: relative;
+  margin: 30px 0;
+}
+
+.post-content hr::after {
+  content: '🐚';
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #fff;
+  padding: 0 8px;
+  font-size: 14px;
+}
+
+/* ── 테이블 ── */
+.post-content table {
+  border: 1px solid #b8d8e8;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.post-content th {
+  font-family: 'Gaegu', 'Gowun Dodum', sans-serif;
+  font-weight: 700;
+  color: #1a3a4a;
+  font-size: 14px;
+  border-color: #b8d8e8;
+}
+
+.post-content td {
+  border-color: #c8e0ea;
+}
+
+/* ── 머메이드 ── */
+.mermaid {
+  margin: 15px 0;
+  padding: 15px;
+  background: #f5fafb;
+  border: 1px solid #b8d8e8;
+  border-radius: 10px;
+  text-align: center;
+}
+
+/* ── 이미지 ── */
+.post-content img {
+  border: 1px solid #b8d8e8;
+  border-radius: 10px;
+  box-shadow: 0 3px 12px rgba(26, 58, 74, 0.08);
+}
+
+/* ── 리스트 ── */
+.post-content ul li::marker {
+  color: #4a9ab8;
+}
+
+.post-content ol li::marker {
+  color: #0e7490;
+  font-family: 'Gaegu', sans-serif;
+  font-weight: 700;
+}
+
+/* ── 체크리스트 ── */
+.post-content .task-list input[type="checkbox"] {
+  accent-color: #0e7490;
+}
+
+/* ── 글 메타 ── */
+.post-meta {
+  font-family: 'Gowun Dodum', sans-serif;
+}
+
+.post-meta .meta-category {
+  background: #e8f4f8;
+  border: 1px solid #b8d8e8;
+  border-radius: 10px;
+  color: #0e7490;
+  font-family: 'Gaegu', sans-serif;
+  font-weight: 700;
+}
+
+/* ── 글 네비게이션 ── */
+.post-nav a {
+  font-family: 'Gaegu', 'Gowun Dodum', sans-serif;
+  font-weight: 700;
+  font-size: 15px;
+  transition: all 0.2s ease;
+}
+
+.post-nav a:hover {
+  color: #0e7490;
+}
+
+
+/* ═══════════════════════════════════
+   Prism.js — Ocean
+   ═══════════════════════════════════ */
+
+.post-content .token.comment,
+.post-content .token.prolog,
+.post-content .token.doctype,
+.post-content .token.cdata {
+  color: #6a8a98;
+  font-style: italic;
+}
+
+.post-content .token.punctuation {
+  color: #1a3a4a;
+}
+
+.post-content .token.property,
+.post-content .token.tag,
+.post-content .token.boolean,
+.post-content .token.number,
+.post-content .token.constant,
+.post-content .token.symbol {
+  color: #0e7490;
+}
+
+.post-content .token.selector,
+.post-content .token.attr-name,
+.post-content .token.string,
+.post-content .token.char,
+.post-content .token.builtin {
+  color: #3a9a7a;
+}
+
+.post-content .token.operator,
+.post-content .token.entity,
+.post-content .token.url {
+  color: #d4a040;
+}
+
+.post-content .token.atrule,
+.post-content .token.attr-value,
+.post-content .token.keyword {
+  color: #4a9ab8;
+}
+
+.post-content .token.function,
+.post-content .token.class-name {
+  color: #6a7aaa;
+}
+
+.post-content .token.regex,
+.post-content .token.important,
+.post-content .token.variable {
+  color: #c87040;
+}
