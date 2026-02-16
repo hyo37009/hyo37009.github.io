@@ -249,32 +249,58 @@ document.querySelectorAll('.post-content pre code[class*="language-"]').forEach(
     }, 1500);
   });
 
-  // 드래그
+  // 드래그 공통 로직
   var offsetX, offsetY, dragging = false;
-  dog.addEventListener('mousedown', function(e) {
+
+  function startDrag(clientX, clientY) {
     dragging = true;
     dog.classList.add('dragging');
     var rect = dog.getBoundingClientRect();
-    offsetX = e.clientX - rect.left;
-    offsetY = e.clientY - rect.top;
+    offsetX = clientX - rect.left;
+    offsetY = clientY - rect.top;
     dog.style.left = rect.left + 'px';
     dog.style.top = rect.top + 'px';
     dog.style.right = 'auto';
     dog.style.bottom = 'auto';
-    e.preventDefault();
-  });
-  document.addEventListener('mousemove', function(e) {
+  }
+
+  function moveDrag(clientX, clientY) {
     if (!dragging) return;
-    var x = Math.max(0, Math.min(e.clientX - offsetX, window.innerWidth - dog.offsetWidth));
-    var y = Math.max(0, Math.min(e.clientY - offsetY, window.innerHeight - dog.offsetHeight));
+    var x = Math.max(0, Math.min(clientX - offsetX, window.innerWidth - dog.offsetWidth));
+    var y = Math.max(0, Math.min(clientY - offsetY, window.innerHeight - dog.offsetHeight));
     dog.style.left = x + 'px';
     dog.style.top = y + 'px';
-  });
-  document.addEventListener('mouseup', function() {
+  }
+
+  function endDrag() {
     if (!dragging) return;
     dragging = false;
     dog.classList.remove('dragging');
+  }
+
+  // 마우스 드래그
+  dog.addEventListener('mousedown', function(e) {
+    startDrag(e.clientX, e.clientY);
+    e.preventDefault();
   });
+  document.addEventListener('mousemove', function(e) {
+    moveDrag(e.clientX, e.clientY);
+  });
+  document.addEventListener('mouseup', endDrag);
+
+  // 터치 드래그
+  dog.addEventListener('touchstart', function(e) {
+    var t = e.touches[0];
+    startDrag(t.clientX, t.clientY);
+    e.preventDefault();
+  }, { passive: false });
+  document.addEventListener('touchmove', function(e) {
+    if (!dragging) return;
+    var t = e.touches[0];
+    moveDrag(t.clientX, t.clientY);
+    e.preventDefault();
+  }, { passive: false });
+  document.addEventListener('touchend', endDrag);
 })();
 
 
