@@ -278,6 +278,61 @@ document.querySelectorAll('.post-content pre code[class*="language-"]').forEach(
 })();
 
 
+/* ========================================
+   모바일 사이드바 토글
+   ======================================== */
+
+(function() {
+  var sidebar = document.querySelector('.sidebar');
+  if (!sidebar) return;
+
+  // 토글 버튼 생성 (nav 안에 삽입)
+  var toggle = document.createElement('button');
+  toggle.className = 'sidebar-toggle';
+  toggle.setAttribute('aria-label', '사이드바 열기');
+  toggle.innerHTML = '&#9776;'; // ☰
+
+  var nav = document.querySelector('.nav');
+  if (nav) {
+    nav.insertBefore(toggle, nav.firstChild);
+  }
+
+  // 오버레이 생성
+  var overlay = document.createElement('div');
+  overlay.className = 'sidebar-overlay';
+  document.body.appendChild(overlay);
+
+  function openSidebar() {
+    sidebar.classList.add('mobile-open');
+    overlay.classList.add('active');
+    document.body.classList.add('sidebar-open');
+  }
+
+  function closeSidebar() {
+    sidebar.classList.remove('mobile-open');
+    overlay.classList.remove('active');
+    document.body.classList.remove('sidebar-open');
+  }
+
+  toggle.addEventListener('click', function() {
+    if (sidebar.classList.contains('mobile-open')) {
+      closeSidebar();
+    } else {
+      openSidebar();
+    }
+  });
+
+  overlay.addEventListener('click', closeSidebar);
+
+  // ESC 키로 닫기
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && sidebar.classList.contains('mobile-open')) {
+      closeSidebar();
+    }
+  });
+})();
+
+
 // 코나미 커맨드 이스터에그
 let konamiSequence = [];
 const konamiCode = [
