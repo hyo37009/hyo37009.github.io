@@ -249,31 +249,112 @@ document.querySelectorAll('.post-content pre code[class*="language-"]').forEach(
     }, 1500);
   });
 
-  // 드래그
+  // 드래그 공통 로직
   var offsetX, offsetY, dragging = false;
-  dog.addEventListener('mousedown', function(e) {
+
+  function startDrag(clientX, clientY) {
     dragging = true;
     dog.classList.add('dragging');
     var rect = dog.getBoundingClientRect();
-    offsetX = e.clientX - rect.left;
-    offsetY = e.clientY - rect.top;
+    offsetX = clientX - rect.left;
+    offsetY = clientY - rect.top;
     dog.style.left = rect.left + 'px';
     dog.style.top = rect.top + 'px';
     dog.style.right = 'auto';
     dog.style.bottom = 'auto';
-    e.preventDefault();
-  });
-  document.addEventListener('mousemove', function(e) {
+  }
+
+  function moveDrag(clientX, clientY) {
     if (!dragging) return;
-    var x = Math.max(0, Math.min(e.clientX - offsetX, window.innerWidth - dog.offsetWidth));
-    var y = Math.max(0, Math.min(e.clientY - offsetY, window.innerHeight - dog.offsetHeight));
+    var x = Math.max(0, Math.min(clientX - offsetX, window.innerWidth - dog.offsetWidth));
+    var y = Math.max(0, Math.min(clientY - offsetY, window.innerHeight - dog.offsetHeight));
     dog.style.left = x + 'px';
     dog.style.top = y + 'px';
-  });
-  document.addEventListener('mouseup', function() {
+  }
+
+  function endDrag() {
     if (!dragging) return;
     dragging = false;
     dog.classList.remove('dragging');
+  }
+
+  // 마우스 드래그
+  dog.addEventListener('mousedown', function(e) {
+    startDrag(e.clientX, e.clientY);
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', function(e) {
+    moveDrag(e.clientX, e.clientY);
+  });
+  document.addEventListener('mouseup', endDrag);
+
+  // 터치 드래그
+  dog.addEventListener('touchstart', function(e) {
+    var t = e.touches[0];
+    startDrag(t.clientX, t.clientY);
+    e.preventDefault();
+  }, { passive: false });
+  document.addEventListener('touchmove', function(e) {
+    if (!dragging) return;
+    var t = e.touches[0];
+    moveDrag(t.clientX, t.clientY);
+    e.preventDefault();
+  }, { passive: false });
+  document.addEventListener('touchend', endDrag);
+})();
+
+
+/* ========================================
+   모바일 사이드바 토글
+   ======================================== */
+
+(function() {
+  var sidebar = document.querySelector('.sidebar');
+  if (!sidebar) return;
+
+  // 토글 버튼 생성 (nav 안에 삽입)
+  var toggle = document.createElement('button');
+  toggle.className = 'sidebar-toggle';
+  toggle.setAttribute('aria-label', '사이드바 열기');
+  toggle.innerHTML = '&#9776;'; // ☰
+
+  var nav = document.querySelector('.nav');
+  if (nav) {
+    nav.insertBefore(toggle, nav.firstChild);
+  }
+
+  // 오버레이 생성
+  var overlay = document.createElement('div');
+  overlay.className = 'sidebar-overlay';
+  document.body.appendChild(overlay);
+
+  function openSidebar() {
+    sidebar.classList.add('mobile-open');
+    overlay.classList.add('active');
+    document.body.classList.add('sidebar-open');
+  }
+
+  function closeSidebar() {
+    sidebar.classList.remove('mobile-open');
+    overlay.classList.remove('active');
+    document.body.classList.remove('sidebar-open');
+  }
+
+  toggle.addEventListener('click', function() {
+    if (sidebar.classList.contains('mobile-open')) {
+      closeSidebar();
+    } else {
+      openSidebar();
+    }
+  });
+
+  overlay.addEventListener('click', closeSidebar);
+
+  // ESC 키로 닫기
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && sidebar.classList.contains('mobile-open')) {
+      closeSidebar();
+    }
   });
 })();
 
