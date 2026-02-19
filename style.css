@@ -720,6 +720,8 @@ a:hover {
   font-family: var(--post-font);
   line-height: var(--post-line-height);
   font-size: var(--post-font-size);
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 /* 제목 */
@@ -804,6 +806,21 @@ a:hover {
   padding: 0;
   color: inherit;
   font-size: 13px;
+}
+
+/* code-line 사이의 \n 텍스트 노드가 추가 줄바꿈을 만들지 않도록 */
+.post-content pre code:has(.code-line) {
+  white-space: normal;
+}
+
+.post-content pre code .code-line {
+  display: block;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  padding-left: 2em;
+  text-indent: -2em;
+  min-height: 1.5em;
 }
 
 /* 인용 (blockquote) */
