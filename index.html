@@ -48,7 +48,7 @@
         <div class="sidebar-section">
           <h3>카테고리</h3>
           <div class="sidebar-categories">
-            <a href="pages/nbuntu.html">nbuntu <span class="cat-count">5</span></a>
+            <a href="pages/nbuntu.html">nbuntu <span class="cat-count">8</span></a>
             <a href="pages/knitting.html">뜨개 공방 <span class="cat-count">1</span></a>
           </div>
         </div>
@@ -73,6 +73,21 @@
 
         <ul class="post-list">
           <li>
+            <span class="post-category">nbuntu</span>
+            <a href="posts/jwt-1-token-auth.html">[JWT] 1. 토큰 기반 인증의 개념과 필요성</a>
+            <span class="post-date">2026.02.19</span>
+          </li>
+          <li>
+            <span class="post-category">nbuntu</span>
+            <a href="posts/jwt-2-structure.html">[JWT] 2. JWT의 구조와 원리</a>
+            <span class="post-date">2026.02.19</span>
+          </li>
+          <li>
+            <span class="post-category">nbuntu</span>
+            <a href="posts/time-complexity-1-basics.html">[코딩테스트] 1. 시간복잡도 기본 개념</a>
+            <span class="post-date">2026.02.19</span>
+          </li>
+          <li>
             <span class="post-category">뜨개 공방</span>
             <a href="posts/knitting-first-scarf.html">첫 목도리 도전기</a>
             <span class="post-date">2026.02.14</span>
@@ -80,26 +95,6 @@
           <li>
             <span class="post-category">nbuntu</span>
             <a href="posts/refactoring-5-code-consistency.html">[Spring] 5. 코드 일관성과 쿼리 최적화</a>
-            <span class="post-date">2026.02.13</span>
-          </li>
-          <li>
-            <span class="post-category">nbuntu</span>
-            <a href="posts/refactoring-4-rest-api.html">[Spring] 4. REST API 설계 원칙</a>
-            <span class="post-date">2026.02.13</span>
-          </li>
-          <li>
-            <span class="post-category">nbuntu</span>
-            <a href="posts/refactoring-3-exception-handling.html">[Spring] 3. 예외 처리 전략 설계</a>
-            <span class="post-date">2026.02.13</span>
-          </li>
-          <li>
-            <span class="post-category">nbuntu</span>
-            <a href="posts/refactoring-2-transaction.html">[Spring] 2. 트랜잭션과 데이터 일관성</a>
-            <span class="post-date">2026.02.13</span>
-          </li>
-          <li>
-            <span class="post-category">nbuntu</span>
-            <a href="posts/refactoring-1-configuration-properties.html">[Spring] 1. 설정 관리와 @ConfigurationProperties</a>
             <span class="post-date">2026.02.13</span>
           </li>
         </ul>
@@ -113,6 +108,11 @@
     </footer>
 
   </div>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js"></script>
 
   <script src="script.js"></script>
 </body>
