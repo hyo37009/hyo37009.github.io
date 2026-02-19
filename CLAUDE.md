@@ -11,16 +11,18 @@
 - **스타일**: 레트로 갠홈 감성 (90~2000년대 개인 홈페이지 느낌)
 - **콘텐츠**: 개발 글 + 일상 글 혼합
 - **댓글**: 지금은 없음. 나중에 Giscus(GitHub Discussions 기반) 검토 예정
-- **호스팅**: naru.pub (정적 파일만, 용량 제한 최근 폐지됨)
-- **글 작성 방식**: HTML 파일 직접 작성 → 나루에 업로드
-- **관리 페이지**: 없음 (나루가 파일 관리 담당)
+- **호스팅**: GitHub Pages (hyo37009.github.io) — 이전: naru.pub
+- **글 작성 방식**: HTML 파일 직접 작성 → GitHub push로 배포
+- **관리 페이지**: 없음
+- **Git 브랜치**: dev에서 작업 → main 머지로 배포
+- **레포**: https://github.com/hyo37009/hyo37009.github.io
 
 ## 기술 제약
 
 - 서버 사이드 코드 실행 불가 (PHP, Node.js, Java 등)
 - 순수 HTML + CSS + JS만 가능
 - DB 없음 → 글 목록 등은 정적으로 관리하거나 JS로 처리
-- 나루 지원 파일: html, htm, css, js, json, png, jpg, jpeg, gif, webp, ico, ogg, wav, mp3, svg, md 등
+- GitHub Pages는 정적 파일만 서빙 (naru.pub과 동일 제약)
 
 ## 사용자 배경
 

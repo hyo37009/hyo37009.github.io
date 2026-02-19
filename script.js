@@ -159,6 +159,78 @@ document.querySelectorAll('.post-content pre code[class*="language-"]').forEach(
   }
 });
 
+// 코드 블록 — 줄바꿈 시 hanging indent (soft-wrap된 줄만 들여쓰기)
+(function() {
+  // Prism.js 하이라이팅 태그를 보존하면서 줄 분리
+  function splitPreservingTags(html) {
+    var lines = [];
+    var currentLine = '';
+    var openTags = [];
+    var i = 0;
+
+    while (i < html.length) {
+      if (html[i] === '\n') {
+        for (var j = openTags.length - 1; j >= 0; j--) {
+          currentLine += '</span>';
+        }
+        lines.push(currentLine);
+        currentLine = openTags.join('');
+        i++;
+      } else if (html[i] === '<') {
+        var tagEnd = html.indexOf('>', i);
+        if (tagEnd === -1) { currentLine += html[i]; i++; continue; }
+        var tag = html.substring(i, tagEnd + 1);
+
+        if (tag.indexOf('</') === 0) {
+          openTags.pop();
+        } else if (tag.indexOf('<span') === 0 && tag.indexOf('/>') === -1) {
+          openTags.push(tag);
+        }
+        currentLine += tag;
+        i = tagEnd + 1;
+      } else {
+        currentLine += html[i];
+        i++;
+      }
+    }
+    if (currentLine) lines.push(currentLine);
+    return lines;
+  }
+
+  function wrapLines(codeElement) {
+    if (codeElement.querySelector('.code-line')) return;
+    var html = codeElement.innerHTML;
+    if (!html.trim()) return;
+
+    var lines = splitPreservingTags(html);
+
+    // 마지막 빈 줄 제거
+    while (lines.length > 0 && !lines[lines.length - 1].replace(/<[^>]*>/g, '').trim()) {
+      lines.pop();
+    }
+
+    codeElement.innerHTML = lines.map(function(line) {
+      return '<span class="code-line">' + line + '</span>';
+    }).join('\n');
+  }
+
+  // Prism.js 하이라이팅 완료 후 줄 감싸기
+  if (typeof Prism !== 'undefined') {
+    Prism.hooks.add('complete', function(env) {
+      wrapLines(env.element);
+    });
+  }
+
+  // Prism 없는 코드 블록 처리
+  document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.post-content pre code').forEach(function(code) {
+      if (!code.querySelector('.token')) {
+        wrapLines(code);
+      }
+    });
+  });
+})();
+
 /* ========================================
    터미널형 사이드바 자동 적용
    ======================================== */
