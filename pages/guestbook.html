@@ -39,24 +39,57 @@
         <h1 class="page-header">방명록</h1>
         <p class="page-description">발자취를 남겨주세요</p>
 
+        <!-- 방명록 카운터 -->
+        <div class="gb-counter" id="gb-counter">
+          <span class="gb-counter-icon">&#9993;</span>
+          총 <strong id="gb-total">0</strong>개의 흔적
+        </div>
+
         <!-- 방명록 작성 폼 -->
-        <div class="guestbook-form">
-          <label for="guest-name">이름</label>
-          <input type="text" id="guest-name" placeholder="닉네임" maxlength="20">
-
-          <label for="guest-message">한마디</label>
-          <textarea id="guest-message" placeholder="하고 싶은 말을 적어주세요"></textarea>
-
-          <button id="guest-submit" onclick="submitGuestbook()">남기기</button>
+        <div class="gb-write">
+          <div class="gb-write-header">
+            <span class="gb-write-dot"></span>
+            <span class="gb-write-dot"></span>
+            <span class="gb-write-dot"></span>
+            <span class="gb-write-title">글 남기기</span>
+          </div>
+          <div class="gb-write-body">
+            <div class="gb-write-row">
+              <div class="gb-field">
+                <label for="guest-name">닉네임</label>
+                <input type="text" id="guest-name" placeholder="이름을 알려주세요" maxlength="20">
+              </div>
+              <div class="gb-field gb-field-icon">
+                <label for="guest-icon">아이콘</label>
+                <div class="gb-icon-picker" id="gb-icon-picker">
+                  <button type="button" class="gb-icon-btn selected" data-icon="🐶">🐶</button>
+                  <button type="button" class="gb-icon-btn" data-icon="🐱">🐱</button>
+                  <button type="button" class="gb-icon-btn" data-icon="🐰">🐰</button>
+                  <button type="button" class="gb-icon-btn" data-icon="🐻">🐻</button>
+                  <button type="button" class="gb-icon-btn" data-icon="🐸">🐸</button>
+                  <button type="button" class="gb-icon-btn" data-icon="🌸">🌸</button>
+                  <button type="button" class="gb-icon-btn" data-icon="⭐">⭐</button>
+                  <button type="button" class="gb-icon-btn" data-icon="🎵">🎵</button>
+                </div>
+              </div>
+            </div>
+            <div class="gb-field">
+              <label for="guest-message">한마디</label>
+              <textarea id="guest-message" placeholder="하고 싶은 말을 적어주세요 :)" maxlength="500"></textarea>
+              <div class="gb-char-count"><span id="gb-char-current">0</span>/500</div>
+            </div>
+            <button id="guest-submit" class="gb-submit-btn" onclick="submitGuestbook()">
+              <span class="gb-submit-text">남기기 ✦</span>
+            </button>
+          </div>
         </div>
 
         <!-- 방명록 목록 -->
-        <ul class="guestbook-entries" id="guestbook-list">
-          <!-- Firebase 연동 전 안내 -->
+        <div class="gb-list" id="guestbook-list">
           <div class="notice-bar" id="firebase-notice">
             아직 Firebase가 연결되지 않았습니다. 연결하면 방명록이 동작합니다!
           </div>
-        </ul>
+        </div>
 
       </div>
     </div>
@@ -67,7 +100,11 @@
 
   </div>
 
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
   <script src="../firebase-config.js"></script>
+
   <script src="../guestbook.js"></script>
   <script src="../script.js"></script>
 </body>

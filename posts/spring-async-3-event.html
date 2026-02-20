@@ -44,12 +44,12 @@
           <div class="callout callout-info">
             <div class="callout-title">스프링 비동기 시리즈 (3/6)</div>
             <p>이 시리즈는 Spring의 비동기 처리를 처음부터 단계별로 다룬다.</p>
-            <p>1. <a href="async와-비동기-처리의-기본.html">@Async와 비동기 처리의 기본</a></p>
-            <p>2. <a href="threadpooltaskexecutor-설정과-스레드-풀-관리.html">ThreadPoolTaskExecutor 설정과 스레드 풀 관리</a></p>
+            <p>1. <a href="spring-async-1-basics.html">@Async와 비동기 처리의 기본</a></p>
+            <p>2. <a href="spring-async-2-thread-pool.html">ThreadPoolTaskExecutor 설정과 스레드 풀 관리</a></p>
             <p>3. <strong>Spring Event 기반 비동기 처리</strong> ← 현재 문서</p>
-            <p>4. <a href="비동기-예외-처리와-재시도-전략.html">비동기 예외 처리와 재시도 전략</a></p>
-            <p>5. <a href="taskdecorator와-컨텍스트-전파.html">TaskDecorator와 컨텍스트 전파</a></p>
-            <p>6. <a href="webclient를-활용한-비동기-http-통신.html">WebClient를 활용한 비동기 HTTP 통신</a></p>
+            <p>4. <a href="spring-async-4-exception.html">비동기 예외 처리와 재시도 전략</a></p>
+            <p>5. <a href="spring-async-5-decorator.html">TaskDecorator와 컨텍스트 전파</a></p>
+            <p>6. <a href="spring-async-6-webclient.html">WebClient를 활용한 비동기 HTTP 통신</a></p>
           </div>
 
           <p>지금까지는 비동기 작업이 필요할 때 서비스에서 다른 서비스를 직접 호출했다. 주문 서비스가 알림 서비스를 호출하고, 포인트 서비스를 호출하고, 통계 서비스를 호출한다. 새로운 후처리가 추가될 때마다 주문 서비스 코드를 수정해야 한다.</p>
@@ -343,7 +343,8 @@ public class ConditionalEventListener {
         </div>
 
         <div class="post-nav">
-          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+          <a href="spring-async-2-thread-pool.html">&larr; 이전 글</a>
+          <a href="spring-async-4-exception.html">다음 글 &rarr;</a>
         </div>
 
       </div>

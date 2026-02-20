@@ -39,128 +39,283 @@
         <h1 class="page-header">nbuntu</h1>
         <p class="page-description">개발 삽질 일지, 공부 기록, 그리고 가끔 작동하는 코드</p>
 
-        <h2>CSRF 시리즈</h2>
+        <!-- Spring -->
+        <div class="cat-folder">
+          <div class="cat-folder-header" data-folder="spring">
+            <span class="cat-folder-icon">&#128194;</span>
+            <span class="cat-folder-name">Spring</span>
+            <span class="cat-folder-count">19</span>
+          </div>
+          <div class="cat-folder-body" id="folder-spring">
 
-        <ul class="post-list">
-          <li>
-            <a href="../posts/spring-csrf-1-concept.html">[Spring Security] 1. CSRF 공격의 원리와 방어 전략</a>
-            <span class="post-date">2026.02.20</span>
-          </li>
-          <li>
-            <a href="../posts/spring-csrf-2-token-repository.html">[Spring Security] 2. CSRF 토큰 저장소 설정</a>
-            <span class="post-date">2026.02.20</span>
-          </li>
-          <li>
-            <a href="../posts/spring-csrf-3-handler.html">[Spring Security] 3. CSRF 핸들러 커스터마이징</a>
-            <span class="post-date">2026.02.20</span>
-          </li>
-          <li>
-            <a href="../posts/spring-csrf-4-api-endpoint.html">[Spring Security] 4. CSRF API 엔드포인트 구현</a>
-            <span class="post-date">2026.02.20</span>
-          </li>
-        </ul>
+            <div class="cat-series">
+              <div class="cat-series-header" data-series="csrf">
+                <span class="cat-series-icon">&#128196;</span>
+                <span class="cat-series-name">CSRF</span>
+                <span class="cat-series-count">4</span>
+              </div>
+              <ul class="post-list cat-series-list" id="series-csrf">
+                <li>
+                  <span class="post-num">01</span>
+                  <a href="../posts/spring-csrf-1-concept.html">CSRF 공격의 원리와 방어 전략</a>
+                  <span class="post-date">2026.02.20</span>
+                </li>
+                <li>
+                  <span class="post-num">02</span>
+                  <a href="../posts/spring-csrf-2-token-repository.html">CSRF 토큰 저장소 설정</a>
+                  <span class="post-date">2026.02.20</span>
+                </li>
+                <li>
+                  <span class="post-num">03</span>
+                  <a href="../posts/spring-csrf-3-handler.html">CSRF 핸들러 커스터마이징</a>
+                  <span class="post-date">2026.02.20</span>
+                </li>
+                <li>
+                  <span class="post-num">04</span>
+                  <a href="../posts/spring-csrf-4-api-endpoint.html">CSRF API 엔드포인트 구현</a>
+                  <span class="post-date">2026.02.20</span>
+                </li>
+              </ul>
+            </div>
 
-        <h2>세션 관리 고도화 시리즈</h2>
+            <div class="cat-series">
+              <div class="cat-series-header" data-series="session">
+                <span class="cat-series-icon">&#128196;</span>
+                <span class="cat-series-name">세션 관리 고도화</span>
+                <span class="cat-series-count">4</span>
+              </div>
+              <ul class="post-list cat-series-list" id="series-session">
+                <li>
+                  <span class="post-num">01</span>
+                  <a href="../posts/spring-session-1-concurrent-login.html">동시 로그인 방지와 SessionRegistry</a>
+                  <span class="post-date">2026.02.20</span>
+                </li>
+                <li>
+                  <span class="post-num">02</span>
+                  <a href="../posts/spring-session-2-privilege-invalidation.html">권한 변경 시 세션 무효화</a>
+                  <span class="post-date">2026.02.20</span>
+                </li>
+                <li>
+                  <span class="post-num">03</span>
+                  <a href="../posts/spring-session-3-online-status.html">SessionRegistry로 온라인 상태 관리</a>
+                  <span class="post-date">2026.02.20</span>
+                </li>
+                <li>
+                  <span class="post-num">04</span>
+                  <a href="../posts/spring-session-4-remember-me.html">RememberMe 자동 로그인</a>
+                  <span class="post-date">2026.02.20</span>
+                </li>
+              </ul>
+            </div>
 
-        <ul class="post-list">
-          <li>
-            <a href="../posts/spring-session-1-concurrent-login.html">[Spring Security] 1. 동시 로그인 방지와 SessionRegistry</a>
-            <span class="post-date">2026.02.20</span>
-          </li>
-          <li>
-            <a href="../posts/spring-session-2-privilege-invalidation.html">[Spring Security] 2. 권한 변경 시 세션 무효화</a>
-            <span class="post-date">2026.02.20</span>
-          </li>
-          <li>
-            <a href="../posts/spring-session-3-online-status.html">[Spring Security] 3. SessionRegistry로 온라인 상태 관리</a>
-            <span class="post-date">2026.02.20</span>
-          </li>
-          <li>
-            <a href="../posts/spring-session-4-remember-me.html">[Spring Security] 4. RememberMe 자동 로그인</a>
-            <span class="post-date">2026.02.20</span>
-          </li>
-        </ul>
+            <div class="cat-series">
+              <div class="cat-series-header" data-series="async">
+                <span class="cat-series-icon">&#128196;</span>
+                <span class="cat-series-name">비동기</span>
+                <span class="cat-series-count">6</span>
+              </div>
+              <ul class="post-list cat-series-list" id="series-async">
+                <li>
+                  <span class="post-num">01</span>
+                  <a href="../posts/spring-async-1-basics.html">@Async와 비동기 처리의 기본</a>
+                  <span class="post-date">2026.02.20</span>
+                </li>
+                <li>
+                  <span class="post-num">02</span>
+                  <a href="../posts/spring-async-2-thread-pool.html">ThreadPoolTaskExecutor 설정과 스레드 풀 관리</a>
+                  <span class="post-date">2026.02.20</span>
+                </li>
+                <li>
+                  <span class="post-num">03</span>
+                  <a href="../posts/spring-async-3-event.html">Spring Event 기반 비동기 처리</a>
+                  <span class="post-date">2026.02.20</span>
+                </li>
+                <li>
+                  <span class="post-num">04</span>
+                  <a href="../posts/spring-async-4-exception.html">비동기 예외 처리와 재시도 전략</a>
+                  <span class="post-date">2026.02.20</span>
+                </li>
+                <li>
+                  <span class="post-num">05</span>
+                  <a href="../posts/spring-async-5-decorator.html">TaskDecorator와 컨텍스트 전파</a>
+                  <span class="post-date">2026.02.20</span>
+                </li>
+                <li>
+                  <span class="post-num">06</span>
+                  <a href="../posts/spring-async-6-webclient.html">WebClient를 활용한 비동기 HTTP 통신</a>
+                  <span class="post-date">2026.02.20</span>
+                </li>
+              </ul>
+            </div>
 
-        <h2>스프링 비동기 시리즈</h2>
+            <div class="cat-series">
+              <div class="cat-series-header" data-series="refactoring">
+                <span class="cat-series-icon">&#128196;</span>
+                <span class="cat-series-name">리팩토링 패턴</span>
+                <span class="cat-series-count">5</span>
+              </div>
+              <ul class="post-list cat-series-list" id="series-refactoring">
+                <li>
+                  <span class="post-num">01</span>
+                  <a href="../posts/refactoring-1-configuration-properties.html">설정 관리와 @ConfigurationProperties</a>
+                  <span class="post-date">2026.02.13</span>
+                </li>
+                <li>
+                  <span class="post-num">02</span>
+                  <a href="../posts/refactoring-2-transaction.html">트랜잭션과 데이터 일관성</a>
+                  <span class="post-date">2026.02.13</span>
+                </li>
+                <li>
+                  <span class="post-num">03</span>
+                  <a href="../posts/refactoring-3-exception-handling.html">예외 처리 전략 설계</a>
+                  <span class="post-date">2026.02.13</span>
+                </li>
+                <li>
+                  <span class="post-num">04</span>
+                  <a href="../posts/refactoring-4-rest-api.html">REST API 설계 원칙</a>
+                  <span class="post-date">2026.02.13</span>
+                </li>
+                <li>
+                  <span class="post-num">05</span>
+                  <a href="../posts/refactoring-5-code-consistency.html">코드 일관성과 쿼리 최적화</a>
+                  <span class="post-date">2026.02.13</span>
+                </li>
+              </ul>
+            </div>
 
-        <ul class="post-list">
-          <li>
-            <a href="../posts/spring-async-3-event.html">[Spring] 3. Spring Event 기반 비동기 처리</a>
-            <span class="post-date">2026.02.20</span>
-          </li>
-        </ul>
+          </div>
+        </div>
 
-        <h2>JWT 시리즈</h2>
+        <!-- Java -->
+        <div class="cat-folder">
+          <div class="cat-folder-header" data-folder="java">
+            <span class="cat-folder-icon">&#128194;</span>
+            <span class="cat-folder-name">Java</span>
+            <span class="cat-folder-count">3</span>
+          </div>
+          <div class="cat-folder-body" id="folder-java">
 
-        <ul class="post-list">
-          <li>
-            <a href="../posts/jwt-1-token-auth.html">[JWT] 1. 토큰 기반 인증의 개념과 필요성</a>
-            <span class="post-date">2026.02.19</span>
-          </li>
-          <li>
-            <a href="../posts/jwt-2-structure.html">[JWT] 2. JWT의 구조와 원리</a>
-            <span class="post-date">2026.02.19</span>
-          </li>
-        </ul>
+            <div class="cat-series">
+              <div class="cat-series-header" data-series="exception">
+                <span class="cat-series-icon">&#128196;</span>
+                <span class="cat-series-name">예외처리</span>
+                <span class="cat-series-count">3</span>
+              </div>
+              <ul class="post-list cat-series-list" id="series-exception">
+                <li>
+                  <a href="../posts/java-catch-axis.html">catch 축 구분법</a>
+                  <span class="post-date">2026.02.20</span>
+                </li>
+                <li>
+                  <a href="../posts/java-sdk-exception-hierarchy.html">SDK 예외 계층 확인법</a>
+                  <span class="post-date">2026.02.20</span>
+                </li>
+                <li>
+                  <a href="../posts/java-custom-exception-cause.html">커스텀 예외에서 cause 전달 시점과 이유</a>
+                  <span class="post-date">2026.02.20</span>
+                </li>
+              </ul>
+            </div>
 
-        <h2>예외처리</h2>
+          </div>
+        </div>
 
-        <ul class="post-list">
-          <li>
-            <a href="../posts/java-catch-axis.html">[Java] catch 축 구분법</a>
-            <span class="post-date">2026.02.20</span>
-          </li>
-          <li>
-            <a href="../posts/spring-s3-exception-handling.html">[AWS] S3BinaryContentStorage 예외 처리</a>
-            <span class="post-date">2026.02.20</span>
-          </li>
-          <li>
-            <a href="../posts/java-sdk-exception-hierarchy.html">[Java] SDK 예외 계층 확인법</a>
-            <span class="post-date">2026.02.20</span>
-          </li>
-          <li>
-            <a href="../posts/java-custom-exception-cause.html">[Java] 커스텀 예외에서 cause 전달 시점과 이유</a>
-            <span class="post-date">2026.02.20</span>
-          </li>
-        </ul>
+        <!-- AWS -->
+        <div class="cat-folder">
+          <div class="cat-folder-header" data-folder="aws">
+            <span class="cat-folder-icon">&#128194;</span>
+            <span class="cat-folder-name">AWS</span>
+            <span class="cat-folder-count">1</span>
+          </div>
+          <div class="cat-folder-body" id="folder-aws">
+            <ul class="post-list">
+              <li>
+                <a href="../posts/spring-s3-exception-handling.html">S3BinaryContentStorage 예외 처리</a>
+                <span class="post-date">2026.02.20</span>
+              </li>
+            </ul>
+          </div>
+        </div>
 
-        <h2>스프링 리팩토링 패턴 시리즈</h2>
+        <!-- JWT -->
+        <div class="cat-folder">
+          <div class="cat-folder-header" data-folder="jwt">
+            <span class="cat-folder-icon">&#128194;</span>
+            <span class="cat-folder-name">JWT</span>
+            <span class="cat-folder-count">2</span>
+          </div>
+          <div class="cat-folder-body" id="folder-jwt">
+            <ul class="post-list">
+              <li>
+                <span class="post-num">01</span>
+                <a href="../posts/jwt-1-token-auth.html">토큰 기반 인증의 개념과 필요성</a>
+                <span class="post-date">2026.02.19</span>
+              </li>
+              <li>
+                <span class="post-num">02</span>
+                <a href="../posts/jwt-2-structure.html">JWT의 구조와 원리</a>
+                <span class="post-date">2026.02.19</span>
+              </li>
+            </ul>
+          </div>
+        </div>
 
-        <ul class="post-list">
-          <li>
-            <a href="../posts/refactoring-1-configuration-properties.html">[Spring] 1. 설정 관리와 @ConfigurationProperties</a>
-            <span class="post-date">2026.02.13</span>
-          </li>
-          <li>
-            <a href="../posts/refactoring-2-transaction.html">[Spring] 2. 트랜잭션과 데이터 일관성</a>
-            <span class="post-date">2026.02.13</span>
-          </li>
-          <li>
-            <a href="../posts/refactoring-3-exception-handling.html">[Spring] 3. 예외 처리 전략 설계</a>
-            <span class="post-date">2026.02.13</span>
-          </li>
-          <li>
-            <a href="../posts/refactoring-4-rest-api.html">[Spring] 4. REST API 설계 원칙</a>
-            <span class="post-date">2026.02.13</span>
-          </li>
-          <li>
-            <a href="../posts/refactoring-5-code-consistency.html">[Spring] 5. 코드 일관성과 쿼리 최적화</a>
-            <span class="post-date">2026.02.13</span>
-          </li>
-        </ul>
+        <!-- 도구 -->
+        <div class="cat-folder">
+          <div class="cat-folder-header" data-folder="tools">
+            <span class="cat-folder-icon">&#128194;</span>
+            <span class="cat-folder-name">도구</span>
+            <span class="cat-folder-count">2</span>
+          </div>
+          <div class="cat-folder-body" id="folder-tools">
+            <ul class="post-list">
+              <li>
+                <a href="../posts/firebase-overview.html">Firebase 개요</a>
+                <span class="post-date">2026.02.20</span>
+              </li>
+              <li>
+                <a href="../posts/intellij-mcp-guide.html">Gemini CLI와 MCP로 스마트하게 작업하는 방법</a>
+                <span class="post-date">2026.02.20</span>
+              </li>
+            </ul>
+          </div>
+        </div>
 
-        <h2>단독 글</h2>
+        <!-- 코딩테스트 -->
+        <div class="cat-folder">
+          <div class="cat-folder-header" data-folder="codingtest">
+            <span class="cat-folder-icon">&#128194;</span>
+            <span class="cat-folder-name">코딩테스트</span>
+            <span class="cat-folder-count">3</span>
+          </div>
+          <div class="cat-folder-body" id="folder-codingtest">
+            <div class="cat-series">
+              <div class="cat-series-header" data-series="time-complexity">
+                <span class="cat-series-icon">&#128196;</span>
+                <span class="cat-series-name">시간복잡도</span>
+                <span class="cat-series-count">3</span>
+              </div>
+              <ul class="post-list cat-series-list" id="series-time-complexity">
+                <li>
+                  <span class="post-num">01</span>
+                  <a href="../posts/time-complexity-1-basics.html">시간복잡도 기본 개념</a>
+                  <span class="post-date">2026.02.19</span>
+                </li>
+                <li>
+                  <span class="post-num">02</span>
+                  <a href="../posts/time-complexity-2-input-size.html">입력 크기로 허용 복잡도 판단하기</a>
+                  <span class="post-date">2026.02.19</span>
+                </li>
+                <li>
+                  <span class="post-num">03</span>
+                  <a href="../posts/time-complexity-3-case-study.html">실전 사례 분석</a>
+                  <span class="post-date">2026.02.19</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
 
-        <ul class="post-list">
-          <li>
-            <a href="../posts/firebase-overview.html">[Firebase] Firebase 개요</a>
-            <span class="post-date">2026.02.20</span>
-          </li>
-          <li>
-            <a href="../posts/intellij-mcp-guide.html">[IntelliJ] Gemini CLI와 MCP로 스마트하게 작업하는 방법</a>
-            <span class="post-date">2026.02.20</span>
-          </li>
-        </ul>
       </div>
     </div>
 

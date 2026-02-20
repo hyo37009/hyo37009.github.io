@@ -1,27 +1,18 @@
 /* ========================================
-   Firebase 설정 파일
-
-   Firebase 프로젝트를 만든 후 아래 값을 채워주세요.
-   https://console.firebase.google.com/
-
-   1. Firebase 프로젝트 생성
-   2. 웹 앱 추가
-   3. 아래 firebaseConfig에 본인 설정값 복사
-   4. Firestore Database 활성화
+   Firebase 설정
    ======================================== */
 
-// Firebase SDK (CDN)
-// 이 파일이 로드되기 전에 Firebase SDK가 필요합니다.
-// guestbook.html에서 순서대로 로드합니다.
-
 const firebaseConfig = {
-  apiKey: "",
-  authDomain: "",
-  projectId: "",
-  storageBucket: "",
-  messagingSenderId: "",
-  appId: ""
+  apiKey: "AIzaSyAACA_viJ0sT6gEvKUkFJCxJh40WMBrpK0",
+  authDomain: "blog-a4550.firebaseapp.com",
+  projectId: "blog-a4550",
+  storageBucket: "blog-a4550.firebasestorage.app",
+  messagingSenderId: "162752629868",
+  appId: "1:162752629868:web:21de66a22387b689ff1c49"
 };
 
-// Firebase 초기화 여부
 const isFirebaseConfigured = firebaseConfig.apiKey !== "";
+
+if (isFirebaseConfigured && typeof firebase !== 'undefined') {
+  firebase.initializeApp(firebaseConfig);
+}

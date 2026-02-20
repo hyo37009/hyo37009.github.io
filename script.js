@@ -258,7 +258,7 @@ document.querySelectorAll('.post-content pre code[class*="language-"]').forEach(
   sidebar.innerHTML =
     '<div class="neo-identity">' +
       '<div class="profile-img">사진 준비중</div>' +
-      '<div class="neo-hostname">nbh<span class="neo-hostname-at">@</span>naru</div>' +
+      '<div class="neo-hostname">nbh</div>' +
       '<div class="neo-bio">코드를 짜고 뜨개질을 합니다</div>' +
     '</div>' +
     '<div class="neo-fetch">' +
@@ -270,8 +270,13 @@ document.querySelectorAll('.post-content pre code[class*="language-"]').forEach(
     '</div>' +
     '<hr class="neo-divider">' +
     '<div class="neo-fetch">' +
-      '<div class="neo-cmd">ls ~/posts</div>' +
-      '<a href="' + pagesPrefix + 'nbuntu.html" class="neo-dir"><span><span class="neo-dir-tree">├─</span><span class="neo-dir-name">nbuntu/</span></span> <span class="neo-dir-count">5</span></a>' +
+      '<div class="neo-cmd">tree ~/nbuntu</div>' +
+      '<a href="' + pagesPrefix + 'nbuntu.html" class="neo-dir"><span><span class="neo-dir-tree">├─</span><span class="neo-dir-name">Spring/</span></span> <span class="neo-dir-count">19</span></a>' +
+      '<a href="' + pagesPrefix + 'nbuntu.html" class="neo-dir"><span><span class="neo-dir-tree">├─</span><span class="neo-dir-name">Java/</span></span> <span class="neo-dir-count">3</span></a>' +
+      '<a href="' + pagesPrefix + 'nbuntu.html" class="neo-dir"><span><span class="neo-dir-tree">├─</span><span class="neo-dir-name">AWS/</span></span> <span class="neo-dir-count">1</span></a>' +
+      '<a href="' + pagesPrefix + 'nbuntu.html" class="neo-dir"><span><span class="neo-dir-tree">├─</span><span class="neo-dir-name">JWT/</span></span> <span class="neo-dir-count">2</span></a>' +
+      '<a href="' + pagesPrefix + 'nbuntu.html" class="neo-dir"><span><span class="neo-dir-tree">├─</span><span class="neo-dir-name">도구/</span></span> <span class="neo-dir-count">2</span></a>' +
+      '<a href="' + pagesPrefix + 'nbuntu.html" class="neo-dir"><span><span class="neo-dir-tree">├─</span><span class="neo-dir-name">코딩테스트/</span></span> <span class="neo-dir-count">3</span></a>' +
       '<a href="' + pagesPrefix + 'knitting.html" class="neo-dir"><span><span class="neo-dir-tree">└─</span><span class="neo-dir-name">뜨개 공방/</span></span> <span class="neo-dir-count">1</span></a>' +
     '</div>' +
     '<hr class="neo-divider">' +
@@ -427,6 +432,35 @@ document.querySelectorAll('.post-content pre code[class*="language-"]').forEach(
     if (e.key === 'Escape' && sidebar.classList.contains('mobile-open')) {
       closeSidebar();
     }
+  });
+})();
+
+
+/* ========================================
+   카테고리 폴더 트리 (nbuntu)
+   ======================================== */
+
+(function() {
+  // 폴더 접기/펼치기
+  document.querySelectorAll('.cat-folder-header').forEach(function(header) {
+    header.addEventListener('click', function() {
+      var folderId = 'folder-' + header.dataset.folder;
+      var body = document.getElementById(folderId);
+      if (!body) return;
+      header.classList.toggle('collapsed');
+      body.classList.toggle('collapsed');
+    });
+  });
+
+  // 시리즈 접기/펼치기
+  document.querySelectorAll('.cat-series-header').forEach(function(header) {
+    header.addEventListener('click', function() {
+      var seriesId = 'series-' + header.dataset.series;
+      var list = document.getElementById(seriesId);
+      if (!list) return;
+      header.classList.toggle('collapsed');
+      list.classList.toggle('collapsed');
+    });
   });
 })();
 

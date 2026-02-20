@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Spring] 1. @Async와 비동기 처리의 기본 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Spring] 1. @Async와 비동기 처리의 기본</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.02.20
+        </div>
+
+        <div class="post-content">
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">스프링 비동기 시리즈 (1/6)</div>
+            <p>이 시리즈는 Spring의 비동기 처리를 처음부터 단계별로 다룬다.</p>
+            <p>1. <strong>@Async와 비동기 처리의 기본</strong> ← 현재 문서</p>
+            <p>2. <a href="spring-async-2-thread-pool.html">ThreadPoolTaskExecutor 설정과 스레드 풀 관리</a></p>
+            <p>3. <a href="spring-async-3-event.html">Spring Event 기반 비동기 처리</a></p>
+            <p>4. <a href="spring-async-4-exception.html">비동기 예외 처리와 재시도 전략</a></p>
+            <p>5. <a href="spring-async-5-decorator.html">TaskDecorator와 컨텍스트 전파</a></p>
+            <p>6. <a href="spring-async-6-webclient.html">WebClient를 활용한 비동기 HTTP 통신</a></p>
+          </div>
+
+          <p>Spring MVC는 요청 하나당 스레드 하나를 할당하는 동기 모델이다. API 하나가 5초 걸리는 작업을 처리한다면, 그 5초 동안 해당 스레드는 아무것도 못 하고 묶여 있다. 동시에 100명이 요청하면 100개의 스레드가 전부 점유되는 셈이다.</p>
+
+          <p>해결책은 <mark>오래 걸리는 작업을 별도 스레드에 위임</mark>하고, 요청을 받은 스레드는 즉시 다음 요청을 처리하게 만드는 것이다.</p>
+
+          <h2>동기와 비동기의 차이</h2>
+
+          <p>먼저 용어를 정리하자.</p>
+
+          <ul>
+            <li><strong>동기(Synchronous)</strong> — 작업을 요청하면 그 작업이 끝날 때까지 기다린다. 호출자가 직접 결과를 받아간다.</li>
+            <li><strong>비동기(Asynchronous)</strong> — 작업을 요청하고 기다리지 않는다. 작업이 끝나면 별도의 방법(콜백, Future 등)으로 결과를 전달받는다.</li>
+          </ul>
+
+          <p>카페에 비유하면 이렇다. 동기 방식은 주문하고 카운터 앞에서 커피가 나올 때까지 서 있는 것이다. 비동기 방식은 진동벨을 받고 자리에 앉아 다른 일을 하다가, 벨이 울리면 커피를 가지러 가는 것이다.</p>
+
+          <p>Spring MVC의 톰캣 스레드가 바로 그 카운터 직원이다. 동기 방식이면 직원 한 명이 커피를 직접 만드느라 다음 손님을 못 받는다. 비동기 방식이면 직원은 주문만 받고 커피 제조는 다른 사람에게 넘긴 뒤, 바로 다음 손님을 응대한다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    participant Client as 클라이언트
+    participant Tomcat as 톰캣 스레드
+    participant Worker as 비동기 스레드
+
+    Note over Client, Tomcat: 동기 방식
+    Client->>Tomcat: 요청
+    Tomcat->>Tomcat: 5초 걸리는 작업 직접 처리
+    Tomcat-->>Client: 응답 (5초 후)
+
+    Note over Client, Worker: 비동기 방식
+    Client->>Tomcat: 요청
+    Tomcat->>Worker: 작업 위임
+    Tomcat-->>Client: 응답 (즉시)
+    Worker->>Worker: 5초 걸리는 작업 처리
+</div>
+          <h2>@EnableAsync로 비동기 기능 켜기</h2>
+
+          <p>Spring에서 비동기 처리를 사용하려면 먼저 스위치를 켜야 한다.</p>
+
+<pre><code class="language-java">@SpringBootApplication
+@EnableAsync
+public class SpringAsyncPracticeApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(SpringAsyncPracticeApplication.class, args);
+    }
+}</code></pre>
+          <ul>
+            <li><code>@EnableAsync</code> — 이 어노테이션이 Spring의 비동기 처리를 활성화한다. 이것이 없으면 <code>@Async</code>를 아무리 붙여도 <mark>그냥 동기로 실행</mark>된다.</li>
+          </ul>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">@EnableAsync를 빠뜨리는 실수</div>
+            <p>프로젝트 초기 설정에서 <code>@EnableAsync</code>를 빠뜨리고 "@Async가 동작하지 않는다"며 한참 헤매는 경우가 정말 많다. <code>@Async</code>를 쓸 계획이라면 가장 먼저 확인해야 할 항목이다.</p>
+          </div>
+
+          <p>나중에 <code>AsyncConfig</code> 같은 설정 클래스를 만들면, <code>@EnableAsync</code>를 그쪽으로 옮기는 것이 깔끔하다. 메인 클래스에 어노테이션이 쌓이는 것을 방지할 수 있다. 이 부분은 <a href="spring-async-2-thread-pool.html">2편</a>에서 다룬다.</p>
+
+          <h2>@Async 메서드 만들기</h2>
+
+          <p>비동기 기능을 켰으면 이제 서비스 메서드에 <code>@Async</code>를 달아보자.</p>
+
+          <h4>동기 메서드</h4>
+
+<pre><code class="language-java">@Service
+@Slf4j
+public class CoffeeService {
+
+    public Coffee makeCoffee(String type) {
+        log.info("[{}] 커피 제조 시작: {}", Thread.currentThread().getName(), type);
+        sleep(5000);
+        Coffee coffee = new Coffee(type);
+        log.info("[{}] 커피 제조 완료: {}", Thread.currentThread().getName(), type);
+        return coffee;
+    }
+}</code></pre>
+          <ul>
+            <li><code>Thread.currentThread().getName()</code> — 현재 코드를 실행하는 스레드의 이름을 확인한다. 동기 메서드에서는 <code>nio-8080-exec-1</code> 같은 톰캣 스레드 이름이 찍힌다.</li>
+          </ul>
+
+          <h4>비동기 메서드</h4>
+
+<pre><code class="language-java">@Async
+public CompletableFuture&lt;Coffee&gt; makeCoffeeAsync(String type) {
+    log.info("[{}] 커피 제조 시작: {}", Thread.currentThread().getName(), type);
+    sleep(5000);
+    Coffee coffee = new Coffee(type);
+    log.info("[{}] 커피 제조 완료: {}", Thread.currentThread().getName(), type);
+    return CompletableFuture.completedFuture(coffee);
+}</code></pre>
+          <ul>
+            <li><code>@Async</code> — 이 메서드가 호출되면, 호출한 스레드가 직접 실행하지 않는다. Spring이 내부적으로 프록시 객체를 만들어 호출을 가로채고, 스레드 풀에서 꺼낸 별도 스레드가 대신 실행한다.</li>
+            <li><code>CompletableFuture.completedFuture()</code> — 비동기 작업의 결과를 감싸는 컨테이너다. 호출자는 이 <code>Future</code>를 통해 나중에 결과를 꺼내볼 수 있다.</li>
+          </ul>
+
+          <p>로그를 찍어보면, 동기 메서드에서는 <code>nio-8080-exec-1</code>이 찍히지만 비동기 메서드에서는 <code>task-1</code>처럼 <mark>완전히 다른 스레드 이름</mark>이 찍힌다. 이것이 비동기로 동작하고 있다는 증거다.</p>
+
+          <h2>@Async의 동작 원리 — 프록시</h2>
+
+          <p><code>@Async</code>가 어떻게 스레드를 바꿔서 실행하는 걸까? 핵심은 <mark>Spring AOP 프록시</mark>다.</p>
+
+          <p>Spring은 <code>@Async</code>가 붙은 메서드를 가진 빈을 등록할 때, 원본 객체를 직접 등록하지 않는다. 대신 원본 객체를 감싼 <strong>프록시 객체</strong>를 만들어 등록한다. 다른 빈에서 이 메서드를 호출하면, 실제로는 프록시 객체의 메서드가 호출된다. 프록시는 원본 메서드를 직접 실행하는 대신, 스레드 풀에서 스레드를 하나 꺼내 그 스레드에서 원본 메서드를 실행시킨다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    participant Controller as Controller
+    participant Proxy as 프록시 객체
+    participant Executor as TaskExecutor
+    participant Real as 실제 CoffeeService
+
+    Controller->>Proxy: makeCoffeeAsync("아메리카노")
+    Note over Proxy: @Async 감지<br/>직접 실행하지 않음
+    Proxy->>Executor: 작업 제출
+    Proxy-->>Controller: CompletableFuture 즉시 반환
+    Executor->>Real: 별도 스레드에서 실행
+    Real-->>Executor: Coffee 객체 반환
+    Note over Executor: Future에 결과 저장
+</div>
+          <p>Controller는 프록시를 통해 메서드를 호출했고, 프록시가 즉시 <code>CompletableFuture</code>를 반환했기 때문에 Controller는 블로킹 없이 바로 다음 코드로 넘어갈 수 있다.</p>
+
+          <h2>CompletableFuture 기초</h2>
+
+          <p><code>@Async</code> 메서드의 반환 타입은 크게 두 가지다.</p>
+
+          <h4>void 반환</h4>
+
+<pre><code class="language-java">@Async
+public void notifyCustomer(String type) {
+    sleep(2000);
+    log.info("[{}] 고객 알림 발송", Thread.currentThread().getName());
+}</code></pre>
+          <p>결과가 필요 없는 "실행만 하면 되는" 작업에 사용한다. 알림 발송이 대표적이다. 단, void 타입은 예외가 발생해도 <strong>호출한 쪽에서 알 수 없다</strong>는 치명적인 단점이 있다. 이 문제는 <a href="spring-async-4-exception.html">4편</a>에서 다룬다.</p>
+
+          <h4>CompletableFuture 반환</h4>
+
+<pre><code class="language-java">@Async
+public CompletableFuture&lt;Coffee&gt; makeCoffeeAsync(String type) {
+    Coffee coffee = new Coffee(type);
+    return CompletableFuture.completedFuture(coffee);
+}</code></pre>
+          <p>결과를 받아야 하는 작업에 사용한다. <code>CompletableFuture</code>는 비동기 작업의 결과를 담는 상자라고 생각하면 된다. 호출한 쪽에서는 이 상자를 열어 결과를 꺼내거나, 여러 상자를 조합할 수 있다.</p>
+
+          <p><code>CompletableFuture</code>의 유용한 조합 메서드 몇 가지를 알아두면 좋다.</p>
+
+<pre><code class="language-java">// 두 비동기 작업의 결과를 합치기
+CompletableFuture&lt;Coffee&gt; coffeeFuture = coffeeService.makeCoffeeAsync(type);
+CompletableFuture&lt;Boolean&gt; paymentFuture = paymentService.processPayment("user123", 4500);
+
+coffeeFuture.thenCombine(paymentFuture, (coffee, paymentResult) -&gt; {
+    return String.format("주문 완료: %s (결제: %s)", coffee.getType(), paymentResult ? "성공" : "실패");
+});</code></pre>
+          <ul>
+            <li><code>thenCombine()</code> — 두 개의 <code>CompletableFuture</code>가 모두 완료되면, 두 결과를 합쳐 새로운 결과를 만든다. 커피 제조와 결제 처리를 동시에 진행하고, 둘 다 끝났을 때 최종 응답을 구성하는 패턴이다.</li>
+          </ul>
+
+<pre><code class="language-java">// 여러 비동기 작업이 모두 끝날 때까지 대기
+List&lt;CompletableFuture&lt;Coffee&gt;&gt; futures = new ArrayList&lt;&gt;();
+for (int i = 0; i &lt; 100; i++) {
+    futures.add(coffeeService.makeCoffeeAsync("아메리카노"));
+}
+CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();</code></pre>
+          <ul>
+            <li><code>allOf()</code> — 전달받은 모든 <code>CompletableFuture</code>가 완료될 때까지 기다린다.</li>
+            <li><code>join()</code> — <code>allOf</code>가 반환하는 <code>CompletableFuture&lt;Void&gt;</code>의 완료를 블로킹 방식으로 대기한다.</li>
+          </ul>
+
+          <h2>톰캣 스레드 1개로 차이 확인하기</h2>
+
+          <p>글로만 읽으면 와닿지 않으니 실제로 확인해보자. <code>application.yml</code>에서 톰캣 스레드를 1개로 제한한다.</p>
+
+<pre><code class="language-yaml">server:
+  tomcat:
+    threads:
+      max: 1</code></pre>
+          <p>톰캣이 딱 하나의 스레드로만 요청을 받는 극단적인 상황이다. 컨트롤러에 동기와 비동기 엔드포인트를 나란히 만들어 비교한다.</p>
+
+<pre><code class="language-java">@GetMapping("/sync/{type}")
+public Coffee orderCoffeeSync(@PathVariable String type) {
+    return coffeeService.makeCoffee(type);
+}
+
+@GetMapping("/async/{type}")
+public CompletableFuture&lt;Coffee&gt; orderCoffeeAsync(@PathVariable String type) {
+    return coffeeService.makeCoffeeAsync(type);
+}</code></pre>
+          <h4>동기 방식의 결과</h4>
+
+          <p><code>/sync/아메리카노</code>를 동시에 2번 호출하면, 첫 번째 요청이 5초간 스레드를 잡고 있는 동안 두 번째 요청은 아무것도 시작하지 못한 채 대기한다. 총 10초가 걸린다.</p>
+
+          <h4>비동기 방식의 결과</h4>
+
+          <p><code>/async/아메리카노</code>를 동시에 2번 호출하면, 톰캣 스레드는 각 요청을 <code>@Async</code> 메서드에 위임하고 즉시 해방된다. 두 잔의 커피가 별도 스레드에서 동시에 만들어지므로 약 5초면 끝난다.</p>
+
+          <p>스레드가 1개뿐인데도 여러 요청을 동시에 처리할 수 있다는 것이 <code>@Async</code>의 핵심 가치다.</p>
+
+          <h2>자주 하는 실수</h2>
+
+          <h4>같은 클래스 내부에서 @Async 호출 (자가 호출 문제)</h4>
+
+<pre><code class="language-java">@Service
+public class OrderService {
+
+    private final NotificationService notificationService;
+
+    public void processOrder(String type) {
+        log.info("[{}] 주문 처리 시작", Thread.currentThread().getName());
+        notificationService.notifyCustomer(type);
+        log.info("[{}] 주문 처리 완료", Thread.currentThread().getName());
+    }
+}</code></pre>
+          <p>위 코드에서 <code>notificationService.notifyCustomer()</code>는 다른 빈의 메서드이므로 비동기가 정상 동작한다. 하지만 만약 <code>notifyCustomer()</code>가 같은 클래스 안에 있었다면?</p>
+
+          <p><code>@Async</code>는 프록시 기반이다. 같은 클래스 내에서 <code>this.메서드()</code>로 호출하면 프록시를 거치지 않고 원본 객체의 메서드가 직접 실행된다. <mark>비동기가 적용되지 않는다.</mark> 비동기가 필요한 메서드는 반드시 다른 빈에서 호출해야 한다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    participant Controller as Controller
+    participant Proxy as OrderService 프록시
+    participant Real as OrderService 원본
+
+    Note over Controller, Real: 다른 빈에서 호출 (정상)
+    Controller->>Proxy: notifyCustomer()
+    Proxy->>Real: 비동기 스레드에서 실행
+
+    Note over Controller, Real: 같은 클래스 내부 호출 (문제!)
+    Real->>Real: this.notifyCustomer()
+    Note over Real: 프록시를 거치지 않음<br/>동기로 실행됨
+</div>
+          <h4>void 반환 메서드의 예외 소실</h4>
+
+          <p><code>@Async</code> 메서드가 <code>void</code>를 반환하면, 그 메서드 안에서 예외가 터져도 호출한 쪽에서 전혀 알 수 없다. 로그도 없이 조용히 삼켜진다. 이 문제의 해결책은 <a href="spring-async-4-exception.html">4편</a>에서 자세히 다룬다.</p>
+
+          <h2>정리</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">핵심 요약</div>
+            <p>- <code>@EnableAsync</code>로 비동기 기능을 활성화하고, <code>@Async</code>로 메서드를 비동기 처리한다.</p>
+            <p>- <code>@Async</code> 메서드는 프록시를 통해 별도 스레드에서 실행된다.</p>
+            <p>- 반환 타입은 <code>void</code> 또는 <code>CompletableFuture</code>를 사용한다. <code>void</code>는 예외를 감지할 수 없으니 주의해야 한다.</p>
+            <p>- 같은 클래스 내부에서 <code>@Async</code> 메서드를 호출하면 비동기가 동작하지 않는다 (자가 호출 문제).</p>
+          </div>
+
+          <p>지금까지 <code>@Async</code>의 기본 동작을 살펴봤다. 하지만 <code>@Async</code>만 달면 Spring이 기본으로 <code>SimpleAsyncTaskExecutor</code>라는 녀석을 사용하는데, 이 녀석은 <mark>스레드 풀이 아니다.</mark> 요청이 올 때마다 새 스레드를 만들고 재사용하지 않는다. 실무에서 이대로 쓰면 서버가 죽을 수 있다. 다음 편에서 제대로 된 스레드 풀을 설정하는 방법을 다룬다.</p>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Spring</span>
+          <span>#Async</span>
+          <span>#비동기</span>
+          <span>#CompletableFuture</span>
+          <span>#프록시</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

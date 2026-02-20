@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Spring] 2. ThreadPoolTaskExecutor 설정과 스레드 풀 관리 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Spring] 2. ThreadPoolTaskExecutor 설정과 스레드 풀 관리</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.02.20
+        </div>
+
+        <div class="post-content">
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">스프링 비동기 시리즈 (2/6)</div>
+            <p>이 시리즈는 Spring의 비동기 처리를 처음부터 단계별로 다룬다.</p>
+            <p>1. <a href="spring-async-1-basics.html">@Async와 비동기 처리의 기본</a></p>
+            <p>2. <strong>ThreadPoolTaskExecutor 설정과 스레드 풀 관리</strong> ← 현재 문서</p>
+            <p>3. <a href="spring-async-3-event.html">Spring Event 기반 비동기 처리</a></p>
+            <p>4. <a href="spring-async-4-exception.html">비동기 예외 처리와 재시도 전략</a></p>
+            <p>5. <a href="spring-async-5-decorator.html">TaskDecorator와 컨텍스트 전파</a></p>
+            <p>6. <a href="spring-async-6-webclient.html">WebClient를 활용한 비동기 HTTP 통신</a></p>
+          </div>
+
+          <p><a href="spring-async-1-basics.html">1편</a>에서 <code>@Async</code>만 달면 <code>SimpleAsyncTaskExecutor</code>가 사용된다고 했다. 이 녀석은 요청이 올 때마다 새 스레드를 생성하고, 재사용하지 않는다. 수천 개의 요청이 몰리면 수천 개의 스레드가 생기고, 결국 <code>OutOfMemoryError</code>로 서버가 죽는다.</p>
+
+          <p>실무에서는 반드시 <mark>스레드 풀</mark>을 사용해야 한다. 스레드 풀은 미리 만들어둔 스레드를 재사용하는 방식이다. Spring이 제공하는 <code>ThreadPoolTaskExecutor</code>를 설정하는 방법을 알아보자.</p>
+
+          <h2>SimpleAsyncTaskExecutor가 위험한 이유</h2>
+
+          <p><code>SimpleAsyncTaskExecutor</code>는 이름에 "Executor"가 붙어있어서 괜찮아 보이지만, 실제로는 스레드 풀이 아니다.</p>
+
+          <ul>
+            <li>호출할 때마다 <strong>새 스레드를 생성</strong>한다.</li>
+            <li>스레드를 <strong>재사용하지 않는다.</strong></li>
+            <li>최대 스레드 수 제한이 <strong>없다.</strong></li>
+          </ul>
+
+          <p>100개 요청이 동시에 오면 스레드 100개가 생기고, 1000개면 1000개가 생긴다. JVM에서 스레드 하나당 약 1MB의 스택 메모리를 사용하므로, 스레드 1000개면 1GB의 메모리가 스레드 스택에만 소비된다.</p>
+
+          <div class="callout callout-info">
+            <div class="callout-title">운영 환경에서 SimpleAsyncTaskExecutor 사용 금지</div>
+            <p>트래픽이 적은 개발 환경에서는 문제가 안 보일 수 있지만, 운영 환경에서 갑자기 트래픽이 몰리면 서버가 <code>OutOfMemoryError</code>로 죽는다. <code>@Async</code>를 쓸 거라면 반드시 <code>ThreadPoolTaskExecutor</code>로 교체해야 한다.</p>
+          </div>
+
+          <h2>AsyncConfig 설정 클래스 만들기</h2>
+
+          <p>스레드 풀 설정은 별도의 설정 클래스로 분리하는 것이 좋다. <code>@EnableAsync</code>도 메인 클래스에서 이쪽으로 옮긴다.</p>
+
+<pre><code class="language-java">@Configuration
+@EnableAsync
+@Slf4j
+public class AsyncConfig {
+
+    @Bean(name = "coffeeExecutor")
+    public ThreadPoolTaskExecutor coffeeExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(10);
+        executor.setMaxPoolSize(20);
+        executor.setQueueCapacity(100);
+        executor.setKeepAliveSeconds(60);
+        executor.setThreadNamePrefix("coffee-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(60);
+        executor.initialize();
+        return executor;
+    }
+}</code></pre>
+          <p>설정 항목이 많은데, 각각의 역할을 이해하려면 <strong>요청이 들어올 때 스레드 풀이 어떤 순서로 반응하는지</strong>를 알아야 한다.</p>
+
+          <h2>스레드 풀의 동작 순서</h2>
+
+          <p>이 순서가 가장 중요하다. 면접에서도 자주 나온다.</p>
+
+<div class="mermaid">
+graph TD
+    A[새 작업 도착] --> B{core 스레드에<br/>여유가 있는가?}
+    B -->|Yes| C[core 스레드가 처리]
+    B -->|No| D{큐에<br/>자리가 있는가?}
+    D -->|Yes| E[큐에서 대기]
+    D -->|No| F{max 스레드에<br/>여유가 있는가?}
+    F -->|Yes| G[추가 스레드 생성 후 처리]
+    F -->|No| H[거부 정책 실행]
+
+    style C fill:#4CAF50,color:#fff,stroke-width:2px
+    style E fill:#FF9800,color:#fff,stroke-width:2px
+    style G fill:#2196F3,color:#fff,stroke-width:2px
+    style H fill:#f44336,color:#fff,stroke-width:2px
+</div>
+          <h4>corePoolSize</h4>
+
+          <p>항상 살아있는 기본 스레드 수다. 요청이 없어도 이 수만큼의 스레드가 대기하고 있다. 위 설정에서는 10개의 스레드가 항상 준비되어 있다.</p>
+
+          <h4>queueCapacity</h4>
+
+          <p>core 스레드가 모두 바쁘면 작업이 이 큐에 쌓인다. 중요한 점은 <mark>큐가 가득 차야 비로소 추가 스레드가 생긴다</mark>는 것이다. <code>maxPoolSize</code>가 먼저 동작하는 것이 아니다.</p>
+
+          <p>예를 들어 <code>corePoolSize=10</code>, <code>queueCapacity=100</code>이면, core 10개가 전부 바쁠 때 11번째 작업은 max 스레드가 아니라 큐에 들어간다. 큐에 100개가 가득 차야 비로소 11번째 스레드가 만들어진다. 이 순서를 헷갈리면 성능 튜닝 시 엉뚱한 값을 조정하게 된다.</p>
+
+          <h4>maxPoolSize</h4>
+
+          <p>큐마저 가득 찼을 때 추가로 만들 수 있는 최대 스레드 수다. core 10개와 queue 100개가 전부 소진되어야 11번째 스레드가 생긴다.</p>
+
+          <h4>keepAliveSeconds</h4>
+
+          <p>core 수를 초과해서 만들어진 스레드가 유휴 상태일 때, 이 시간(초)이 지나면 제거된다. 위 설정에서는 60초 동안 일이 없으면 추가 스레드가 사라진다. core 스레드는 이 설정과 관계없이 계속 살아 있다.</p>
+
+          <h4>threadNamePrefix</h4>
+
+          <p>스레드 이름의 접두사다. 로그에서 어떤 스레드 풀의 스레드가 작업을 수행했는지 구분하기 위해 반드시 설정하자. <code>coffee-1</code>, <code>coffee-2</code> 같은 형태로 찍힌다.</p>
+
+          <h4>RejectedExecutionHandler</h4>
+
+          <p>max 스레드도 전부 사용 중이고 큐도 꽉 찼을 때의 마지막 보루다. Spring은 여러 가지 정책을 제공한다.</p>
+
+          <table>
+          <thead>
+          <tr><th>정책</th><th>동작</th><th>적합한 상황</th></tr>
+          </thead>
+          <tbody>
+          <tr><td><code>CallerRunsPolicy</code></td><td>호출한 스레드에서 직접 실행</td><td>데이터 유실 불가 (결제 등)</td></tr>
+          <tr><td><code>AbortPolicy</code></td><td><code>RejectedExecutionException</code> 발생</td><td>즉시 실패를 알려야 할 때</td></tr>
+          <tr><td><code>DiscardPolicy</code></td><td>작업을 조용히 버림</td><td>유실돼도 괜찮은 작업</td></tr>
+          <tr><td><code>DiscardOldestPolicy</code></td><td>큐에서 가장 오래된 작업을 버리고 새 작업 투입</td><td>최신 데이터가 더 중요할 때</td></tr>
+          </tbody>
+          </table>
+
+          <h4>종료 관련 설정</h4>
+
+<pre><code class="language-java">executor.setWaitForTasksToCompleteOnShutdown(true);
+executor.setAwaitTerminationSeconds(60);</code></pre>
+          <ul>
+            <li><code>setWaitForTasksToCompleteOnShutdown(true)</code> — 서버가 종료될 때 현재 실행 중인 작업이 끝날 때까지 기다린다. 이 설정이 없으면 서버가 내려가면서 진행 중인 비동기 작업이 중간에 잘린다.</li>
+            <li><code>setAwaitTerminationSeconds(60)</code> — 최대 60초까지만 기다린다. 그 이후에는 강제 종료한다.</li>
+          </ul>
+
+          <h2>용도별 Executor 분리</h2>
+
+          <p>하나의 스레드 풀로 모든 비동기 작업을 처리하면 위험하다. 알림 발송이 폭증해서 스레드를 전부 점유하면 <mark>결제 처리까지 멈출 수 있다.</mark> 이를 방지하려면 업무 영역별로 Executor를 나눠야 한다.</p>
+
+<pre><code class="language-java">@Bean(name = "notificationExecutor")
+public ThreadPoolTaskExecutor notificationExecutor() {
+    ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+    executor.setCorePoolSize(50);
+    executor.setMaxPoolSize(100);
+    executor.setQueueCapacity(500);
+    executor.setThreadNamePrefix("notification-");
+    executor.setRejectedExecutionHandler(new ThreadPoolExecutor.DiscardOldestPolicy());
+    executor.initialize();
+    return executor;
+}
+
+@Bean(name = "paymentExecutor")
+public ThreadPoolTaskExecutor paymentExecutor() {
+    ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+    executor.setCorePoolSize(5);
+    executor.setMaxPoolSize(10);
+    executor.setQueueCapacity(50);
+    executor.setThreadNamePrefix("payment-");
+    executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+    executor.setWaitForTasksToCompleteOnShutdown(true);
+    executor.setAwaitTerminationSeconds(120);
+    executor.initialize();
+    return executor;
+}</code></pre>
+          <p>설정값이 다른 이유는 각 업무의 성격이 다르기 때문이다.</p>
+
+          <ul>
+            <li><strong>알림</strong> — 대량으로 발생하지만 하나가 실패해도 치명적이지 않다. core를 50으로 넉넉하게 잡고, 거부 정책은 <code>DiscardOldestPolicy</code>로 오래된 것부터 버린다.</li>
+            <li><strong>결제</strong> — 건수는 적지만 단 하나도 유실되면 안 된다. core를 5로 보수적으로 잡고, <code>CallerRunsPolicy</code>로 호출 스레드에서라도 반드시 실행한다. 종료 시 대기 시간도 120초로 길게 잡았다.</li>
+          </ul>
+
+<div class="mermaid">
+graph TD
+    subgraph coffeeExecutor
+        C1[core: 10 / max: 20]
+        C2[queue: 100]
+        C3[CallerRunsPolicy]
+    end
+
+    subgraph notificationExecutor
+        N1[core: 50 / max: 100]
+        N2[queue: 500]
+        N3[DiscardOldestPolicy]
+    end
+
+    subgraph paymentExecutor
+        P1[core: 5 / max: 10]
+        P2[queue: 50]
+        P3[CallerRunsPolicy]
+    end
+
+    style coffeeExecutor fill:#E3F2FD,stroke:#1565C0,stroke-width:2px
+    style notificationExecutor fill:#FFF3E0,stroke:#E65100,stroke-width:2px
+    style paymentExecutor fill:#E8F5E9,stroke:#2E7D32,stroke-width:2px
+</div>
+          <h2>@Async에 Executor 지정하기</h2>
+
+          <p>서비스에서는 <code>@Async</code>의 value 속성에 사용할 Executor 빈 이름을 명시한다.</p>
+
+<pre><code class="language-java">@Async("coffeeExecutor")
+public CompletableFuture&lt;Coffee&gt; makeCoffeeAsync(String type) { ... }
+
+@Async("notificationExecutor")
+public void notifyCustomer(String type) { ... }
+
+@Async("paymentExecutor")
+public CompletableFuture&lt;Boolean&gt; processPayment(String userId, int amount) { ... }</code></pre>
+          <div class="callout callout-warning">
+            <div class="callout-title">Executor 이름 미지정 시 문제</div>
+            <p><code>@Async</code>에 이름을 지정하지 않으면 Spring이 기본 Executor를 찾는다. Executor가 하나만 등록되어 있으면 그것을 사용하지만, 여러 개가 등록된 상태에서는 어떤 풀에서 실행될지 보장할 수 없다. 반드시 이름을 명시하자.</p>
+          </div>
+
+          <h2>여러 비동기 작업을 조합하는 엔드포인트</h2>
+
+          <p>커피 제조, 결제, 알림을 동시에 실행하는 전체 주문 프로세스를 보자.</p>
+
+<pre><code class="language-java">@GetMapping("/full/{type}")
+public CompletableFuture&lt;String&gt; fullOrder(@PathVariable String type) {
+    CompletableFuture&lt;Coffee&gt; coffeeFuture = coffeeService.makeCoffeeAsync(type);
+    CompletableFuture&lt;Boolean&gt; paymentFuture = paymentService.processPayment("user123", 4500);
+    notificationService.notifyCustomer(type);
+
+    return coffeeFuture.thenCombine(paymentFuture, (coffee, paymentResult) -&gt; {
+        return String.format("주문 완료: %s (결제: %s)", coffee.getType(), paymentResult ? "성공" : "실패");
+    });
+}</code></pre>
+          <ul>
+            <li>커피 제조는 <code>coffeeExecutor</code>에서, 결제는 <code>paymentExecutor</code>에서, 알림은 <code>notificationExecutor</code>에서 각각 실행된다.</li>
+            <li><code>thenCombine()</code>으로 커피와 결제가 모두 완료될 때까지 기다린 후 응답을 구성한다.</li>
+            <li>알림은 <code>void</code> 반환이므로 결과를 기다리지 않는다.</li>
+          </ul>
+
+          <p>세 작업이 서로 다른 스레드 풀에서 병렬로 실행되므로, 가장 오래 걸리는 작업의 시간이 전체 소요 시간이 된다. 커피 5초 + 결제 3초 + 알림 2초를 순서대로 하면 10초이지만, 병렬로 하면 약 5초면 끝난다.</p>
+
+          <h2>자주 하는 실수</h2>
+
+          <h4>queueCapacity를 0으로 설정</h4>
+
+          <p>큐가 없으면 core 스레드가 모두 바쁠 때 바로 max 스레드가 생성된다. 빠르게 반응하는 장점이 있지만, 트래픽 피크 때 스레드가 급격히 늘어나 메모리 압박이 생길 수 있다. 의도한 것이 아니라면 적절한 큐 크기를 설정하자.</p>
+
+          <h4>Executor 빈 이름 오타</h4>
+
+          <p><code>@Async("cofeeExecutor")</code> 같은 오타가 있으면 Spring이 해당 이름의 빈을 찾지 못해 기본 Executor로 폴백하거나 예외가 발생한다. 빈 이름은 상수로 관리하는 것이 안전하다.</p>
+
+          <h4>종료 설정 누락</h4>
+
+          <p><code>setWaitForTasksToCompleteOnShutdown(true)</code> 없이 서버를 내리면, 진행 중인 비동기 작업(결제 등)이 중간에 끊길 수 있다. 데이터 정합성이 중요한 Executor에는 반드시 설정하자.</p>
+
+          <h2>정리</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">핵심 요약</div>
+            <p>- <code>SimpleAsyncTaskExecutor</code>는 스레드를 재사용하지 않으므로 운영 환경에서는 금지다.</p>
+            <p>- <code>ThreadPoolTaskExecutor</code>로 교체하고, 작업이 들어올 때 core → queue → max → 거부 정책 순서로 처리된다.</p>
+            <p>- 업무 영역별로 Executor를 분리해서 한 영역의 장애가 다른 영역으로 전파되지 않도록 한다.</p>
+            <p>- <code>@Async</code>에 Executor 빈 이름을 반드시 명시한다.</p>
+          </div>
+
+          <p>다음 편에서는 <code>@Async</code>를 직접 호출하는 대신, Spring Event를 통해 비동기 작업을 발행하고 구독하는 패턴을 다룬다.</p>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Spring</span>
+          <span>#Async</span>
+          <span>#ThreadPool</span>
+          <span>#ThreadPoolTaskExecutor</span>
+          <span>#스레드풀</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>
