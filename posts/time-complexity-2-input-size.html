@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[코딩테스트] 2. 입력 크기로 허용 복잡도 판단하기 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[코딩테스트] 2. 입력 크기로 허용 복잡도 판단하기</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.02.19
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">시간복잡도 가이드 시리즈 (2/3)</div>
+            <p>이전: <a href="time-complexity-1-basics.html">시간복잡도 기본 개념</a></p>
+            <p>다음: <a href="time-complexity-3-case-study.html">실전 사례 분석</a></p>
+          </div>
+
+          <h2>문제를 열자마자 봐야 할 세 가지</h2>
+
+          <p>코딩테스트 문제를 열면, 코드를 작성하기 전에 반드시 세 가지를 확인해야 한다.</p>
+
+          <ol>
+            <li><strong>시간 제한</strong> (보통 1~2초)</li>
+            <li><strong>메모리 제한</strong> (보통 128~512MB)</li>
+            <li><strong>입력 범위</strong> (N, M 등의 최대값)</li>
+          </ol>
+
+          <p>이 세 가지 조합이 <mark>어떤 알고리즘을 써야 하는지</mark>를 알려준다. 풀이를 떠올리기 전에, 허용되는 시간복잡도의 상한선부터 정하는 것이 핵심이다.</p>
+
+          <h2>Java 기준 연산 횟수 감각</h2>
+
+          <p>경험적으로 Java는 <strong>1초에 약 1~2억 번</strong>의 단순 연산(덧셈, 비교, 대입 등)을 수행할 수 있다. 이 숫자를 기준으로 삼으면 된다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">실전 기준</div>
+            <p><mark>1초 제한이면 최대 약 1억 번(10^8) 연산</mark>까지 안전하다고 보면 된다. 2억까지 되는 경우도 있지만, 여유를 두는 게 좋다.</p>
+          </div>
+
+          <p>시간 제한이 2초라면? 단순히 2억 번까지 허용된다고 보면 된다.</p>
+
+          <h2>입력 크기별 허용 복잡도 표</h2>
+
+          <p>이 표가 코딩테스트의 <mark>치트시트</mark>다. 문제를 읽고 N의 범위를 확인하면, 아래 표에서 <strong>어떤 복잡도까지 사용할 수 있는지</strong> 바로 판단할 수 있다.</p>
+
+          <table>
+            <thead>
+              <tr><th>N의 범위</th><th>허용 복잡도</th><th>대표 알고리즘</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>N ≤ 10</td><td>O(N!)</td><td>브루트포스, 순열 탐색</td></tr>
+              <tr><td>N ≤ 20~25</td><td>O(2^N)</td><td>부분집합, 비트마스킹</td></tr>
+              <tr><td>N ≤ 500</td><td>O(N³)</td><td>플로이드-워셜, 3중 루프</td></tr>
+              <tr><td>N ≤ 5,000</td><td>O(N²)</td><td>이중 루프, 삽입 정렬</td></tr>
+              <tr><td>N ≤ 100,000</td><td>O(N log N)</td><td>정렬, 우선순위 큐</td></tr>
+              <tr><td>N ≤ 1,000,000</td><td>O(N)</td><td>슬라이딩 윈도우, 투 포인터, 누적합</td></tr>
+              <tr><td>N ≤ 100,000,000</td><td>O(log N) ~ O(√N)</td><td>이분 탐색, 수학</td></tr>
+            </tbody>
+          </table>
+
+          <h4>표 읽는 법</h4>
+
+          <p>N ≤ 250,000인 문제가 있다고 하자. 표에서 100,000과 1,000,000 사이에 위치하므로 O(N log N)이나 O(N) 알고리즘이 필요하다.</p>
+
+          <p>만약 여기서 O(N²) 풀이를 쓰면? 250,000² = 625억 번 연산이므로, 1초는커녕 수백 초가 걸린다. <mark>시간 초과 확정</mark>이다.</p>
+
+          <h2>연산 횟수 계산 실전 연습</h2>
+
+          <p>구체적인 문제로 연습해보자.</p>
+
+          <h4>예시 1: BOJ 21921 블로그</h4>
+
+<pre><code>시간 제한: 1초
+N ≤ 250,000
+X ≤ N</code></pre>
+
+          <p>이중 for문(O(N × X))을 쓰면 최악의 경우 얼마나 걸릴까?</p>
+
+<pre><code>N = 250,000, X = 125,000 (N/2)일 때
+연산 횟수 ≈ 250,000 × 125,000 = 31,250,000,000 (약 312억)</code></pre>
+
+          <p>1초에 1억 번 처리 가능하므로, <mark>약 312초</mark>가 걸린다. 당연히 시간 초과다.</p>
+
+          <p>O(N) 풀이(슬라이딩 윈도우)를 쓰면?</p>
+
+<pre><code>연산 횟수 ≈ 250,000</code></pre>
+
+          <p>1억의 0.25%도 안 된다. 여유롭게 통과한다.</p>
+
+          <hr>
+
+          <h4>예시 2: N ≤ 5,000인 문제</h4>
+
+<pre><code>시간 제한: 2초
+N ≤ 5,000</code></pre>
+
+          <p>O(N²) = 25,000,000 (2,500만). 2초 제한이면 2억까지 가능하니 <mark>충분히 통과</mark>한다.</p>
+
+          <p>O(N³) = 125,000,000,000 (1,250억). 절대 불가능하다.</p>
+
+          <h2>메모리 제한 판단법</h2>
+
+          <p>시간만큼 자주 걸리진 않지만, 메모리 초과도 흔한 실패 원인이다.</p>
+
+          <h4>Java의 메모리 사용량 기준</h4>
+
+          <table>
+            <thead>
+              <tr><th>자료형</th><th>크기</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>int</code></td><td>4 bytes</td></tr>
+              <tr><td><code>long</code></td><td>8 bytes</td></tr>
+              <tr><td><code>int[]</code> (길이 N)</td><td>약 4N bytes</td></tr>
+              <tr><td><code>int[][]</code> (N × M)</td><td>약 4NM bytes</td></tr>
+            </tbody>
+          </table>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">빠른 계산법</div>
+            <p><mark><code>int</code> 배열 1,000만 개 ≈ 40MB</mark>라고 기억해두면 편하다.</p>
+          </div>
+
+          <h4>메모리 초과가 나는 흔한 패턴</h4>
+
+          <p>반복문 안에서 <strong>매번 새로운 배열을 생성</strong>하는 경우다.</p>
+
+<pre><code class="language-java">for (int i = 0; i &lt; n; i++) {
+    int[] copy = Arrays.copyOfRange(arr, i, i + k);  // 매번 새 배열 생성
+    int sum = IntStream.of(copy).sum();
+}</code></pre>
+
+          <p>이 코드는 루프가 돌 때마다 크기 K짜리 배열을 새로 만든다. GC(가비지 컬렉션)가 제때 수거하지 못하면, N × K × 4 bytes만큼의 메모리가 누적될 수 있다. N과 K가 크면 메모리 초과로 이어진다.</p>
+
+          <p>해결책은 <strong>새 배열을 만들지 않는 것</strong>이다. 슬라이딩 윈도우처럼 기존 값을 빼고 새 값을 더하는 방식으로 바꾸면 추가 메모리 없이 O(1) 공간으로 처리할 수 있다.</p>
+
+          <h2>복잡도별 대표 알고리즘 정리</h2>
+
+          <p>어떤 복잡도가 필요한지 알았다면, 그 복잡도에 맞는 알고리즘을 떠올려야 한다.</p>
+
+          <table>
+            <thead>
+              <tr><th>복잡도</th><th>대표 알고리즘</th><th>언제 의심할까</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>O(N)</td><td>슬라이딩 윈도우, 투 포인터, 누적합</td><td>"연속 구간의 합/최대" 문제</td></tr>
+              <tr><td>O(N)</td><td>스택, 큐</td><td>"괄호 짝 맞추기", "다음 큰 수"</td></tr>
+              <tr><td>O(N log N)</td><td>정렬 후 탐색, 이분 탐색</td><td>"정렬하면 풀리는" 문제</td></tr>
+              <tr><td>O(N log N)</td><td>우선순위 큐, 트리</td><td>"최소/최대를 반복적으로 꺼내는" 문제</td></tr>
+              <tr><td>O(N²)</td><td>DP(2차원), 이중 루프</td><td>N ≤ 5,000이고 모든 쌍 비교</td></tr>
+              <tr><td>O(V + E)</td><td>BFS, DFS</td><td>그래프 탐색</td></tr>
+            </tbody>
+          </table>
+
+          <h2>판단 프로세스 요약</h2>
+
+          <p>문제를 읽은 직후, 코드를 쓰기 전에 아래 순서를 따른다.</p>
+
+          <div class="mermaid">
+flowchart TD
+    A[문제 읽기] --> B[N의 최대값 확인]
+    B --> C[허용 복잡도 표에서 상한 확인]
+    C --> D{떠오른 풀이의 복잡도가\n상한 이내인가?}
+    D -->|Yes| E[구현 시작]
+    D -->|No| F[더 효율적인 알고리즘 탐색]
+    F --> C
+          </div>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">흔한 실수</div>
+            <p>"일단 구현하고 제출해보자"는 접근은 시간 낭비로 이어진다. <mark>구현 전에 복잡도를 계산하는 습관</mark>이 코딩테스트에서 가장 중요한 스킬이다.</p>
+          </div>
+
+          <p>다음 문서에서는 실제로 시간 초과와 메모리 초과를 경험했던 문제를 가지고, 이 판단 프로세스를 어떻게 적용하는지 분석한다.</p>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#코딩테스트</span>
+          <span>#시간복잡도</span>
+          <span>#입력범위</span>
+          <span>#허용복잡도</span>
+          <span>#메모리제한</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+          <a href="time-complexity-3-case-study.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js — 문법 하이라이팅 -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid — 다이어그램 -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

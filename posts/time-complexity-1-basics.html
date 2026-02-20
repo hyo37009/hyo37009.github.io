@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[코딩테스트] 1. 시간복잡도 기본 개념 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[코딩테스트] 1. 시간복잡도 기본 개념</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.02.19
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">시간복잡도 가이드 시리즈 (1/3)</div>
+            <p>이 시리즈는 코딩테스트에서 시간복잡도를 판단하는 실전 감각을 기르기 위한 가이드입니다.</p>
+            <p>1. <strong>시간복잡도 기본 개념</strong> ← 현재 문서</p>
+            <p>2. <a href="time-complexity-2-input-size.html">입력 크기로 허용 복잡도 판단하기</a></p>
+            <p>3. <a href="time-complexity-3-case-study.html">실전 사례 분석</a></p>
+          </div>
+
+          <h2>왜 시간복잡도를 알아야 할까</h2>
+
+          <p>코딩테스트에서 "맞았습니다"와 "시간 초과" 사이의 차이는 대부분 <strong>알고리즘의 시간복잡도</strong>에서 갈린다. 같은 문제를 푸는 코드라도, 입력이 커지면 느린 알고리즘은 제한 시간 안에 끝나지 못한다.</p>
+
+          <p>시간복잡도를 이해하면 코드를 작성하기 <em>전에</em> "이 접근법이 통과할 수 있는가?"를 판단할 수 있다. 즉, <mark>풀이를 구현하기 전에 미리 걸러내는 필터</mark> 역할을 한다.</p>
+
+          <h2>Big-O 표기법</h2>
+
+          <p>Big-O는 입력 크기 <code>N</code>이 충분히 커졌을 때 알고리즘의 <strong>최악의 경우 연산 횟수가 어떤 비율로 증가하는지</strong>를 나타낸다.</p>
+
+          <p>핵심은 <mark>증가율</mark>이다. 상수나 낮은 차수의 항은 무시한다.</p>
+
+<pre><code>3N² + 5N + 100  →  O(N²)</code></pre>
+
+          <ul>
+            <li><code>3N²</code> → 계수 <code>3</code>은 무시, <code>N²</code>만 남긴다</li>
+            <li><code>5N</code> → <code>N²</code>에 비해 무시할 수 있는 크기이므로 제거</li>
+            <li><code>100</code> → 상수항 제거</li>
+          </ul>
+
+          <p>왜 이렇게 단순화할까? N이 10일 때는 상수가 의미 있지만, N이 100,000이 되면 <code>N²</code>이 나머지를 압도하기 때문이다. 코딩테스트에서 관심 있는 건 "N이 최대일 때 시간 안에 끝나느냐"이므로, 지배적인 항만 보면 충분하다.</p>
+
+          <h2>주요 복잡도 등급</h2>
+
+          <p>아래 표는 N = 100,000일 때 대략적인 연산 횟수를 보여준다.</p>
+
+          <table>
+            <thead>
+              <tr><th>복잡도</th><th>이름</th><th>N = 100,000일 때 연산 횟수</th><th>흔한 예시</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>O(1)</td><td>상수</td><td>1</td><td>배열 인덱스 접근, HashMap 조회</td></tr>
+              <tr><td>O(log N)</td><td>로그</td><td>~17</td><td>이분 탐색</td></tr>
+              <tr><td>O(N)</td><td>선형</td><td>100,000</td><td>단순 반복, 슬라이딩 윈도우</td></tr>
+              <tr><td>O(N log N)</td><td>선형 로그</td><td>~1,700,000</td><td>정렬 (Arrays.sort), 우선순위 큐</td></tr>
+              <tr><td>O(N²)</td><td>이차</td><td>10,000,000,000</td><td>이중 for문</td></tr>
+              <tr><td>O(2^N)</td><td>지수</td><td>천문학적</td><td>부분집합 탐색</td></tr>
+              <tr><td>O(N!)</td><td>팩토리얼</td><td>천문학적</td><td>순열 탐색</td></tr>
+            </tbody>
+          </table>
+
+          <p>O(N²)부터는 N이 10만만 돼도 <mark>100억 번</mark> 연산이 필요하다. Java 기준 1초에 대략 1~2억 번 연산이 가능하다고 보면, 이 정도면 시간 초과가 확정이다.</p>
+
+          <h2>복잡도 성장률 비교</h2>
+
+          <p>체감이 안 될 수 있으니 비유를 하나 들어보겠다.</p>
+
+          <p>N명의 학생이 있는 교실에서 출석을 부른다고 생각해보자.</p>
+
+          <ul>
+            <li><strong>O(1)</strong>: 학생 번호를 알고 있어서, 바로 그 자리를 보고 확인한다 → 학생이 몇 명이든 1번이면 끝</li>
+            <li><strong>O(log N)</strong>: 학생이 번호순으로 앉아 있어서, 가운데를 확인하고 반씩 좁혀간다 → 1,000명이어도 10번이면 찾는다</li>
+            <li><strong>O(N)</strong>: 처음부터 끝까지 한 명씩 부른다 → 학생 수만큼 시간이 걸린다</li>
+            <li><strong>O(N²)</strong>: 모든 학생을 다른 모든 학생과 한 번씩 악수시킨다 → 학생 수의 제곱만큼 시간이 걸린다</li>
+          </ul>
+
+          <h2>코드에서 시간복잡도 읽는 법</h2>
+
+          <h4>단일 반복문 → O(N)</h4>
+
+<pre><code class="language-java">for (int i = 0; i &lt; n; i++) {
+    // O(1) 작업
+}</code></pre>
+
+          <p>반복 횟수가 N에 비례하므로 O(N)이다.</p>
+
+          <hr>
+
+          <h4>중첩 반복문 → O(N × M)</h4>
+
+<pre><code class="language-java">for (int i = 0; i &lt; n; i++) {
+    for (int j = 0; j &lt; m; j++) {
+        // O(1) 작업
+    }
+}</code></pre>
+
+          <p>바깥 루프 N번 × 안쪽 루프 M번 = O(N × M)이다. N과 M이 같으면 O(N²).</p>
+
+          <hr>
+
+          <h4>반복문 안의 메서드 호출 → 숨은 복잡도 주의</h4>
+
+<pre><code class="language-java">for (int i = 0; i &lt; n; i++) {
+    int sum = IntStream.of(Arrays.copyOfRange(arr, i, i + k)).sum();
+}</code></pre>
+
+          <p>얼핏 보면 단일 반복문 같지만, 안쪽에서 <code>Arrays.copyOfRange</code>(O(K))와 <code>sum</code>(O(K))이 매번 실행된다. 실제 복잡도는 <mark>O(N × K)</mark>이다. 이런 <strong>숨은 복잡도</strong>가 시간 초과의 흔한 원인이다.</p>
+
+          <hr>
+
+          <h4>반씩 줄어드는 반복 → O(log N)</h4>
+
+<pre><code class="language-java">while (n &gt; 0) {
+    n /= 2;
+}</code></pre>
+
+          <p>매 반복마다 N이 절반으로 줄어드므로 O(log N)이다.</p>
+
+          <h2>정리</h2>
+
+          <table>
+            <thead>
+              <tr><th>핵심 포인트</th><th>설명</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Big-O는 <strong>증가율</strong></td><td>상수와 낮은 차수 항은 무시한다</td></tr>
+              <tr><td><strong>지배적인 항</strong>만 남긴다</td><td><code>3N² + 5N</code> → <code>O(N²)</code></td></tr>
+              <tr><td>메서드 호출도 복잡도에 포함</td><td><code>Arrays.copyOfRange</code>, <code>String.substring</code> 등은 O(N)</td></tr>
+              <tr><td>중첩 = 곱셈</td><td>바깥 루프 × 안쪽 루프</td></tr>
+            </tbody>
+          </table>
+
+          <p>다음 문서에서는 이 개념을 바탕으로, <mark>문제의 입력 크기와 시간 제한만 보고 어떤 복잡도까지 허용되는지 판단하는 법</mark>을 다룬다.</p>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#코딩테스트</span>
+          <span>#시간복잡도</span>
+          <span>#BigO</span>
+          <span>#알고리즘</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+          <a href="time-complexity-2-input-size.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js — 문법 하이라이팅 -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid — 다이어그램 -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>
