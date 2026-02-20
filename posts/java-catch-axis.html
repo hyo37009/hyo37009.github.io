@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Java] catch 축 구분법 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Java] catch 축 구분법</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.02.20
+        </div>
+
+        <div class="post-content">
+
+
+          <p>외부 SDK 예외를 잡을 때, "어떤 작업에서 실패했는지"와 "왜 실패했는지"를 동시에 구분해야 할 때가 있다. 이 두 가지를 축으로 나눠서 catch를 구성하면, 예외 처리가 깔끔하게 정리된다.</p>
+
+          <hr>
+
+          <h2>두 축의 개념</h2>
+
+          <p>예외는 두 축으로 나뉜다.</p>
+
+          <h3>축 1 - 작업 종류 (무엇이 실패했는지)</h3>
+
+          <p>코드에서 무엇을 하려고 했는지를 기준으로 구분한다.</p>
+
+          <ul>
+            <li>업로드 (<code>put</code>)</li>
+            <li>다운로드 (<code>get</code>, <code>download</code>)</li>
+            <li>삭제 (<code>delete</code>)</li>
+          </ul>
+
+          <h3>축 2 - 오류 종류 (왜 실패했는지)</h3>
+
+          <p>SDK가 던진 예외의 계층을 기준으로 구분한다.</p>
+
+          <ul>
+            <li><strong>서버 오류</strong> (<code>S3Exception</code>) — S3 쪽 문제 (권한 없음, 파일 없음 등)</li>
+            <li><strong>클라이언트 오류</strong> (<code>SdkClientException</code>) — 우리 쪽 문제 (네트워크, 타임아웃 등)</li>
+          </ul>
+
+          <hr>
+
+          <h2>두 축을 교차하여 잡는 구조</h2>
+
+          <p>각 메서드에서 두 종류의 catch를 쓰면, 4가지를 동시에 구분할 수 있다.</p>
+
+<pre><code class="language-java">try {
+    s3Client.putObject(...);
+} catch (S3Exception e) {                    // 축 2: 서버 오류
+    log.error("S3 서버 오류 - 업로드 실패");  // 축 1: 업로드
+    throw new S3UploadException(...);
+} catch (SdkClientException e) {             // 축 2: 클라이언트 오류
+    log.warn("클라이언트 오류 - 업로드 실패"); // 축 1: 업로드
+    throw new S3UploadException(...);
+}</code></pre>
+          <hr>
+
+          <h2>적용 예시 - S3BinaryContentStorage</h2>
+
+          <h3>메서드별 예외 매핑 구조</h3>
+
+<pre><code>                    클라이언트 오류              서버 오류
+                  (SdkClientException)        (S3Exception)
+put()            S3UploadException           S3UploadException
+get()            S3DownloadException         S3DownloadException
+download()       S3DownloadException         S3DownloadException
+delete()         S3OperationException        S3OperationException</code></pre>
+          <h3>실제 코드</h3>
+
+<pre><code class="language-java">// put() — 업로드
+try {
+    s3Client.putObject(...);
+} catch (S3Exception e) {
+    log.error("S3 서버 오류 - 업로드 실패 : {}", file.getFileName());
+    throw new S3UploadException(uuid);
+} catch (SdkClientException e) {
+    log.warn("클라이언트 오류 - 업로드 실패 : {}", file.getFileName());
+    throw new S3UploadException(uuid);
+}
+
+// get() — 파일 조회
+try {
+    return s3Client.getObject(...);
+} catch (S3Exception e) {
+    log.error("S3 서버 오류 - 다운로드 실패 : {}", fileName);
+    throw new S3DownloadException(fileName);
+} catch (SdkClientException e) {
+    log.warn("클라이언트 오류 - 다운로드 실패 : {}", fileName);
+    throw new S3DownloadException(fileName);
+}
+
+// download() — presigned URL 생성
+try {
+    return ResponseEntity.status(HttpStatus.FOUND)
+            .header(HttpHeaders.LOCATION, generatePresignedUrl(dto.fileName()))
+            .build();
+} catch (S3Exception e) {
+    log.error("S3 서버 오류 - 다운로드 실패 : {}", dto.fileName());
+    throw new S3DownloadException(dto.fileName());
+} catch (SdkClientException e) {
+    log.warn("클라이언트 오류 - 다운로드 실패 : {}", dto.fileName());
+    throw new S3DownloadException(dto.fileName());
+}
+
+// delete() — 삭제
+try {
+    s3Client.deleteObject(...);
+} catch (S3Exception e) {
+    log.error("S3 서버 오류 - 삭제 실패 : {}", fileName);
+    throw new S3OperationException(fileName);
+} catch (SdkClientException e) {
+    log.warn("클라이언트 오류 - 삭제 실패 : {}", fileName);
+    throw new S3OperationException(fileName);
+}</code></pre>
+          <hr>
+
+          <h2>오류 종류별 로그 레벨 기준</h2>
+
+          <table>
+          <thead>
+          <tr><th>오류 종류</th><th>로그 레벨</th><th>이유</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>서버 오류 (<code>S3Exception</code>)</td><td><code>log.error</code></td><td>S3 쪽 문제 → 개발자가 즉시 확인해야 한다</td></tr>
+          <tr><td>클라이언트 오류 (<code>SdkClientException</code>)</td><td><code>log.warn</code></td><td>네트워크 등 일시적 문제일 수 있다</td></tr>
+          </tbody>
+          </table>
+
+          <hr>
+
+          <h2>catch 순서 주의사항</h2>
+
+          <p><code>S3Exception</code>과 <code>SdkClientException</code>은 서로 상속 관계가 아니므로 순서는 상관없다. 다만 습관적으로 서버 오류를 먼저 쓰는 것이 일반적이다.</p>
+
+<pre><code class="language-java">} catch (S3Exception e) {        // 서버 오류 먼저
+} catch (SdkClientException e) { // 클라이언트 오류
+}</code></pre>
+          <hr>
+
+          <h2>확장 예시</h2>
+
+          <p>이 구조는 다른 외부 SDK에서도 동일하게 적용할 수 있다.</p>
+
+          <p>예를 들어 Redis SDK를 추가하면 이렇게 된다.</p>
+
+<pre><code>                    클라이언트 오류              서버 오류
+                  (RedisClientException)      (RedisException)
+put()            RedisWriteException         RedisWriteException
+get()            RedisReadException          RedisReadException</code></pre>
+          <p>축 구분법 자체는 동일하고, 예외 클래스와 SDK 종류만 바뀐다.</p>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Java</span>
+          <span>#예외처리</span>
+          <span>#AWS</span>
+          <span>#S3</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

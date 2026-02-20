@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Spring Security] 2. 권한 변경 시 세션 무효화 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Spring Security] 2. 권한 변경 시 세션 무효화</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.02.20
+        </div>
+
+        <div class="post-content">
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">세션 관리 고도화 시리즈 (2/4)</div>
+            <p>이전 편: <a href="spring-session-1-concurrent-login.html">[Spring Security] 1. 동시 로그인 방지와 SessionRegistry</a></p>
+            <p>다음 편: <a href="spring-session-3-online-status.html">[Spring Security] 3. SessionRegistry로 온라인 상태 관리</a></p>
+          </div>
+
+          <hr>
+
+          <h2>왜 권한 변경 시 세션을 무효화해야 할까?</h2>
+
+          <p>사용자의 권한을 변경했더라도 기존 세션이 살아 있으면 변경 전 권한으로 계속 요청이 가능하다.</p>
+
+          <p>예시:</p>
+
+          <ul>
+            <li>ADMIN이 user1을 CHANNEL_MANAGER로 강등</li>
+            <li>user1은 이미 로그인 중 → 세션에는 아직 이전 권한 정보가 남아 있음</li>
+            <li>user1은 강등됐음에도 ADMIN 권한 API를 계속 사용 가능</li>
+          </ul>
+
+          <p>이를 막으려면 권한 변경 시 해당 사용자의 세션을 강제로 만료시켜야 한다.</p>
+
+          <hr>
+
+          <h2>SessionRegistry로 세션 무효화하는 방법</h2>
+
+<pre><code class="language-java">List&lt;SessionInformation&gt; sessions = sessionRegistry.getAllSessions(principal, false);
+sessions.forEach(SessionInformation::expireNow);</code></pre>
+          <ul>
+            <li><code>sessionRegistry.getAllSessions(principal, false)</code> : 해당 사용자의 모든 활성 세션 조회
+          <ul>
+            <li>첫 번째 인자 : <code>principal</code> — <code>DiscodeitUserDetails</code> 객체</li>
+            <li>두 번째 인자 : <code>includeExpiredSessions</code> — <code>false</code>면 만료된 세션 제외</li>
+          </ul>
+          </li>
+            <li><code>expireNow()</code> : 세션을 즉시 만료 처리</li>
+          </ul>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">[실수] principal 객체가 equals()를 오버라이딩하지 않으면 조회 안 됨</div>
+            <p><code>getAllSessions()</code>는 내부 Map에서 <code>equals()</code>로 사용자를 찾는다. <a href="spring-session-1-concurrent-login.html">이전 문서</a>에서 오버라이딩한 이유가 여기서도 적용된다.</p>
+          </div>
+
+          <hr>
+
+          <h2>권한 변경 서비스에 적용</h2>
+
+<pre><code class="language-java">@Service
+@RequiredArgsConstructor
+public class BasicUserService implements UserService {
+
+    private final UserRepository userRepository;
+    private final SessionRegistry sessionRegistry;
+
+    public UserDto updateRole(UUID userId, Role newRole) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -&gt; new UserNotFoundException(userId));
+
+        user.updateRole(newRole);
+        userRepository.save(user);
+
+        // 세션 무효화
+        invalidateUserSessions(user.getUsername());
+
+        return UserMapper.toDto(user);
+    }
+
+    private void invalidateUserSessions(String username) {
+        sessionRegistry.getAllPrincipals().stream()
+                .filter(p -&gt; p instanceof DiscodeitUserDetails)
+                .map(p -&gt; (DiscodeitUserDetails) p)
+                .filter(p -&gt; p.getUsername().equals(username))
+                .flatMap(p -&gt; sessionRegistry.getAllSessions(p, false).stream())
+                .forEach(SessionInformation::expireNow);
+    }
+}</code></pre>
+          <ul>
+            <li><code>sessionRegistry.getAllPrincipals()</code> : 현재 로그인된 모든 사용자 목록</li>
+            <li>username으로 해당 사용자를 찾아 세션을 만료한다</li>
+          </ul>
+
+          <div class="callout callout-info">
+            <div class="callout-title">AuthService에서 처리하는 방법도 있다</div>
+            <p>요구사항에 따라 <code>BasicAuthService</code>에 <code>SessionRegistry</code>를 주입해 처리할 수도 있다. 권한 변경 로직이 어느 서비스에 있는지에 따라 위치를 결정하면 된다.</p>
+          </div>
+
+          <hr>
+
+          <h2>전체 흐름</h2>
+
+<div class="mermaid">
+sequenceDiagram
+    participant Admin
+    participant Service as UserService
+    participant Registry as SessionRegistry
+    participant User as 대상 사용자
+
+    Admin->>Service: updateRole(userId, CHANNEL_MANAGER)
+    Service->>Service: user.updateRole() + save()
+    Service->>Registry: getAllSessions(userPrincipal)
+    Registry-->>Service: [session1, session2]
+    Service->>Registry: expireNow() x2
+    Service-->>Admin: UserDto 반환
+
+    User->>Registry: 다음 요청 시 세션 확인
+    Registry-->>User: 세션 만료 → 재로그인 필요
+</div>
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#spring-security</span>
+          <span>#session</span>
+          <span>#session-registry</span>
+          <span>#권한-변경</span>
+          <span>#세션-무효화</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="spring-session-1-concurrent-login.html">&larr; 이전 글</a>
+          <a href="spring-session-3-online-status.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

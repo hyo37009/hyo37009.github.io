@@ -39,6 +39,91 @@
         <h1 class="page-header">nbuntu</h1>
         <p class="page-description">개발 삽질 일지, 공부 기록, 그리고 가끔 작동하는 코드</p>
 
+        <h2>CSRF 시리즈</h2>
+
+        <ul class="post-list">
+          <li>
+            <a href="../posts/spring-csrf-1-concept.html">[Spring Security] 1. CSRF 공격의 원리와 방어 전략</a>
+            <span class="post-date">2026.02.20</span>
+          </li>
+          <li>
+            <a href="../posts/spring-csrf-2-token-repository.html">[Spring Security] 2. CSRF 토큰 저장소 설정</a>
+            <span class="post-date">2026.02.20</span>
+          </li>
+          <li>
+            <a href="../posts/spring-csrf-3-handler.html">[Spring Security] 3. CSRF 핸들러 커스터마이징</a>
+            <span class="post-date">2026.02.20</span>
+          </li>
+          <li>
+            <a href="../posts/spring-csrf-4-api-endpoint.html">[Spring Security] 4. CSRF API 엔드포인트 구현</a>
+            <span class="post-date">2026.02.20</span>
+          </li>
+        </ul>
+
+        <h2>세션 관리 고도화 시리즈</h2>
+
+        <ul class="post-list">
+          <li>
+            <a href="../posts/spring-session-1-concurrent-login.html">[Spring Security] 1. 동시 로그인 방지와 SessionRegistry</a>
+            <span class="post-date">2026.02.20</span>
+          </li>
+          <li>
+            <a href="../posts/spring-session-2-privilege-invalidation.html">[Spring Security] 2. 권한 변경 시 세션 무효화</a>
+            <span class="post-date">2026.02.20</span>
+          </li>
+          <li>
+            <a href="../posts/spring-session-3-online-status.html">[Spring Security] 3. SessionRegistry로 온라인 상태 관리</a>
+            <span class="post-date">2026.02.20</span>
+          </li>
+          <li>
+            <a href="../posts/spring-session-4-remember-me.html">[Spring Security] 4. RememberMe 자동 로그인</a>
+            <span class="post-date">2026.02.20</span>
+          </li>
+        </ul>
+
+        <h2>스프링 비동기 시리즈</h2>
+
+        <ul class="post-list">
+          <li>
+            <a href="../posts/spring-async-3-event.html">[Spring] 3. Spring Event 기반 비동기 처리</a>
+            <span class="post-date">2026.02.20</span>
+          </li>
+        </ul>
+
+        <h2>JWT 시리즈</h2>
+
+        <ul class="post-list">
+          <li>
+            <a href="../posts/jwt-1-token-auth.html">[JWT] 1. 토큰 기반 인증의 개념과 필요성</a>
+            <span class="post-date">2026.02.19</span>
+          </li>
+          <li>
+            <a href="../posts/jwt-2-structure.html">[JWT] 2. JWT의 구조와 원리</a>
+            <span class="post-date">2026.02.19</span>
+          </li>
+        </ul>
+
+        <h2>예외처리</h2>
+
+        <ul class="post-list">
+          <li>
+            <a href="../posts/java-catch-axis.html">[Java] catch 축 구분법</a>
+            <span class="post-date">2026.02.20</span>
+          </li>
+          <li>
+            <a href="../posts/spring-s3-exception-handling.html">[AWS] S3BinaryContentStorage 예외 처리</a>
+            <span class="post-date">2026.02.20</span>
+          </li>
+          <li>
+            <a href="../posts/java-sdk-exception-hierarchy.html">[Java] SDK 예외 계층 확인법</a>
+            <span class="post-date">2026.02.20</span>
+          </li>
+          <li>
+            <a href="../posts/java-custom-exception-cause.html">[Java] 커스텀 예외에서 cause 전달 시점과 이유</a>
+            <span class="post-date">2026.02.20</span>
+          </li>
+        </ul>
+
         <h2>스프링 리팩토링 패턴 시리즈</h2>
 
         <ul class="post-list">
@@ -63,6 +148,19 @@
             <span class="post-date">2026.02.13</span>
           </li>
         </ul>
+
+        <h2>단독 글</h2>
+
+        <ul class="post-list">
+          <li>
+            <a href="../posts/firebase-overview.html">[Firebase] Firebase 개요</a>
+            <span class="post-date">2026.02.20</span>
+          </li>
+          <li>
+            <a href="../posts/intellij-mcp-guide.html">[IntelliJ] Gemini CLI와 MCP로 스마트하게 작업하는 방법</a>
+            <span class="post-date">2026.02.20</span>
+          </li>
+        </ul>
       </div>
     </div>
 
@@ -71,6 +169,11 @@
     </footer>
 
   </div>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
 
   <script src="../script.js"></script>
 </body>
