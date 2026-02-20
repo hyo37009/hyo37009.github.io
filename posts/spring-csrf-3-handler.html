@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Spring Security] 3. CSRF 핸들러 커스터마이징 - SPA 환경 최적화 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Spring Security] 3. CSRF 핸들러 커스터마이징 - SPA 환경 최적화</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.02.20
+        </div>
+
+        <div class="post-content">
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">CSRF 시리즈 (3/4)</div>
+            <p>이전 편: <a href="spring-csrf-2-token-repository.html">[Spring Security] 2. CSRF 토큰 저장소 설정</a></p>
+            <p>다음 편: <a href="spring-csrf-4-api-endpoint.html">[Spring Security] 4. CSRF API 엔드포인트 구현</a></p>
+          </div>
+
+          <hr>
+
+          <p>앞서 SPA 환경에 적합한 CSRF 토큰 저장 전략으로 <code>CookieCsrfTokenRepository</code>를 선택했다.</p>
+
+          <p>토큰을 저장하는 것만큼 <strong>토큰을 처리하는 방식</strong>도 중요하다. Spring Security의 <code>CsrfTokenRequestHandler</code>를 커스터마이징하여, SPA 환경에 최적화된 <code>SpaCsrfTokenRequestHandler</code>를 구현하는 과정을 정리한다.</p>
+
+          <h2><code>CsrfTokenRequestHandler</code>의 역할</h2>
+
+          <p><code>CsrfTokenRequestHandler</code>는 CSRF 토큰과 관련된 <strong>요청(Request)과 응답(Response)을 처리</strong>하는 책임을 가진다.</p>
+
+          <ul>
+            <li><strong>요청 처리</strong> 클라이언트가 보낸 <code>HttpServletRequest</code>에서 CSRF 토큰을 <strong>어떻게 읽어올 것인가(resolve)</strong> 를 결정한다. </li>
+            <li><strong>응답 처리</strong> <code>HttpServletResponse</code>에 CSRF 토큰을 <strong>어떻게 포함시킬 것인가(handle)</strong> 를 결정한다.</li>
+          </ul>
+
+          <h2><code>SpaCsrfTokenRequestHandler</code> 상세 분석</h2>
+
+          <p><code>SpaCsrfTokenRequestHandler</code>는 두 개의 기본 핸들러(<code>plain</code>, <code>xor</code>)의 장점을 결합하여 SPA 환경의 요구사항을 충족시키는 커스텀 핸들러다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">디자인 패턴 한 스푼</div>
+            <p><strong>전략 패턴(Strategy Pattern)</strong></p>
+            <p><code>SpaCsrfTokenRequestHandler</code>는 두 명의 전문가(<code>plain</code>, <code>xor</code>)에게 실제 작업을 위임한다. 상황(요청 헤더 유무)에 따라 적절한 전문가(전략)를 선택하여 사용하는 구조는 <strong>전략 패턴</strong>의 좋은 예시다.</p>
+          </div>
+
+<pre><code class="language-java">// SpaCsrfTokenRequestHandler.java
+public class SpaCsrfTokenRequestHandler implements CsrfTokenRequestHandler {
+    private final CsrfTokenRequestHandler plain = new CsrfTokenRequestAttributeHandler();
+    private final CsrfTokenRequestHandler xor = new XorCsrfTokenRequestAttributeHandler();
+    // ...
+}</code></pre>
+          <p>이 클래스의 핵심 메서드들을 하나씩 살펴보자.</p>
+
+          <hr>
+
+          <h4><code>resolveCsrfTokenValue()</code></h4>
+
+          <p>클라이언트 요청에서 CSRF 토큰을 찾아내는 역할을 한다.</p>
+
+<pre><code class="language-java">@Override
+public String resolveCsrfTokenValue(HttpServletRequest request, CsrfToken csrfToken) {
+    String headerValue = request.getHeader(csrfToken.getHeaderName());
+    return (StringUtils.hasText(headerValue) ? this.plain : this.xor)
+        .resolveCsrfTokenValue(request, csrfToken);
+}</code></pre>
+          <ul>
+            <li><strong><code>request.getHeader(...)</code></strong> <code>X-XSRF-TOKEN</code> 헤더에 값이 있는지 먼저 확인한다. SPA가 보내는 API 요청의 표준 방식이다.</li>
+            <li><strong><code>? this.plain : this.xor</code></strong> 전략 패턴의 핵심이다. 헤더에 값이 있으면 헤더 읽기 전문가 <code>plain</code>에게, 없다면 <code>_csrf</code> 파라미터 등을 찾을 수 있는 <code>xor</code> 전문가에게 작업을 위임한다.</li>
+          </ul>
+
+          <hr>
+
+          <h4><code>handle()</code></h4>
+
+          <p>생성된 토큰을 어떻게 안전하게 클라이언트에게 전달할지 결정한다.</p>
+
+<pre><code class="language-java">@Override
+public void handle(HttpServletRequest request, HttpServletResponse response, Supplier&lt;CsrfToken&gt; csrfToken) {
+    this.xor.handle(request, response, csrfToken);
+    csrfToken.get();
+}</code></pre>
+          <ul>
+            <li><strong><code>this.xor.handle(...)</code></strong> 응답 본문에 토큰이 포함될 경우, 토큰을 랜덤 값과 XOR 연산하여 마스킹한다. <mark>BREACH 공격을 방어</mark>하기 위한 핵심 보안 조치다.</li>
+            <li><strong><code>csrfToken.get()</code></strong> 지연 로딩(Lazy Loading)되는 토큰을 실제로 생성/로드하여, <code>CookieCsrfTokenRepository</code>가 <code>Set-Cookie</code> 헤더를 응답에 추가하도록 하는 결정적인 트리거 역할을 한다.</li>
+          </ul>
+
+          <h2><code>SecurityConfig</code>에 커스텀 핸들러 적용</h2>
+
+<pre><code class="language-java">// SecurityConfig.java
+@Bean
+public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    http
+        .csrf(csrf -&gt; csrf
+            .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+            .csrfTokenRequestHandler(new SpaCsrfTokenRequestHandler()) // 커스텀 핸들러 등록
+        );
+    return http.build();
+}</code></pre>
+          <div class="callout callout-warning">
+            <div class="callout-title">자주 하는 실수 - 핸들러 관련</div>
+            <p>*   <strong>커스텀 핸들러 미등록</strong></p>
+            <p><code>SpaCsrfTokenRequestHandler.java</code> 파일을 만들어 놓고, <code>SecurityConfig</code>의 <code>.csrfTokenRequestHandler()</code>에 등록하는 것을 잊는 경우가 많다. 등록하지 않으면 Spring Security는 기본 핸들러를 사용하게 되고, 의도한 '헤더 우선 검증' 로직이 동작하지 않는다.</p>
+            <p>*   <strong><code>csrfToken.get()</code> 누락</strong></p>
+            <p><code>handle()</code> 메서드에서 이 코드를 빼먹으면 토큰이 활성화되지 않아 클라이언트는 토큰 쿠키를 받지 못하고, 이후의 모든 요청은 CSRF 검증에 실패한다.</p>
+          </div>
+
+          <p>다음 글에서는 이 모든 설정의 마지막 퍼즐 조각인 <strong><a href="spring-csrf-4-api-endpoint.html">클라이언트가 최초에 CSRF 토큰을 발급받기 위한 API 엔드포인트 구현</a></strong>을 다룬다.</p>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#SpringSecurity</span>
+          <span>#CSRF</span>
+          <span>#웹보안</span>
+          <span>#가이드</span>
+          <span>#SPA</span>
+          <span>#BREACH</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="spring-csrf-2-token-repository.html">&larr; 이전 글</a>
+          <a href="spring-csrf-4-api-endpoint.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

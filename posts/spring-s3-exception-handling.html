@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[AWS] S3BinaryContentStorage 예외 처리 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[AWS] S3BinaryContentStorage 예외 처리</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.02.20
+        </div>
+
+        <div class="post-content">
+
+
+          <p>S3 SDK를 호출하는 코드에서 예외 처리를 안 하면, SDK 예외가 그대로 올라가서 모든 실패가 똑같은 500 응답이 된다. 업로드 실패인지, 다운로드 실패인지 구분이 안 되는 것이다. 이걸 커스텀 예외로 감싸서 구분하는 방법을 정리한다.</p>
+
+          <hr>
+
+          <h2>문제 - 예외 처리 없이 SDK 예외가 그대로 올라가는 경우</h2>
+
+          <p>현재 <code>S3BinaryContentStorage</code>의 메서드들은 S3 SDK를 호출하는데, 예외 처리가 없다.</p>
+
+<pre><code class="language-java">// 현재 put() — S3 실패 시 SDK 예외가 그대로 올라감
+s3Client.putObject(...);</code></pre>
+          <p>이러면 S3 SDK 예외가 그대로 올라가서 <code>GlobalExceptionHandler</code>의 맨 마지막 핸들러에 걸린다.</p>
+
+<pre><code class="language-java">// GlobalExceptionHandler.java
+@ExceptionHandler(Exception.class)  // ← 여기로 올라감
+public ResponseEntity&lt;ErrorResponse&gt; handleGeneralException(Exception ex) {
+    // 무조건 500 INTERNAL_SERVER_ERROR
+}</code></pre>
+          <p>결과적으로 업로드 실패든, 다운로드 실패든, 삭제 실패든 모두 동일한 500 응답을 받게 된다.</p>
+
+          <hr>
+
+          <h2>목표 - 업로드와 다운로드를 구분하기</h2>
+
+          <p>원하는 구조는 이렇다.</p>
+
+<pre><code>S3Exception (부모)
+├── S3UploadException   — 업로드 실패 시
+└── S3DownloadException — 다운로드 실패 시</code></pre>
+          <p>이렇게 하면 예외 종류에 따라 다른 응답과 로깅이 가능하다.</p>
+
+          <hr>
+
+          <h2>cause 전달이 필요한 이유</h2>
+
+          <p>S3 SDK 예외를 잡고 커스텀 예외를 던질 때, 원본 예외를 버리면 안 된다.</p>
+
+          <h3>원본 예외를 버리는 경우</h3>
+
+<pre><code class="language-java">} catch (Exception e) {
+    throw new S3UploadException(fileName);  // e를 전달하지 않음
+}</code></pre>
+          <p>로그에 남는 스택트레이스는 이렇게 된다.</p>
+
+<pre><code>S3UploadException: 파일 업로드 실패
+    at S3BinaryContentStorage.put(S3BinaryContentStorage.java:52)
+    ...
+// 끝. S3에서 실제로 무엇이 잘못되었는지 모름</code></pre>
+          <h3>원본 예외를 보존하는 경우</h3>
+
+<pre><code class="language-java">} catch (Exception e) {
+    throw new S3UploadException(fileName, e);  // e를 cause로 전달
+}</code></pre>
+          <p>로그에 남는 스택트레이스는 이렇게 된다.</p>
+
+<pre><code>S3UploadException: 파일 업로드 실패
+    at S3BinaryContentStorage.put(S3BinaryContentStorage.java:52)
+    ...
+Caused by: software.amazon.awssdk.services.s3.model.S3Exception: Access Denied
+    at ...
+// ← 실제 원인이 남음</code></pre>
+          <p><code>Caused by</code>가 남는 건 <code>RuntimeException</code>의 기본 기능이다. <code>super(message, cause)</code>로 원본 예외를 전달하면 자동으로 붙는다.</p>
+
+          <h3>스택트레이스가 한 레이어 더 쌓이는 건 문제가 아니다</h3>
+
+          <p>예외를 변환하는 것은 일반적인 패턴이다. 스택트레이스가 두 레이어가 되는 건 정상이고, <code>Caused by</code>를 통해 원본 정보가 유지되는 게 핵심이다.</p>
+
+          <hr>
+
+          <h2>현재 프로젝트 예외 구조와의 연결</h2>
+
+          <p>현재 프로젝트는 <code>DiscodeitException</code>을 기반으로 한 예외 계층을 사용한다.</p>
+
+<pre><code class="language-java">// DiscodeitException — 현재 구조
+public class DiscodeitException extends RuntimeException {
+    private final ErrorCode errorCode;
+    protected final Map&lt;String, Object&gt; details;
+
+    public DiscodeitException(Class&lt;?&gt; entity, ErrorCode errorCode, Map&lt;String, Object&gt; details) {
+        // super()에 cause를 전달하지 않음 ← 포인트
+        this.errorCode = errorCode;
+        this.details = details;
+    }
+}</code></pre>
+          <p>현재 <code>DiscodeitException</code>은 <code>cause</code>를 받는 생성자가 없다.</p>
+
+          <p>S3 예외 계층을 만들 때 <code>cause</code>를 보존하려면, 부모 클래스에서 <code>super(cause)</code>를 호출해야 한다.</p>
+
+          <h3>방법 A - DiscodeitException 계층 안에서 cause 전달</h3>
+
+          <p><code>DiscodeitException</code> 자체에 <code>cause</code>를 받는 생성자를 추가하면 모든 커스텀 예외에서 활용 가능하다.</p>
+
+<pre><code class="language-java">// DiscodeitException에 추가
+public DiscodeitException(Class&lt;?&gt; entity, ErrorCode errorCode, Map&lt;String, Object&gt; details, Throwable cause) {
+    super(cause);  // ← RuntimeException에 cause 전달
+    this.errorCode = errorCode;
+    this.details = details;
+    this.details.put("entity", entity.getSimpleName());
+}</code></pre>
+          <p>사용 예시는 다음과 같다.</p>
+
+<pre><code class="language-java">public class S3UploadException extends S3Exception {
+    public S3UploadException(String fileName, Throwable cause) {
+        super(fileName, ErrorCode.INTERNAL_SERVER_ERROR, cause);  // cause를 위로 전달
+    }
+}</code></pre>
+          <h3>방법 B - S3Exception에서 직접 처리</h3>
+
+          <p><code>DiscodeitException</code>을 건드리지 않고, <code>S3Exception</code> 부모 클래스에서 직접 처리하는 방식이다.</p>
+
+<pre><code class="language-java">public class S3Exception extends DiscodeitException {
+    public S3Exception(String fileName, ErrorCode errorCode, Throwable cause) {
+        super(BinaryContent.class, errorCode);  // DiscodeitException 초기화
+        // 별도로 cause를 저장하거나, details에 원본 예외 메시지를 넣는 방식
+        details.put("fileName", fileName);
+        details.put("cause", cause.getMessage());
+    }
+}</code></pre>
+          <table>
+          <thead>
+          <tr><th></th><th>방법 A</th><th>방법 B</th></tr>
+          </thead>
+          <tbody>
+          <tr><td><code>Caused by</code> 남기는지</td><td>남긴다</td><td>안 남긴다 (details에 메시지만 남김)</td></tr>
+          <tr><td><code>DiscodeitException</code> 변경 여부</td><td>변경 필요</td><td>변경 불필요</td></tr>
+          <tr><td>다른 예외에서 재사용 가능 여부</td><td>가능</td><td>S3만 가능</td></tr>
+          </tbody>
+          </table>
+
+          <p>디버깅 가능성을 생각하면 <strong>방법 A</strong>가 낫다. 단, <code>DiscodeitException</code>을 수정하면 기존 예외 클래스들에도 영향을 줄 수 있으니 확인이 필요하다.</p>
+
+          <hr>
+
+          <h2>S3BinaryContentStorage 메서드별 적용</h2>
+
+          <p>예외 클래스 계층은 별도로 만드는 부분이므로, 여기서는 각 메서드에서 어떤 예외를 잡고 던져야 하는지를 정리한다.</p>
+
+          <h3>put() - 업로드</h3>
+
+<pre><code class="language-java">@Override
+public UUID put(UUID uuid, byte[] content) {
+    BinaryContent file = binaryContentRepository.findById(uuid)
+            .orElseThrow(() -&gt; new BinaryContentNotFoundException(uuid));
+    try {
+        s3Client.putObject(
+                PutObjectRequest.builder()
+                        .key(file.getFileName())
+                        .bucket(bucket)
+                        .contentType(file.getContentType())
+                        .build(),
+                RequestBody.fromBytes(content)
+        );
+    } catch (Exception e) {
+        log.error("S3 업로드 실패 - 파일: {}, 오류: {}", file.getFileName(), e.getMessage());
+        throw new S3UploadException(file.getFileName(), e);  // cause 전달
+    }
+    log.info("S3 파일 업로드 완료 : {}", file.getFileName());
+    return uuid;
+}</code></pre>
+          <h3>get() - 파일 조회</h3>
+
+<pre><code class="language-java">@Override
+public InputStream get(String fileName) {
+    try {
+        return s3Client.getObject(GetObjectRequest.builder()
+                .bucket(bucket)
+                .key(fileName)
+                .build()
+        );
+    } catch (Exception e) {
+        log.error("S3 다운로드 실패 - 파일: {}, 오류: {}", fileName, e.getMessage());
+        throw new S3DownloadException(fileName, e);  // cause 전달
+    }
+}</code></pre>
+          <h3>download() - presigned URL 생성</h3>
+
+<pre><code class="language-java">@Override
+public ResponseEntity&lt;?&gt; download(BinaryContentDto dto) {
+    try {
+        return ResponseEntity.status(HttpStatus.FOUND)
+                .header(HttpHeaders.LOCATION, generatePresignedUrl(dto.fileName()))
+                .build();
+    } catch (Exception e) {
+        log.error("Presigned URL 생성 실패 - 파일: {}, 오류: {}", dto.fileName(), e.getMessage());
+        throw new S3DownloadException(dto.fileName(), e);  // URL 생성도 다운로드 흐름
+    }
+}</code></pre>
+          <h3>delete() - 삭제</h3>
+
+<pre><code class="language-java">@Override
+public void delete(String fileName) {
+    try {
+        s3Client.deleteObject(
+                DeleteObjectRequest.builder()
+                        .key(fileName)
+                        .bucket(bucket)
+                        .build()
+        );
+    } catch (Exception e) {
+        log.error("S3 삭제 실패 - 파일: {}, 오류: {}", fileName, e.getMessage());
+        // 삭제는 업로드도 다운로드도 아님 → S3Exception(부모) 사용 또는 별도 예외 추가
+        throw new S3Exception(fileName, e);
+    }
+}</code></pre>
+          <hr>
+
+          <h2>메서드별 예외 정리</h2>
+
+          <table>
+          <thead>
+          <tr><th>메서드</th><th>던져야 할 예외</th><th>이유</th></tr>
+          </thead>
+          <tbody>
+          <tr><td><code>put()</code></td><td><code>S3UploadException</code></td><td>업로드 실패</td></tr>
+          <tr><td><code>get()</code></td><td><code>S3DownloadException</code></td><td>파일 조회 실패</td></tr>
+          <tr><td><code>download()</code></td><td><code>S3DownloadException</code></td><td>presigned URL 생성도 다운로드 흐름의 일부</td></tr>
+          <tr><td><code>delete()</code></td><td><code>S3Exception</code> (부모) 또는 별도 예외</td><td>업로드/다운로드 둘 다 아니다</td></tr>
+          </tbody>
+          </table>
+
+          <hr>
+
+          <h2>결정해야 할 것</h2>
+
+          <ol>
+            <li><code>DiscodeitException</code>에 <code>cause</code> 생성자를 추가할지 (방법 A vs B)</li>
+            <li><code>delete()</code> 실패 시 부모 <code>S3Exception</code>을 던질지, <code>S3DeleteException</code>을 별도로 만들지</li>
+          </ol>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#AWS</span>
+          <span>#S3</span>
+          <span>#Spring</span>
+          <span>#예외처리</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

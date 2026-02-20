@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Java] 커스텀 예외에서 cause 전달 시점과 이유 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Java] 커스텀 예외에서 cause 전달 시점과 이유</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.02.20
+        </div>
+
+        <div class="post-content">
+
+
+          <p>커스텀 예외를 만들었을 때, 모든 예외에 <code>cause</code>를 전달해야 하는지 헷갈릴 수 있다. 결론부터 말하면, 외부 시스템의 예외를 감싸는 경우에만 필요하다. 내 코드에서 직접 던지는 예외에는 감쌀 원본이 없으니까.</p>
+
+          <hr>
+
+          <h2>예외가 발생하는 두 가지 패턴</h2>
+
+          <h3>패턴 1 - 조건 확인 후 직접 던지는 경우</h3>
+
+          <p>코드 자체가 조건을 확인하고, 문제가 있으면 직접 예외를 생성하여 던진다.</p>
+
+<pre><code class="language-java">Channel channel = channelRepository.findById(id)
+    .orElseThrow(() -&gt; new ChannelNotFoundException(id));</code></pre>
+          <p>여기서 발생하는 예외의 흐름은 이렇다.</p>
+
+<pre><code>findById() → Optional.empty() 반환
+    → orElseThrow()가 ChannelNotFoundException을 생성하고 던짐</code></pre>
+          <p>원본 예외가 존재하지 않는다. <code>findById()</code>는 예외를 던지지 않고, <code>empty()</code>를 반환하는 것이다. <code>ChannelNotFoundException</code> 자체가 처음과 끝이다.</p>
+
+<pre><code class="language-java">// cause를 넘길 e가 없음
+throw new ChannelNotFoundException(id);  // ✅ 이것으로 충분</code></pre>
+          <hr>
+
+          <h3>패턴 2 - 외부 시스템의 예외를 감싸는 경우</h3>
+
+          <p>외부 시스템(AWS SDK, HTTP 클라이언트 등)이 먼저 예외를 던지고, 그것을 catch하여 커스텀 예외로 변환하는 경우다.</p>
+
+<pre><code class="language-java">try {
+    s3Client.putObject(...);  // ← AWS SDK가 예외를 던짐
+} catch (Exception e) {       // ← e는 SDK가 던진 원본 예외
+    throw new S3UploadException(fileName, e);
+}</code></pre>
+          <p>여기서 발생하는 예외의 흐름은 이렇다.</p>
+
+<pre><code>s3Client.putObject() → S3Exception("Access Denied") 발생
+    → catch에서 잡음
+    → S3UploadException을 생성하고 던짐</code></pre>
+          <p>원본 예외(<code>e</code>)가 존재한다. <code>e</code>를 버리면 S3에서 실제로 무엇이 잘못되었는지가 사라진다.</p>
+
+<pre><code class="language-java">// ❌ e를 버리면 실제 원인 소멸
+throw new S3UploadException(fileName);
+
+// ✅ e를 전달하면 Caused by로 남음
+throw new S3UploadException(fileName, e);</code></pre>
+          <hr>
+
+          <h2>두 패턴의 차이 한눈에 보기</h2>
+
+          <table>
+          <thead>
+          <tr><th></th><th>패턴 1 - 조건 확인</th><th>패턴 2 - 외부 예외 감싸기</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>예외의 출발점</td><td>내 코드가 직접 생성</td><td>외부 시스템이 먼저 발생</td></tr>
+          <tr><td>원본 예외 존재 여부</td><td>없다</td><td>있다 (<code>catch</code>의 <code>e</code>)</td></tr>
+          <tr><td><code>cause</code> 필요 여부</td><td>불필요</td><td>필요</td></tr>
+          <tr><td>디버깅 시 확인해야 할 정보</td><td>예외 메시지와 파라미터</td><td>원본 예외의 메시지와 스택트레이스</td></tr>
+          </tbody>
+          </table>
+
+          <hr>
+
+          <h2>현재 프로젝트에서의 적용</h2>
+
+          <table>
+          <thead>
+          <tr><th>예외 클래스</th><th>패턴</th><th>cause 필요 여부</th></tr>
+          </thead>
+          <tbody>
+          <tr><td><code>ChannelNotFoundException</code></td><td>조건 확인 (<code>findById</code> → empty)</td><td>불필요</td></tr>
+          <tr><td><code>UserNotFoundException</code></td><td>조건 확인 (<code>findById</code> → empty)</td><td>불필요</td></tr>
+          <tr><td><code>BinaryContentNotFoundException</code></td><td>조건 확인 (<code>findById</code> → empty)</td><td>불필요</td></tr>
+          <tr><td><code>BinaryContentAlreadyExistException</code></td><td>조건 확인 (<code>Files.exists()</code>)</td><td>불필요</td></tr>
+          <tr><td><code>S3UploadException</code></td><td>외부 예외 감싸기 (<code>s3Client.putObject()</code>)</td><td>필요</td></tr>
+          <tr><td><code>S3DownloadException</code></td><td>외부 예외 감싸기 (<code>s3Client.getObject()</code>)</td><td>필요</td></tr>
+          </tbody>
+          </table>
+
+          <hr>
+
+          <h2>cause를 전달하면 스택트레이스는 어떻게 되나</h2>
+
+<pre><code class="language-java">// S3UploadException(fileName, e)를 던질 때의 로그
+S3UploadException: 파일 업로드 실패 - image.png
+    at S3BinaryContentStorage.put(S3BinaryContentStorage.java:52)
+    ...
+Caused by: software.amazon.awssdk.services.s3.model.S3Exception: Access Denied  // ← 실제 원인
+    at software.amazon.awssdk...
+    ...</code></pre>
+          <p><code>Caused by</code> 아래가 실제 원인이다. 이건 <code>RuntimeException</code>의 기본 기능이고, <code>super(message, cause)</code>로 원본 예외를 전달하면 자동으로 붙는다.</p>
+
+          <hr>
+
+          <h2>요약</h2>
+
+          <p>외부 시스템이 예외를 던진 후, 그것을 catch하여 변환하는 경우에만 <code>cause</code>를 전달한다. 조건을 직접 확인하고 예외를 생성하는 경우는 원본 예외가 존재하지 않으므로 불필요하다.</p>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Java</span>
+          <span>#예외처리</span>
+          <span>#Spring</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

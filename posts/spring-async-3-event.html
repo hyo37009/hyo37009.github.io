@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Spring] 3. Spring Event 기반 비동기 처리 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Spring] 3. Spring Event 기반 비동기 처리</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.02.20
+        </div>
+
+        <div class="post-content">
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">스프링 비동기 시리즈 (3/6)</div>
+            <p>이 시리즈는 Spring의 비동기 처리를 처음부터 단계별로 다룬다.</p>
+            <p>1. <a href="async와-비동기-처리의-기본.html">@Async와 비동기 처리의 기본</a></p>
+            <p>2. <a href="threadpooltaskexecutor-설정과-스레드-풀-관리.html">ThreadPoolTaskExecutor 설정과 스레드 풀 관리</a></p>
+            <p>3. <strong>Spring Event 기반 비동기 처리</strong> ← 현재 문서</p>
+            <p>4. <a href="비동기-예외-처리와-재시도-전략.html">비동기 예외 처리와 재시도 전략</a></p>
+            <p>5. <a href="taskdecorator와-컨텍스트-전파.html">TaskDecorator와 컨텍스트 전파</a></p>
+            <p>6. <a href="webclient를-활용한-비동기-http-통신.html">WebClient를 활용한 비동기 HTTP 통신</a></p>
+          </div>
+
+          <p>지금까지는 비동기 작업이 필요할 때 서비스에서 다른 서비스를 직접 호출했다. 주문 서비스가 알림 서비스를 호출하고, 포인트 서비스를 호출하고, 통계 서비스를 호출한다. 새로운 후처리가 추가될 때마다 주문 서비스 코드를 수정해야 한다.</p>
+
+          <p>이것은 <mark>강결합</mark>이다. Spring Event를 사용하면 "주문이 생성되었다"라는 이벤트만 발행하고, 관심 있는 서비스들이 각자 이벤트를 구독하는 구조로 바꿀 수 있다. 주문 서비스는 누가 이벤트를 듣고 있는지 알 필요가 없다.</p>
+
+          <h2>이벤트 기반 아키텍처의 개념</h2>
+
+<div class="mermaid">
+sequenceDiagram
+    participant OS as OrderService
+    participant EP as EventPublisher
+    participant L1 as 알림 리스너
+    participant L2 as 포인트 리스너
+    participant L3 as 통계 리스너
+
+    OS->>EP: OrderCreatedEvent 발행
+    EP-->>OS: 즉시 반환
+    EP->>L1: 이벤트 전달 (비동기)
+    EP->>L2: 이벤트 전달 (비동기)
+    EP->>L3: 이벤트 전달 (비동기)
+
+    Note over L1: 알림 발송 처리
+    Note over L2: 포인트 적립 처리
+    Note over L3: 통계 수집 처리
+</div>
+          <p>직접 호출 방식과 비교하면 차이가 뚜렷하다.</p>
+
+          <ul>
+            <li><strong>직접 호출</strong> — 주문 서비스가 알림 서비스, 포인트 서비스, 통계 서비스를 전부 알고 있어야 한다. 새 서비스가 추가되면 주문 서비스 코드를 수정해야 한다.</li>
+            <li><strong>이벤트 방식</strong> — 주문 서비스는 "주문이 생성됐다"는 사실만 알린다. 누가 듣고 있는지는 모른다. 새 리스너를 추가해도 주문 서비스 코드는 건드리지 않는다.</li>
+          </ul>
+
+          <h2>이벤트 클래스 정의</h2>
+
+          <p>이벤트는 발행 시점의 정보를 담는 불변 객체다. Spring의 <code>ApplicationEvent</code>를 상속할 필요 없이, 아무 POJO나 이벤트로 사용할 수 있다.</p>
+
+<pre><code class="language-java">@Getter
+@RequiredArgsConstructor
+public class OrderCreatedEvent {
+
+    private final Long orderId;
+    private final String userId;
+    private final String coffeeType;
+    private final int price;
+    private final LocalDateTime occuredAt = LocalDateTime.now();
+}</code></pre>
+          <ul>
+            <li>이벤트에는 리스너가 필요로 할 수 있는 정보를 넉넉히 담아둔다. <code>orderId</code>, <code>userId</code>, <code>price</code> 등 핵심 데이터를 포함시켰다.</li>
+            <li><code>LocalDateTime.now()</code>로 이벤트 발생 시각을 기록한다. 디버깅이나 로그 추적에 유용하다.</li>
+          </ul>
+
+          <p>목적에 따라 여러 이벤트를 정의할 수 있다.</p>
+
+<pre><code class="language-java">@Getter
+@RequiredArgsConstructor
+public class OrderCompletedEvent {
+    private final Long orderId;
+    private final String userId;
+    private final LocalDateTime occuredAt = LocalDateTime.now();
+}
+
+@Getter
+@RequiredArgsConstructor
+public class OrderCancelledEvent {
+    private final Long orderId;
+    private final String reason;
+    private final LocalDateTime occuredAt = LocalDateTime.now();
+}</code></pre>
+          <h2>이벤트 발행</h2>
+
+          <p>이벤트를 발행하려면 <code>ApplicationEventPublisher</code>를 주입받아 <code>publishEvent()</code>를 호출한다.</p>
+
+<pre><code class="language-java">@Service
+@RequiredArgsConstructor
+@Slf4j
+public class OrderService {
+
+    private final ApplicationEventPublisher eventPublisher;
+
+    public Long createOrderWithEvent(String userId, String coffeeType, int price) {
+        log.info("[{}] 주문 생성 시작: userId={}, coffeeType={}", Thread.currentThread().getName(), userId, coffeeType);
+
+        Long orderId = System.currentTimeMillis();
+
+        OrderCreatedEvent event = new OrderCreatedEvent(orderId, userId, coffeeType, price);
+        eventPublisher.publishEvent(event);
+
+        log.info("[{}] 이벤트 발행 완료!", Thread.currentThread().getName());
+        return orderId;
+    }
+}</code></pre>
+          <ul>
+            <li><code>ApplicationEventPublisher</code> — Spring이 제공하는 이벤트 발행기다. 어떤 빈에서든 주입받아 사용할 수 있다.</li>
+            <li><code>publishEvent()</code> — 전달받은 객체를 이벤트로 발행한다. 해당 이벤트 타입을 구독하는 모든 리스너에게 전달된다.</li>
+          </ul>
+
+          <p>주문 서비스는 이벤트를 발행하기만 하고, 누가 듣고 있는지 전혀 모른다. 이것이 느슨한 결합이다.</p>
+
+          <h2>@EventListener와 @Async 결합</h2>
+
+          <p>이벤트를 수신하는 리스너는 <code>@EventListener</code>와 <code>@Async</code>를 함께 사용한다.</p>
+
+<pre><code class="language-java">@Component
+@RequiredArgsConstructor
+@Slf4j
+public class OrderEventListener {
+
+    @EventListener
+    @Async("notificationExecutor")
+    public void handleOrderCreatedAsync(OrderCreatedEvent event) {
+        log.info("[{}] 주문 생성 이벤트 수신 (비동기): orderId={}", Thread.currentThread().getName(), event.getOrderId());
+        sleep(3000);
+        log.info("[{}] 알림 발송 완료: orderId={}", Thread.currentThread().getName(), event.getOrderId());
+    }
+
+    @EventListener
+    @Async
+    public void addPoints(OrderCreatedEvent event) {
+        log.info("[{}] 포인트 적립 시작: userId={}", Thread.currentThread().getName(), event.getUserId());
+        int points = event.getPrice() / 10;
+        sleep(1000);
+        log.info("[{}] 포인트 적립 완료: {}points", Thread.currentThread().getName(), points);
+    }
+
+    @EventListener
+    @Async
+    public void collectStats(OrderCreatedEvent event) {
+        log.info("[{}] 통계 수집 시작: orderId={}", Thread.currentThread().getName(), event.getOrderId());
+        sleep(500);
+        log.info("[{}] 통계 수집 완료", Thread.currentThread().getName());
+    }
+}</code></pre>
+          <ul>
+            <li><code>@EventListener</code> — 이 메서드가 특정 이벤트 타입의 리스너임을 선언한다. 파라미터의 타입으로 어떤 이벤트를 수신할지 결정된다.</li>
+            <li><code>@Async</code>를 함께 붙이면 이벤트 처리가 비동기로 실행된다. <code>@Async</code>가 없으면 <mark>이벤트 발행 스레드에서 동기적으로</mark> 실행된다.</li>
+            <li>하나의 이벤트에 여러 리스너를 등록할 수 있다. 같은 <code>OrderCreatedEvent</code>를 세 개의 리스너가 각자 수신한다.</li>
+          </ul>
+
+          <div class="callout callout-info">
+            <div class="callout-title">@EventListener만 쓰면 동기 실행이다</div>
+            <p><code>@Async</code> 없이 <code>@EventListener</code>만 사용하면, <code>publishEvent()</code>를 호출한 스레드가 리스너 메서드까지 직접 실행한다. 리스너가 3초 걸리는 작업을 하면, 이벤트를 발행한 서비스도 3초 블로킹된다. 비동기 처리가 목적이라면 <code>@Async</code>를 반드시 함께 달자.</p>
+          </div>
+
+          <h2>@TransactionalEventListener</h2>
+
+          <p><code>@EventListener</code>와 비슷하지만, <mark>트랜잭션의 특정 시점</mark>에 리스너를 실행하는 전용 어노테이션이다. 주문을 DB에 저장하는 트랜잭션이 진행 중일 때, 이벤트 리스너가 그 데이터를 DB에서 조회하면 어떻게 될까?</p>
+
+          <p>먼저 트랜잭션이 있는 주문 생성 메서드를 보자.</p>
+
+<pre><code class="language-java">@Transactional
+public Long createOrderWithDB(String userId, String coffeeType, int price) {
+    Order order = new Order(userId, coffeeType, price);
+    Order savedOrder = orderRepository.save(order);
+
+    log.info("주문 DB 저장 완료: orderId={} (아직 커밋 안됨!)", savedOrder.getId());
+
+    OrderCreatedEvent event = new OrderCreatedEvent(savedOrder.getId(), userId, coffeeType, price);
+    eventPublisher.publishEvent(event);
+
+    log.info("createOrderWithDB 종료 (이제 커밋됨!)");
+    return savedOrder.getId();
+}</code></pre>
+          <ul>
+            <li><code>orderRepository.save(order)</code> — DB에 주문을 저장하지만, <code>@Transactional</code> 메서드가 끝나기 전까지 커밋되지 않는다.</li>
+            <li>이 시점에서 이벤트를 발행하면, 비동기 리스너가 아직 커밋되지 않은 데이터를 조회하려고 시도할 수 있다.</li>
+          </ul>
+
+          <p>이 문제를 해결하는 것이 <code>@TransactionalEventListener</code>다.</p>
+
+<pre><code class="language-java">@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+@Async
+public void handleOrderCreatedWithProblem(OrderCreatedEvent event) {
+    Order order = orderRepository.findById(event.getOrderId())
+            .orElseThrow(() -&gt; new RuntimeException("주문을 찾을 수 없습니다!"));
+    log.info("DB 조회 성공: {}", order.getId());
+}</code></pre>
+          <p><code>phase</code> 속성으로 리스너가 실행되는 시점을 지정한다.</p>
+
+          <table>
+          <thead>
+          <tr><th>phase</th><th>실행 시점</th><th>용도</th></tr>
+          </thead>
+          <tbody>
+          <tr><td><code>AFTER_COMMIT</code></td><td>트랜잭션이 성공적으로 커밋된 후</td><td>DB에 저장된 데이터 조회, 알림 발송</td></tr>
+          <tr><td><code>AFTER_ROLLBACK</code></td><td>트랜잭션이 롤백된 후</td><td>롤백 알림, 보상 로직</td></tr>
+          <tr><td><code>AFTER_COMPLETION</code></td><td>커밋이든 롤백이든 트랜잭션이 끝난 후</td><td>리소스 정리, 로깅</td></tr>
+          <tr><td><code>BEFORE_COMMIT</code></td><td>커밋 직전</td><td>커밋 전 검증</td></tr>
+          </tbody>
+          </table>
+
+<div class="mermaid">
+sequenceDiagram
+    participant OS as OrderService
+    participant DB as Database
+    participant EP as EventPublisher
+    participant L1 as AFTER_COMMIT 리스너
+    participant L2 as AFTER_ROLLBACK 리스너
+    participant L3 as AFTER_COMPLETION 리스너
+
+    OS->>DB: save(order)
+    OS->>EP: publishEvent()
+    Note over EP: 리스너 실행을 보류
+    OS->>DB: 트랜잭션 커밋
+
+    alt 커밋 성공
+        EP->>L1: 실행 (비동기)
+        EP->>L3: 실행 (비동기)
+        Note over L1: DB 조회 가능!
+    else 롤백 발생
+        EP->>L2: 실행 (비동기)
+        EP->>L3: 실행 (비동기)
+    end
+</div>
+          <div class="callout callout-tip">
+            <div class="callout-title">AFTER_COMMIT이 가장 많이 쓰인다</div>
+            <p>대부분의 후처리(알림, 포인트 적립, 외부 API 호출 등)는 데이터가 확실히 저장된 후에 실행되어야 한다. 트랜잭션이 롤백됐는데 "주문 완료" 알림이 나가면 곤란하다. 기본값으로 <code>AFTER_COMMIT</code>을 사용하자.</p>
+          </div>
+
+          <h2>조건부 이벤트 리스너</h2>
+
+          <p><code>@EventListener</code>의 <code>condition</code> 속성으로 SpEL(Spring Expression Language)을 사용해 조건부 리스너를 만들 수 있다.</p>
+
+<pre><code class="language-java">@Component
+@Slf4j
+public class ConditionalEventListener {
+
+    @EventListener(condition = "#event.price &gt;= 100000")
+    @Async
+    public void handleExpensiveOrder(OrderCreatedEvent event) {
+        log.info("고가 주문 감지! orderId={}, price={}원", event.getOrderId(), event.getPrice());
+    }
+
+    @EventListener(condition = "#event.userId.startsWith('VIP')")
+    @Async
+    public void handleVipOrder(OrderCreatedEvent event) {
+        log.info("VIP 주문: userId={}", event.getUserId());
+    }
+
+    @EventListener(condition = "#event.price &gt;= 10000 and #event.coffeeType == '아메리카노'")
+    @Async
+    public void handleExpensiveAmericano(OrderCreatedEvent event) {
+        log.info("고가 아메리카노 주문!", event.getOrderId());
+    }
+}</code></pre>
+          <ul>
+            <li><code>condition = "#event.price &gt;= 100000"</code> — 이벤트의 <code>price</code>가 10만원 이상일 때만 리스너가 실행된다.</li>
+            <li><code>#event</code>는 리스너 메서드의 파라미터 이름을 가리킨다.</li>
+            <li><code>and</code>, <code>or</code> 등의 논리 연산자로 여러 조건을 조합할 수 있다.</li>
+          </ul>
+
+          <p>이 기능은 모든 주문에 대해 리스너가 동작하되, 내부에서 if문으로 걸러내는 것보다 깔끔하다. 조건에 맞지 않으면 리스너 메서드 자체가 호출되지 않으므로 불필요한 스레드 할당도 방지된다.</p>
+
+          <h2>자주 하는 실수</h2>
+
+          <h4>@TransactionalEventListener를 트랜잭션 없이 사용</h4>
+
+          <p><code>@TransactionalEventListener</code>는 트랜잭션 컨텍스트가 있을 때만 동작한다. <code>@Transactional</code>이 없는 메서드에서 이벤트를 발행하면, 리스너가 <mark>아예 실행되지 않는다.</mark> 트랜잭션이 없는 상황에서는 <code>@EventListener</code>를 사용해야 한다.</p>
+
+          <h4>이벤트 리스너에서 원본 트랜잭션에 의존</h4>
+
+          <p><code>AFTER_COMMIT</code> 리스너는 원본 트랜잭션이 이미 끝난 상태에서 실행된다. 리스너 안에서 DB 쓰기 작업을 하려면 <mark>새로운 트랜잭션</mark>을 열어야 한다. <code>@Transactional(propagation = REQUIRES_NEW)</code>를 사용하거나, 별도의 서비스 메서드를 호출하자.</p>
+
+          <h4>이벤트 객체에 엔티티를 직접 넣기</h4>
+
+          <p>이벤트에 JPA 엔티티를 직접 담으면, 비동기 리스너에서 지연 로딩(Lazy Loading) 시 세션이 닫혀 <code>LazyInitializationException</code>이 발생할 수 있다. 이벤트에는 ID나 DTO 같은 단순 값만 담는 것이 안전하다.</p>
+
+          <h2>정리</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">핵심 요약</div>
+            <p>- Spring Event는 이벤트 발행-구독 패턴으로 서비스 간 결합도를 낮춘다.</p>
+            <p>- <code>@EventListener</code> + <code>@Async</code>로 비동기 이벤트 처리를 구현한다.</p>
+            <p>- <code>@TransactionalEventListener</code>로 트랜잭션 커밋/롤백 시점에 맞춰 리스너를 실행한다.</p>
+            <p>- <code>condition</code> 속성으로 SpEL 기반 조건부 리스너를 만들 수 있다.</p>
+          </div>
+
+          <p>이벤트 기반으로 비동기 처리를 설계했지만, 비동기 작업에서 예외가 발생하면 어떻게 될까? 다음 편에서 비동기 예외 처리와 재시도 전략을 다룬다.</p>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Spring</span>
+          <span>#Event</span>
+          <span>#EventListener</span>
+          <span>#TransactionalEventListener</span>
+          <span>#비동기</span>
+          <span>#이벤트</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

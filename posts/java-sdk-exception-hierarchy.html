@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Java] SDK 예외 계층 확인법 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Java] SDK 예외 계층 확인법</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.02.20
+        </div>
+
+        <div class="post-content">
+
+
+          <p>외부 라이브러리(AWS SDK 등)의 예외를 catch로 잡으려면, 먼저 예외 계층 구조를 알아야 한다. 어떤 예외가 어떤 예외의 하위인지 모르면 catch를 제대로 구성할 수 없다. 확인하는 방법 3가지를 정리한다.</p>
+
+          <hr>
+
+          <h2>IntelliJ - Class Hierarchy (가장 빠른 방법)</h2>
+
+          <p>클래스명 우클릭 → <code>Open in</code> → <code>Class hierarchy</code></p>
+
+          <p>전체 상속 트리를 한눈에 볼 수 있다.</p>
+
+<pre><code>SdkException
+├── SdkClientException       — 네트워크, 타임아웃 등
+└── SdkServiceException
+    └── S3Exception           — S3 서버 측 오류
+        ├── NoSuchKeyException
+        ├── InvalidRequestException
+        ├── TooManyPartsException
+        └── ...</code></pre>
+          <hr>
+
+          <h2>IntelliJ - 클래스 소스 직접 확인</h2>
+
+          <p>클래스명 위에 커서 놓고 <code>Ctrl+B</code> (또는 클릭) → 소스로 이동한다.</p>
+
+          <p>소스 첫 줄의 <code>extends</code>에서 부모가 바로 보인다.</p>
+
+<pre><code class="language-java">public class InvalidRequestException extends S3Exception {  // ← 여기</code></pre>
+          <hr>
+
+          <h2>공식 문서</h2>
+
+          <p>각 클래스 페이지의 클래스 정의 부분에 <code>extends</code>가 명시되어 있다.</p>
+
+          <ul>
+            <li>AWS SDK v2 S3Client API: https://sdk.amazonaws.com/java/api/latest/software/amazon/awssdk/services/s3/S3Client.html</li>
+            <li>각 메서드 페이지의 <code>Throws:</code> 섹션에서 던질 수 있는 예외 목록을 확인할 수 있다</li>
+          </ul>
+
+          <hr>
+
+          <h2>catch에서 활용하는 방법</h2>
+
+          <p>계층을 파악하면, 하위 예외를 하나씩 잡을 필요 없이 부모로 잡을 수 있다.</p>
+
+<pre><code class="language-java">// ❌ 하위 예외를 하나씩 잡는 경우
+} catch (InvalidRequestException e) {
+} catch (TooManyPartsException e) {
+} catch (NoSuchKeyException e) {
+// ...
+
+// ✅ 부모로 잡으면 하위 전부 포함
+} catch (S3Exception e) {          // S3 서버 측 오류 전부
+} catch (SdkClientException e) {   // 클라이언트 측 오류 전부
+}</code></pre>
+          <hr>
+
+          <h2>AWS SDK v2 예외 계층 참고</h2>
+
+<pre><code>SdkException
+├── SdkClientException
+│   └── 네트워크 오류, 타임아웃, 설정 오류 등
+└── SdkServiceException
+    └── AwsServiceException
+        └── S3Exception
+            ├── NoSuchKeyException        — 파일 없음
+            ├── NoSuchBucketException     — 버킷 없음
+            ├── AccessDeniedException     — 권한 없음
+            ├── InvalidRequestException   — 잘못된 요청
+            ├── TooManyPartsException     — Multipart 파트 초과
+            └── ...</code></pre>
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Java</span>
+          <span>#AWS</span>
+          <span>#예외처리</span>
+          <span>#IntelliJ</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>
