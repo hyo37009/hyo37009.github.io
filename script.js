@@ -465,6 +465,245 @@ document.querySelectorAll('.post-content pre code[class*="language-"]').forEach(
 })();
 
 
+/* ========================================
+   Mermaid 다이어그램 Pan/Zoom 뷰어
+   ======================================== */
+
+(function() {
+  function initPanZoom(el) {
+    if (el.closest('.mermaid-frame')) return;
+    var svg = el.querySelector('svg');
+    if (!svg) return;
+
+    // ── 1. 원본 크기 파악 ──
+    // viewBox를 사용하되, height가 너무 작으면(=아직 레이아웃 미완료) getBoundingClientRect 사용
+    var vb = svg.viewBox.baseVal;
+    var origW, origH;
+    if (vb && vb.width > 0 && vb.height > 50) {
+      origW = vb.width;
+      origH = vb.height;
+    } else {
+      var r = svg.getBoundingClientRect();
+      origW = r.width  || 600;
+      origH = r.height || 300;
+    }
+    console.log('[mermaid-viewer] origW=' + origW + ' origH=' + origH);
+
+    // ── 2. SVG inline style 정리 후 크기 고정 ──
+    svg.removeAttribute('style');   // mermaid의 max-width 제거
+    svg.style.display  = 'block';
+    svg.style.width    = origW + 'px';
+    svg.style.height   = origH + 'px';
+
+    // ── 3. DOM 구성 ──
+    var frame    = document.createElement('div');  frame.className    = 'mermaid-frame';
+    var titlebar = document.createElement('div');  titlebar.className = 'mermaid-titlebar';
+    var viewport = document.createElement('div');  viewport.className = 'mermaid-viewport';
+    var canvas   = document.createElement('div');  canvas.className   = 'mermaid-canvas';
+    var zoomLabel = document.createElement('div'); zoomLabel.className = 'mermaid-zoom-label';
+    var hint      = document.createElement('div'); hint.className      = 'mermaid-hint';
+
+    titlebar.innerHTML =
+      '<div class="mermaid-titlebar-dots">' +
+        '<div class="mermaid-dot"></div><div class="mermaid-dot"></div><div class="mermaid-dot"></div>' +
+      '</div>' +
+      '<span class="mermaid-titlebar-name">📊 diagram.svg</span>' +
+      '<div class="mermaid-controls">' +
+        '<button class="mermaid-btn btn-fit" title="화면 맞춤">⤢</button>' +
+        '<button class="mermaid-btn btn-out" title="축소">−</button>' +
+        '<button class="mermaid-btn btn-in"  title="확대">+</button>' +
+        '<button class="mermaid-btn btn-reset" title="리셋">↺</button>' +
+      '</div>';
+    zoomLabel.textContent = '100%';
+    hint.textContent = '휠: 줌  드래그: 이동';
+
+    canvas.style.transformOrigin = '0 0';
+
+    // ── 4. DOM 조립 ──
+    el.parentNode.insertBefore(frame, el);
+    canvas.appendChild(el);
+    viewport.appendChild(canvas);
+    viewport.appendChild(zoomLabel);
+    viewport.appendChild(hint);
+    frame.appendChild(titlebar);
+    frame.appendChild(viewport);
+
+    // ── 5. 상태 ──
+    var scale = 1, panX = 0, panY = 0;
+    var MIN = 0.05, MAX = 8;
+
+    function apply() {
+      canvas.style.transform = 'translate(' + panX + 'px, ' + panY + 'px) scale(' + scale + ')';
+      zoomLabel.textContent = Math.round(scale * 100) + '%';
+    }
+
+    function zoomAt(mx, my, ns) {
+      ns = Math.min(Math.max(ns, MIN), MAX);
+      var cx = (mx - panX) / scale;
+      var cy = (my - panY) / scale;
+      panX = mx - cx * ns;
+      panY = my - cy * ns;
+      scale = ns;
+      apply();
+    }
+
+    // ── 6. initView: 뷰포트 너비·최대높이 기준 fit ──
+    function initView() {
+      var PAD = 40;
+      // viewport가 DOM에 붙은 후 clientWidth를 읽어야 정확함
+      var vw = viewport.clientWidth || frame.offsetWidth || 700;
+      var maxH = Math.min(window.innerHeight * 0.72, 680);
+
+      var scaleByW = (vw  - PAD) / origW;
+      var scaleByH = (maxH - PAD) / origH;
+      scale = Math.min(scaleByW, scaleByH, 1);
+      scale = Math.max(scale, MIN);
+
+      var vpH = Math.max(Math.round(origH * scale) + PAD, 150);
+      viewport.style.height = vpH + 'px';
+
+      panX = (vw - origW * scale) / 2;
+      panY = (vpH - origH * scale) / 2;  // 수직 중앙 정렬
+
+      apply();
+      console.log('[mermaid-viewer] initView scale=' + Math.round(scale*100) + '% vw=' + vw + ' vph=' + vpH);
+    }
+
+    function fit() {
+      var PAD = 40;
+      var vw = viewport.clientWidth;
+      var maxH = Math.min(window.innerHeight * 0.72, 680);
+      var s = Math.min((vw - PAD) / origW, (maxH - PAD) / origH, 1);
+      scale = Math.max(MIN, s);
+      var vpH = Math.max(Math.round(origH * scale) + PAD, 150);
+      viewport.style.height = vpH + 'px';
+      panX = (vw - origW * scale) / 2;
+      panY = (vpH - origH * scale) / 2;
+      apply();
+    }
+
+    function reset() { scale = 1; panX = 0; panY = 0; apply(); }
+
+    // initView는 레이아웃이 확정된 후 실행 (requestAnimationFrame)
+    requestAnimationFrame(function() {
+      requestAnimationFrame(initView); // 2프레임 기다려서 레이아웃 완료 보장
+    });
+
+    // 버튼: 뷰포트 중앙 기준 줌
+    titlebar.querySelector('.btn-fit').addEventListener('click', fit);
+    titlebar.querySelector('.btn-reset').addEventListener('click', reset);
+    titlebar.querySelector('.btn-in').addEventListener('click', function() {
+      zoomAt(viewport.clientWidth / 2, viewport.clientHeight / 2, scale * 1.5);
+    });
+    titlebar.querySelector('.btn-out').addEventListener('click', function() {
+      zoomAt(viewport.clientWidth / 2, viewport.clientHeight / 2, scale / 1.5);
+    });
+
+    // 휠: 항상 줌 (커서 위치 기준)
+    viewport.addEventListener('wheel', function(e) {
+      e.preventDefault();
+      var rect = viewport.getBoundingClientRect();
+      var mx = e.clientX - rect.left;
+      var my = e.clientY - rect.top;
+      // deltaY 기준, deltaX는 무시 (트랙패드 대각선 방지)
+      var factor = e.deltaY > 0 ? 0.85 : 1.15;
+      zoomAt(mx, my, scale * factor);
+    }, { passive: false });
+
+    // 마우스 드래그 패닝
+    var dragging = false, sx, sy, spx, spy;
+    viewport.addEventListener('mousedown', function(e) {
+      if (e.button !== 0) return;
+      dragging = true; sx = e.clientX; sy = e.clientY; spx = panX; spy = panY;
+      viewport.classList.add('panning'); e.preventDefault();
+    });
+    document.addEventListener('mousemove', function(e) {
+      if (!dragging) return;
+      panX = spx + (e.clientX - sx);
+      panY = spy + (e.clientY - sy);
+      apply();
+    });
+    document.addEventListener('mouseup', function() {
+      if (dragging) { dragging = false; viewport.classList.remove('panning'); }
+    });
+
+    // 터치: 패닝 + 핀치 줌
+    var lDist = null, tsx, tsy, tspx, tspy;
+    viewport.addEventListener('touchstart', function(e) {
+      if (e.touches.length === 1) {
+        tsx = e.touches[0].clientX; tsy = e.touches[0].clientY;
+        tspx = panX; tspy = panY; lDist = null;
+      } else if (e.touches.length === 2) {
+        lDist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY);
+      }
+      e.preventDefault();
+    }, { passive: false });
+    viewport.addEventListener('touchmove', function(e) {
+      if (e.touches.length === 1 && lDist === null) {
+        panX = tspx + (e.touches[0].clientX - tsx);
+        panY = tspy + (e.touches[0].clientY - tsy);
+        apply();
+      } else if (e.touches.length === 2 && lDist) {
+        var d = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY);
+        var cx = (viewport.clientWidth  / 2 - panX) / scale;
+        var cy = (viewport.clientHeight / 2 - panY) / scale;
+        scale = Math.min(Math.max(scale * (d / lDist), MIN), MAX);
+        panX = viewport.clientWidth  / 2 - cx * scale;
+        panY = viewport.clientHeight / 2 - cy * scale;
+        lDist = d; apply();
+      }
+      e.preventDefault();
+    }, { passive: false });
+    viewport.addEventListener('touchend', function() { lDist = null; });
+  }
+
+  // mermaid 렌더링 완료 판단:
+  // data-processed="true" + SVG + viewBox.height > 50 모두 만족해야 함
+  function isReady(el) {
+    if (el.getAttribute('data-processed') !== 'true') return false;
+    var svg = el.querySelector('svg');
+    if (!svg) return false;
+    var vb = svg.viewBox.baseVal;
+    return vb && vb.width > 0 && vb.height > 50;
+  }
+
+  function watchAndInit(el) {
+    if (isReady(el)) {
+      initPanZoom(el);
+      return;
+    }
+    // data-processed 변경 + childList 변경 모두 감지
+    var obs = new MutationObserver(function() {
+      if (isReady(el)) {
+        obs.disconnect();
+        // rAF 1번: 브라우저가 SVG 내부 레이아웃까지 마친 후 실행
+        requestAnimationFrame(function() { initPanZoom(el); });
+      }
+    });
+    obs.observe(el, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['data-processed']
+    });
+  }
+
+  function initAll() {
+    document.querySelectorAll('.mermaid').forEach(watchAndInit);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAll);
+  } else {
+    initAll();
+  }
+})();
+
+
 // 코나미 커맨드 이스터에그
 let konamiSequence = [];
 const konamiCode = [

@@ -659,6 +659,128 @@ a:hover {
 }
 
 
+/* ========================================
+   Mermaid 다이어그램 뷰어
+   ======================================== */
+
+.mermaid-frame {
+  margin: 20px 0;
+  border: 2px solid var(--border-color);
+  background: #fff;
+  box-shadow: 3px 3px 0 rgba(90,155,191,0.12);
+}
+
+.mermaid-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  background: linear-gradient(90deg, #a8cce0, #c4e0f0);
+  border-bottom: 1px solid var(--border-color);
+  user-select: none;
+}
+
+.mermaid-titlebar-dots {
+  display: flex;
+  gap: 4px;
+  margin-right: 2px;
+}
+
+.mermaid-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1px solid rgba(0,0,0,0.12);
+}
+.mermaid-dot:nth-child(1) { background: #ff6b6b; }
+.mermaid-dot:nth-child(2) { background: #ffd93d; }
+.mermaid-dot:nth-child(3) { background: #6bcb77; }
+
+.mermaid-titlebar-name {
+  flex: 1;
+  font-size: 11px;
+  color: #fff;
+  text-shadow: 0 1px 1px rgba(0,0,0,0.18);
+  letter-spacing: 0.3px;
+}
+
+.mermaid-controls {
+  display: flex;
+  gap: 2px;
+}
+
+.mermaid-btn {
+  font-family: 'NeoDunggeunmo', monospace;
+  width: 22px;
+  height: 22px;
+  font-size: 13px;
+  border: 1px solid rgba(255,255,255,0.35);
+  background: rgba(255,255,255,0.18);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s, border-color 0.12s;
+  padding: 0;
+  line-height: 1;
+}
+
+.mermaid-btn:hover {
+  background: rgba(255,255,255,0.38);
+  border-color: rgba(255,255,255,0.7);
+}
+
+.mermaid-btn:active {
+  background: rgba(255,255,255,0.55);
+  box-shadow: inset 1px 1px 0 rgba(0,0,0,0.1);
+}
+
+.mermaid-viewport {
+  overflow: hidden;
+  cursor: grab;
+  position: relative;
+  background-color: #f8fcff;
+  background-image:
+    linear-gradient(rgba(90,155,191,0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(90,155,191,0.07) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.mermaid-viewport.panning {
+  cursor: grabbing;
+}
+
+.mermaid-canvas {
+  display: inline-block;
+  padding: 20px;
+}
+
+.mermaid-zoom-label {
+  position: absolute;
+  bottom: 7px;
+  right: 8px;
+  font-size: 10px;
+  color: var(--text-light);
+  font-family: 'NeoDunggeunmo', monospace;
+  pointer-events: none;
+  background: rgba(255,255,255,0.88);
+  padding: 1px 6px;
+  border: 1px solid var(--border-color);
+}
+
+.mermaid-hint {
+  position: absolute;
+  bottom: 7px;
+  left: 8px;
+  font-size: 10px;
+  color: var(--text-light);
+  font-family: 'NeoDunggeunmo', monospace;
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+
 /* ── 빈 상태 ── */
 
 .empty-state {
