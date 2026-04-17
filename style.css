@@ -859,9 +859,9 @@ a:hover {
 
 
 /* ── 방명록 ──
-   컨셉: 터미널 감성의 편지함 / 쪽지 핀보드
-   - 레트로 파스텔 블루 팔레트 유지, 픽셀 폰트 유지
-   - 각진 박스 → 미묘한 radius + 종이 질감 + 쪽지 틸트로 리듬 부여
+   컨셉: 터미널 감성의 편지함 / 쪽지 핀보드 (담백 버전)
+   - 편지지 가로선 배경 · 스카치테이프 · 터미널 라벨은 유지
+   - 그라데이션 · shimmer · 복합 shadow 등 과장은 걷어내고 블로그 톤에 맞춤
 */
 
 .gb-counter {
@@ -872,15 +872,13 @@ a:hover {
   color: var(--text-light);
   margin-bottom: 20px;
   padding: 8px 14px;
-  background: linear-gradient(90deg, #eef6fc 0%, #f6fbfe 60%, transparent);
+  background: var(--bg-color);
   border-left: 3px solid var(--accent);
-  border-radius: 0 10px 10px 0;
-  box-shadow: 2px 2px 0 rgba(90,155,191,0.08);
+  border-radius: 0 8px 8px 0;
 }
 
 .gb-counter-icon {
   font-size: 15px;
-  filter: drop-shadow(0 1px 0 rgba(90,155,191,0.2));
 }
 
 .gb-counter strong {
@@ -889,7 +887,7 @@ a:hover {
   font-variant-numeric: tabular-nums;
 }
 
-/* 작성 폼 — 윈도우 프레임 × 편지지 */
+/* 작성 폼 — 편지지 가로선 배경 유지 */
 .gb-write {
   position: relative;
   margin: 8px 0 28px;
@@ -905,32 +903,8 @@ a:hover {
       rgba(168,204,224,0.08) 28px
     );
   background-blend-mode: multiply;
-  box-shadow:
-    3px 3px 0 rgba(90,155,191,0.10),
-    0 6px 16px -8px rgba(90,155,191,0.25);
+  box-shadow: 2px 2px 0 rgba(90,155,191,0.08);
   overflow: hidden;
-}
-
-/* 좌상단 스카치테이프 장식 */
-.gb-write::before {
-  content: '';
-  position: absolute;
-  top: -8px;
-  left: 22px;
-  width: 52px;
-  height: 18px;
-  background: linear-gradient(
-    180deg,
-    rgba(255,255,255,0.55),
-    rgba(212,234,247,0.55) 40%,
-    rgba(168,204,224,0.40)
-  );
-  border: 1px solid rgba(90,155,191,0.25);
-  border-top: none;
-  transform: rotate(-2deg);
-  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-  pointer-events: none;
-  z-index: 2;
 }
 
 .gb-write-header {
@@ -938,40 +912,34 @@ a:hover {
   align-items: center;
   gap: 6px;
   padding: 7px 12px;
-  background:
-    linear-gradient(180deg, #b6d4e6 0%, #a8cce0 50%, #9cc3d9 100%);
+  background: var(--bg-color);
   border-bottom: 1px solid var(--border-color);
   position: relative;
 }
 
-/* 헤더 우측 터미널 라벨 */
+/* 헤더 우측 터미널 라벨 유지 */
 .gb-write-header::after {
   content: '$ write --to=nbh';
   margin-left: auto;
   font-size: 10px;
-  color: rgba(255,255,255,0.75);
+  color: var(--text-light);
   letter-spacing: 0.5px;
-  text-shadow: 0 1px 0 rgba(0,0,0,0.12);
 }
 
 .gb-write-dot {
-  width: 11px;
-  height: 11px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
-  border: 1px solid rgba(0,0,0,0.2);
-  box-shadow:
-    inset 0 1px 1px rgba(255,255,255,0.45),
-    inset 0 -1px 1px rgba(0,0,0,0.08);
+  border: 1px solid rgba(0,0,0,0.15);
 }
 
-.gb-write-dot:nth-child(1) { background: radial-gradient(circle at 35% 30%, #ff9595, #e55a5a); }
-.gb-write-dot:nth-child(2) { background: radial-gradient(circle at 35% 30%, #ffe570, #e8bd28); }
-.gb-write-dot:nth-child(3) { background: radial-gradient(circle at 35% 30%, #8ddc97, #52b867); }
+.gb-write-dot:nth-child(1) { background: #ff6b6b; }
+.gb-write-dot:nth-child(2) { background: #ffd93d; }
+.gb-write-dot:nth-child(3) { background: #6bcb77; }
 
 .gb-write-title {
   font-size: 11px;
-  color: #fff;
-  text-shadow: 0 1px 1px rgba(0,0,0,0.2);
+  color: var(--text-color);
   margin-left: 8px;
   letter-spacing: 0.4px;
 }
@@ -998,23 +966,11 @@ a:hover {
 }
 
 .gb-field label {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+  display: block;
   font-size: 11px;
   margin-bottom: 6px;
   color: var(--text-light);
-  letter-spacing: 0.6px;
-}
-
-.gb-field label::before {
-  content: '';
-  display: inline-block;
-  width: 5px;
-  height: 5px;
-  background: var(--accent);
-  border-radius: 50%;
-  opacity: 0.55;
+  letter-spacing: 0.5px;
 }
 
 .gb-field input,
@@ -1022,14 +978,13 @@ a:hover {
   font-family: 'NeoDunggeunmo', 'Courier New', monospace;
   width: 100%;
   padding: 10px 12px;
-  border: 1.5px solid var(--border-color);
-  border-radius: 8px;
-  background: #fbfeff;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: #fff;
   font-size: 13px;
   color: var(--text-color);
-  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+  transition: border-color 0.2s, box-shadow 0.2s;
   outline: none;
-  box-shadow: inset 0 1px 2px rgba(90,155,191,0.06);
 }
 
 .gb-field input::placeholder,
@@ -1040,10 +995,7 @@ a:hover {
 .gb-field input:focus,
 .gb-field textarea:focus {
   border-color: var(--accent);
-  box-shadow:
-    inset 0 1px 2px rgba(90,155,191,0.06),
-    0 0 0 3px rgba(90,155,191,0.14);
-  background: #fff;
+  box-shadow: 0 0 0 2px rgba(90,155,191,0.15);
 }
 
 .gb-field textarea {
@@ -1060,12 +1012,7 @@ a:hover {
   letter-spacing: 0.3px;
 }
 
-.gb-char-count::before {
-  content: '✎ ';
-  opacity: 0.45;
-}
-
-/* 아이콘 피커 — 동그란 스티커 */
+/* 아이콘 피커 */
 .gb-icon-picker {
   display: flex;
   gap: 5px;
@@ -1073,88 +1020,55 @@ a:hover {
 }
 
 .gb-icon-btn {
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   font-size: 16px;
-  border: 1.5px solid var(--border-color);
+  border: 1px solid var(--border-color);
   border-radius: 50%;
-  background: radial-gradient(circle at 30% 25%, #ffffff, #f4fafd 70%);
+  background: #fff;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.18s cubic-bezier(0.34,1.56,0.64,1), background 0.2s, border-color 0.2s, box-shadow 0.2s;
+  transition: transform 0.15s, background 0.15s, border-color 0.15s;
   padding: 0;
   line-height: 1;
 }
 
 .gb-icon-btn:hover {
-  background: radial-gradient(circle at 30% 25%, #ffffff, #e3f1f9 80%);
+  background: var(--bg-color);
   border-color: var(--accent);
-  transform: translateY(-2px) scale(1.08) rotate(-4deg);
-  box-shadow: 0 4px 8px -2px rgba(90,155,191,0.25);
+  transform: scale(1.04);
 }
 
 .gb-icon-btn.selected {
-  background: radial-gradient(circle at 30% 25%, #ffffff, #c5e1f0 80%);
+  background: #d4eaf7;
   border-color: var(--accent);
-  box-shadow:
-    0 0 0 3px rgba(90,155,191,0.22),
-    inset 0 1px 3px rgba(90,155,191,0.15);
-  transform: scale(1.05);
+  box-shadow: 0 0 0 2px rgba(90,155,191,0.18);
 }
 
-/* 제출 버튼 — 우표/봉랍 느낌의 pill */
+/* 제출 버튼 */
 .gb-submit-btn {
   font-family: 'NeoDunggeunmo', 'Courier New', monospace;
   width: 100%;
-  padding: 12px;
+  padding: 11px;
   margin-top: 4px;
-  background: linear-gradient(180deg, #dbecf7 0%, #b6d4e6 100%);
+  background: #d4eaf7;
   border: 1.5px solid var(--accent);
   border-radius: 999px;
   cursor: pointer;
   font-size: 14px;
   color: #2d556b;
   letter-spacing: 1px;
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.6),
-    0 2px 0 rgba(90,155,191,0.25),
-    0 6px 14px -6px rgba(90,155,191,0.4);
-  transition: transform 0.15s, box-shadow 0.15s, background 0.2s;
-  position: relative;
-  overflow: hidden;
-}
-
-.gb-submit-btn::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 60%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.45), transparent);
-  transition: left 0.55s ease;
-}
-
-.gb-submit-btn:hover::before {
-  left: 140%;
+  transition: background 0.2s, transform 0.15s;
 }
 
 .gb-submit-btn:hover {
-  background: linear-gradient(180deg, #c8e0ed 0%, #a0c4d9 100%);
-  transform: translateY(-1px);
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.55),
-    0 3px 0 rgba(90,155,191,0.28),
-    0 10px 18px -8px rgba(90,155,191,0.5);
+  background: #b6d4e6;
 }
 
 .gb-submit-btn:active {
   transform: translateY(1px);
-  box-shadow:
-    inset 0 1px 3px rgba(90,155,191,0.25),
-    0 0 0 rgba(90,155,191,0.25);
 }
 
 .gb-submit-btn:disabled {
@@ -1163,7 +1077,7 @@ a:hover {
   transform: none;
 }
 
-/* 방명록 엔트리 목록 — 쪽지 핀보드 */
+/* 엔트리 목록 — 쪽지 핀보드 */
 .gb-list {
   display: flex;
   flex-direction: column;
@@ -1171,30 +1085,23 @@ a:hover {
   padding: 4px 2px 8px;
 }
 
-/* 개별 엔트리 — 포스트잇 쪽지 */
+/* 개별 엔트리 — 포스트잇 쪽지 (틸트 완화) */
 .gb-entry {
   display: flex;
   position: relative;
   border: 1px solid var(--border-color);
   border-radius: 10px;
-  background:
-    linear-gradient(135deg, #ffffff 0%, #fafdff 65%, #f3f9fc 100%);
-  box-shadow:
-    2px 2px 0 rgba(90,155,191,0.08),
-    0 4px 12px -6px rgba(90,155,191,0.18);
-  transition:
-    transform 0.22s cubic-bezier(0.34,1.2,0.64,1),
-    box-shadow 0.22s,
-    border-color 0.22s;
+  background: #fff;
+  box-shadow: 2px 2px 0 rgba(90,155,191,0.08);
+  transition: transform 0.22s cubic-bezier(0.34,1.2,0.64,1), box-shadow 0.22s, border-color 0.22s;
   overflow: visible;
 }
 
-/* 엔트리별 살짝씩 다른 틸트 — 포스트잇 감성 */
-.gb-entry:nth-child(3n+1) { transform: rotate(-0.5deg); }
-.gb-entry:nth-child(3n+2) { transform: rotate(0.4deg); }
-.gb-entry:nth-child(3n+3) { transform: rotate(-0.25deg); }
+.gb-entry:nth-child(3n+1) { transform: rotate(-0.15deg); }
+.gb-entry:nth-child(3n+2) { transform: rotate(0.1deg); }
+.gb-entry:nth-child(3n+3) { transform: rotate(-0.07deg); }
 
-/* 우상단 테이프 조각 */
+/* 엔트리 테이프 */
 .gb-entry::after {
   content: '';
   position: absolute;
@@ -1202,18 +1109,11 @@ a:hover {
   right: 28px;
   width: 36px;
   height: 14px;
-  background: linear-gradient(
-    180deg,
-    rgba(255,255,255,0.55),
-    rgba(200,226,240,0.55) 50%,
-    rgba(168,204,224,0.35)
-  );
+  background: rgba(168,204,224,0.4);
   border: 1px solid rgba(90,155,191,0.22);
   border-top: none;
   transform: rotate(3deg);
-  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
   pointer-events: none;
-  opacity: 0.85;
   border-radius: 1px;
 }
 
@@ -1225,10 +1125,8 @@ a:hover {
 
 .gb-entry:hover {
   border-color: #8fbcd6;
-  box-shadow:
-    3px 3px 0 rgba(90,155,191,0.12),
-    0 12px 24px -10px rgba(90,155,191,0.35);
-  transform: rotate(0deg) translateY(-3px);
+  box-shadow: 3px 3px 0 rgba(90,155,191,0.14);
+  transform: rotate(0deg) translateY(-1px);
   z-index: 2;
 }
 
@@ -1239,20 +1137,7 @@ a:hover {
   align-items: flex-start;
   justify-content: center;
   padding: 14px 0 10px;
-  border-right: 1px dashed rgba(90,155,191,0.35);
-  position: relative;
-}
-
-/* 구분선 위 장식 도트 */
-.gb-entry-side::after {
-  content: '';
-  position: absolute;
-  right: -3px;
-  bottom: 10px;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: rgba(90,155,191,0.5);
+  border-right: 1px solid var(--border-color);
 }
 
 .gb-entry-icon {
@@ -1265,16 +1150,11 @@ a:hover {
   justify-content: center;
   border-radius: 50%;
   background: #eef6fc; /* JS에서 inline background로 덮어씀 */
-  box-shadow:
-    inset 0 1px 2px rgba(255,255,255,0.55),
-    inset 0 -1px 3px rgba(0,0,0,0.05),
-    0 2px 4px -1px rgba(0,0,0,0.08);
-  filter: saturate(1.1);
   transition: transform 0.2s;
 }
 
 .gb-entry:hover .gb-entry-icon {
-  transform: scale(1.08) rotate(-5deg);
+  transform: scale(1.02);
 }
 
 .gb-entry-body {
@@ -1282,19 +1162,6 @@ a:hover {
   min-width: 0;
   padding: 14px 18px 14px 16px;
   position: relative;
-}
-
-/* 본문 좌측 섬세한 수직 도트 가이드 */
-.gb-entry-body::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 14px;
-  bottom: 14px;
-  width: 1px;
-  background-image: radial-gradient(circle, rgba(90,155,191,0.35) 1px, transparent 1px);
-  background-size: 1px 4px;
-  background-repeat: repeat-y;
 }
 
 .gb-entry-header {
@@ -1329,11 +1196,11 @@ a:hover {
 .gb-entry-date {
   font-size: 10.5px;
   color: var(--text-light);
-  letter-spacing: 0.4px;
+  letter-spacing: 0.3px;
   padding: 2px 8px;
-  border: 1px dashed rgba(90,155,191,0.35);
+  border: 1px solid var(--border-color);
   border-radius: 999px;
-  background: rgba(255,255,255,0.6);
+  background: var(--bg-color);
   white-space: nowrap;
 }
 
@@ -1348,46 +1215,18 @@ a:hover {
   letter-spacing: -0.1px;
 }
 
-/* 빈 상태 — 비어있는 편지함 */
+/* 빈 상태 */
 .gb-empty {
   text-align: center;
-  padding: 56px 20px 50px;
-  border: 1.5px dashed rgba(90,155,191,0.45);
-  border-radius: 14px;
-  background:
-    radial-gradient(
-      ellipse at 50% 0%,
-      rgba(212,234,247,0.45) 0%,
-      rgba(250,254,255,0.3) 50%,
-      transparent 80%
-    ),
-    #fbfeff;
-  position: relative;
+  padding: 50px 20px;
+  border: 1.5px dashed var(--border-color);
+  border-radius: 12px;
+  background: var(--bg-color);
 }
-
-.gb-empty::before,
-.gb-empty::after {
-  content: '';
-  position: absolute;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: rgba(90,155,191,0.35);
-}
-
-.gb-empty::before { top: 12px; left: 14px; }
-.gb-empty::after  { top: 12px; right: 14px; }
 
 .gb-empty-icon {
-  font-size: 44px;
+  font-size: 42px;
   margin-bottom: 14px;
-  filter: drop-shadow(0 3px 4px rgba(90,155,191,0.2));
-  animation: gbEmptyBob 3.2s ease-in-out infinite;
-}
-
-@keyframes gbEmptyBob {
-  0%, 100% { transform: translateY(0); }
-  50%      { transform: translateY(-4px); }
 }
 
 .gb-empty-text {
