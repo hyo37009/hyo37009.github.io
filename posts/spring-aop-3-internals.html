@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Spring AOP] 3. AOP 동작 원리와 주의사항 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Spring AOP] 3. AOP 동작 원리와 주의사항</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.03.12
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Spring AOP (3/3)</div>
+            <p>이전 편: <a href="spring-aop-2-advice-pointcut.html">[Spring AOP] 2. Advice와 Pointcut 활용</a></p>
+            <p>이 문서가 시리즈의 마지막 편입니다.</p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">Spring AOP 시리즈</div>
+            <p>1. <a href="스프링spring-aop01-aop-개념과-용어-정리.html">AOP 개념과 용어 정리</a></p>
+            <p>2. <a href="스프링spring-aop02-advice와-pointcut-활용.html">Advice와 Pointcut 활용</a></p>
+            <p>3. <a href="스프링spring-aop03-aop-동작-원리와-주의사항.html">AOP 동작 원리와 주의사항</a> ← 현재 문서</p>
+          </div>
+
+          <p><a href="스프링spring-aop02-advice와-pointcut-활용.html">이전 편</a>까지 AOP를 "사용하는 방법"을 다뤘다. 이번 편에서는 Spring AOP가 <mark>내부적으로 어떻게 동작하는지</mark> 들여다본다. 동작 원리를 알아야 함정을 피할 수 있다.</p>
+
+          <h2>프록시 기반 AOP</h2>
+
+          <p>Spring AOP의 핵심 메커니즘은 <mark>프록시 패턴</mark>이다. Aspect를 적용할 빈이 있으면, 스프링 컨테이너는 원본 객체 대신 프록시 객체를 생성해서 빈으로 등록한다.</p>
+
+          <p>호출자가 <code>orderService.createOrder()</code>를 호출하면, 실제로는 프록시의 <code>createOrder()</code>가 호출된다. 프록시가 Advice를 실행한 뒤, 원본 객체의 <code>createOrder()</code>를 호출하는 구조다.</p>
+
+<pre><code>호출자 → 프록시 객체 → Advice 실행 → 원본 객체 메서드</code></pre>
+          <p>이 과정을 단계별로 펼쳐보면 이렇다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    actor C as 호출자 (Controller)
+    
+    box rgb(240, 248, 255) Spring Container
+        participant P as 프록시 객체 (Proxy)
+        participant T as 원본 객체 (Target)
+    end
+
+    C->>P: 1. Target인 줄 알고 호출
+    Note over P: 2. 부가 기능 실행 (로깅 등)
+    P->>T: 3. proceed() 위임
+    Note over T: 4. 실제 비즈니스 로직 처리
+    T-->>P: 5. 결과 반환
+    Note over P: 6. 부가 기능 후처리
+    P-->>C: 7. 최종 결과 전달
+</div>
+          <p>Controller가 호출하는 <code>orderService</code>는 원본이 아니라 Proxy다. Proxy가 Advice를 먼저 실행하고, <code>proceed()</code>로 원본 Target에 위임한 뒤, 돌아온 결과에 후처리를 거쳐 최종 반환한다.</p>
+
+          <p>스프링 컨테이너에서 <code>@Autowired</code>로 주입받는 객체는 원본이 아니라 <mark>프록시</mark>다. <code>@Transactional</code>, <code>@Async</code>, <code>@Cacheable</code> 같은 어노테이션이 동작하는 것도 전부 같은 프록시 메커니즘이다.</p>
+
+          <h2>JDK Dynamic Proxy와 CGLIB</h2>
+
+          <p>스프링이 프록시를 만드는 방식은 두 가지다.</p>
+
+          <h3>JDK Dynamic Proxy</h3>
+
+          <p>Java 표준 라이브러리에 포함된 프록시 생성 방식이다. <mark>인터페이스를 기반</mark>으로 프록시를 생성한다.</p>
+
+<pre><code class="language-java">public interface OrderService {
+    void createOrder(OrderRequest request);
+}
+
+@Service
+public class OrderServiceImpl implements OrderService {
+    public void createOrder(OrderRequest request) {
+        // ...
+    }
+}</code></pre>
+          <p>이 경우 스프링은 <code>OrderService</code> 인터페이스를 구현하는 프록시 객체를 만든다. 프록시는 <code>OrderServiceImpl</code>과 같은 인터페이스를 구현하지만, <code>OrderServiceImpl</code>을 상속하지는 않는다.</p>
+
+          <p>두 방식이 프록시를 만드는 구조를 나란히 놓으면 차이가 선명하다.</p>
+
+<div class="mermaid">
+classDiagram
+    direction BT
+    
+    %% JDK Proxy
+    class OrderService {
+        <<interface>>
+    }
+    class OrderServiceImpl
+    class JdkProxy~동적 생성~
+    
+    OrderServiceImpl ..|> OrderService : 구현
+    JdkProxy ..|> OrderService : 구현 (인터페이스 필수)
+    
+    %% CGLIB Proxy
+    class OrderClass {
+        <<class>>
+    }
+    class CglibProxy~동적 생성~
+    
+    CglibProxy --|> OrderClass : 상속 (인터페이스 불필요)
+</div>
+          <p>JDK Dynamic Proxy(왼쪽)는 인터페이스를 구현하는 별개의 객체를 만든다. 그래서 Proxy와 <code>OrderServiceImpl</code> 사이에 상속 관계가 없다. CGLIB(오른쪽)는 클래스 자체를 상속해서 하위 클래스를 만든다. 그래서 구현 타입으로도 주입이 가능하다.</p>
+
+          <p>이 구조 때문에 JDK Dynamic Proxy를 쓸 때는 주입받는 타입이 <mark>인터페이스</mark>여야 한다.</p>
+
+<pre><code class="language-java">@Autowired
+private OrderService orderService; // 인터페이스 타입 → 정상
+
+@Autowired
+private OrderServiceImpl orderService; // 구현 타입 → 에러 가능</code></pre>
+          <h3>CGLIB</h3>
+
+          <p>인터페이스 없이 <mark>클래스를 상속</mark>해서 프록시를 만드는 방식이다. 바이트코드를 조작하여 Target 클래스의 하위 클래스를 런타임에 생성한다.</p>
+
+<pre><code class="language-java">@Service
+public class OrderService {
+    public void createOrder(OrderRequest request) {
+        // ...
+    }
+}</code></pre>
+          <p>인터페이스가 없으니 스프링은 CGLIB로 <code>OrderService</code>를 상속한 프록시 클래스를 만든다.</p>
+
+          <p>Spring Boot 2.0부터는 <mark>기본값이 CGLIB</mark>다. <code>spring.aop.proxy-target-class=true</code>가 디폴트로 설정되어 있어서, 인터페이스가 있든 없든 CGLIB 프록시를 사용한다. 인터페이스 유무를 신경 쓰지 않아도 되기 때문에 실무에서 훨씬 편하다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">두 방식의 차이 요약</div>
+            <p>- <strong>JDK Dynamic Proxy</strong> : 인터페이스 필수, 인터페이스 타입으로만 주입 가능</p>
+            <p>- <strong>CGLIB</strong> : 인터페이스 불필요, 클래스 타입으로 주입 가능, Spring Boot 기본값</p>
+            <p>실무에서 직접 선택할 일은 거의 없다. Spring Boot가 알아서 CGLIB를 쓴다.</p>
+          </div>
+
+          <h3>CGLIB의 제약</h3>
+
+          <p>CGLIB는 상속 기반이기 때문에 몇 가지 제약이 있다.</p>
+
+          <ul>
+            <li><strong>final 클래스</strong> : 상속이 불가능하므로 프록시를 만들 수 없다.</li>
+            <li><strong>final 메서드</strong> : 오버라이드가 불가능하므로 해당 메서드에는 Advice가 적용되지 않는다.</li>
+            <li><strong>private 메서드</strong> : 상속해도 접근할 수 없으므로 프록시가 가로챌 수 없다.</li>
+          </ul>
+
+<pre><code class="language-java">@Service
+public final class OrderService { // 프록시 생성 실패
+    // ...
+}</code></pre>
+
+<pre><code class="language-java">@Service
+public class OrderService {
+    public final void createOrder() { // 이 메서드에는 AOP 미적용
+        // ...
+    }
+}</code></pre>
+          <h2>내부 호출 함정</h2>
+
+          <p>프록시 기반 AOP에서 <mark>가장 빈번하게 발생하는 문제</mark>다. 같은 클래스 내에서 자기 자신의 메서드를 호출하면, 프록시를 거치지 않고 원본 객체의 메서드가 직접 호출된다.</p>
+
+<pre><code class="language-java">@Service
+public class OrderService {
+
+    public void processOrder(OrderRequest request) {
+        // 내부 호출 - 프록시를 거치지 않음
+        this.createOrder(request);
+    }
+
+    @LogExecutionTime  // 이 Advice가 동작하지 않는다
+    public void createOrder(OrderRequest request) {
+        // ...
+    }
+}</code></pre>
+          <p>외부에서 <code>orderService.createOrder()</code>를 호출하면 프록시를 경유하므로 <code>@LogExecutionTime</code>이 동작한다. 하지만 <code>processOrder()</code> 안에서 <code>this.createOrder()</code>를 호출하면 <code>this</code>가 <mark>프록시가 아닌 원본 객체</mark>를 가리키기 때문에 Advice가 적용되지 않는다.</p>
+
+          <p>두 경우의 차이를 나란히 놓으면 문제가 분명해진다.</p>
+
+<div class="mermaid">
+flowchart LR
+    classDef proxy fill:#fff3e0,stroke:#ef6c00,stroke-width:2px,stroke-dasharray: 5 5
+    classDef target fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    classDef danger fill:#ffebee,stroke:#c62828,stroke-width:2px
+
+    subgraph 외부_호출 [정상: 외부 호출]
+        Client1([외부 클라이언트]) -->|호출| P1{프록시}:::proxy
+        P1 -->|Advice 적용 후 위임| T1[원본 객체 메서드]:::target
+    end
+
+    subgraph 내부_호출 [함정: 내부 호출]
+        T2_Inner[동일 객체 내 다른 메서드] -->|this.호출| T2_Target[대상 메서드]:::danger
+        P2{프록시}:::proxy -. "경유 불가 (우회됨)" .-x T2_Target
+    end
+</div>
+          <p>왼쪽은 Controller → Proxy → Target으로 이어지면서 Advice가 정상 적용된다. 오른쪽은 같은 객체 안에서 <code>this</code>로 직접 호출하기 때문에 Proxy를 완전히 건너뛴다.</p>
+
+          <p>이 문제는 <code>@Transactional</code>, <code>@Async</code>, <code>@Cacheable</code> 등 프록시 기반으로 동작하는 <mark>모든 스프링 어노테이션</mark>에 동일하게 적용된다.</p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">스프링 AOP를 쓴다면 반드시 기억해야 할 규칙</div>
+            <p><mark>같은 클래스 내부에서 자기 메서드를 호출하면 AOP가 동작하지 않는다.</mark></p>
+          </div>
+
+          <h3>해결 방법</h3>
+
+          <h4>클래스 분리</h4>
+
+          <p>가장 권장되는 방법이다. AOP가 적용되어야 하는 메서드를 별도 클래스로 분리하면 외부 호출이 되므로 프록시를 경유한다.</p>
+
+<pre><code class="language-java">@Service
+@RequiredArgsConstructor
+public class OrderService {
+
+    private final OrderCreator orderCreator;
+
+    public void processOrder(OrderRequest request) {
+        orderCreator.createOrder(request); // 외부 빈 호출 → 프록시 경유
+    }
+}
+
+@Service
+public class OrderCreator {
+
+    @LogExecutionTime  // 정상 동작
+    public void createOrder(OrderRequest request) {
+        // ...
+    }
+}</code></pre>
+          <p>설계상으로도 단일 책임 원칙에 더 부합한다.</p>
+
+          <h4>자기 자신을 주입</h4>
+
+          <p>같은 빈을 자기 자신에게 주입받아 프록시를 통해 호출하는 방법이다.</p>
+
+<pre><code class="language-java">@Service
+public class OrderService {
+
+    @Autowired
+    private OrderService self;
+
+    public void processOrder(OrderRequest request) {
+        self.createOrder(request); // 프록시를 통한 호출
+    }
+
+    @LogExecutionTime
+    public void createOrder(OrderRequest request) {
+        // ...
+    }
+}</code></pre>
+          <p>동작은 하지만, 자기 자신을 주입하는 패턴은 코드를 읽는 사람에게 혼란을 줄 수 있다. 클래스 분리가 어려운 경우에만 제한적으로 사용하자.</p>
+
+          <h2>Aspect 적용 순서</h2>
+
+          <p>하나의 메서드에 여러 Aspect가 적용될 때, Aspect 간의 실행 순서를 제어하려면 <code>@Order</code>를 사용한다.</p>
+
+<pre><code class="language-java">@Aspect
+@Component
+@Order(1)
+public class SecurityAspect {
+    // 먼저 실행
+}
+
+@Aspect
+@Component
+@Order(2)
+public class LoggingAspect {
+    // 나중에 실행
+}</code></pre>
+          <p><code>@Order</code> 값이 <mark>작을수록 먼저 실행</mark>된다. <code>@Around</code> 기준으로 보면 <code>@Order(1)</code>이 바깥쪽, <code>@Order(2)</code>가 안쪽에 위치한다. 양파 껍질처럼 감싸는 구조다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    participant Req as 요청
+    participant A1 as @Order(1)<br/>SecurityAspect
+    participant A2 as @Order(2)<br/>LoggingAspect
+    participant T as Target<br/>(원본)
+
+    Req->>A1: 진입
+    Note over A1: 1. 바깥쪽 전처리 (권한 검사)
+    A1->>A2: 
+    Note over A2: 2. 안쪽 전처리 (로그 시작)
+    A2->>T: 
+    Note over T: 3. 핵심 비즈니스 로직
+    T-->>A2: 
+    Note over A2: 4. 안쪽 후처리 (로그 끝)
+    A2-->>A1: 
+    Note over A1: 5. 바깥쪽 후처리
+    A1-->>Req: 응답
+</div>
+          <p>바깥 껍질(<code>@Order(1)</code>)이 먼저 열리고 마지막에 닫힌다. 안쪽 껍질(<code>@Order(2)</code>)은 그 사이에서 동작한다. <code>@Order</code>를 지정하지 않으면 이 감싸는 순서가 <mark>보장되지 않는다</mark>. Aspect 간에 의존 관계가 있다면 반드시 명시하자.</p>
+
+          <h2>Spring AOP vs AspectJ</h2>
+
+          <p>Spring AOP는 AspectJ의 어노테이션 문법을 빌려 쓰지만, 실제 동작 방식은 다르다. 둘의 차이를 알아두면 Spring AOP의 한계가 명확해진다.</p>
+
+          <table>
+          <thead>
+          <tr><th>항목</th><th>Spring AOP</th><th>AspectJ</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>Weaving 시점</td><td>런타임 (프록시)</td><td>컴파일/로드 타임</td></tr>
+          <tr><td>JoinPoint</td><td>메서드 실행만</td><td>메서드, 필드, 생성자 등</td></tr>
+          <tr><td>성능 오버헤드</td><td>프록시 호출 비용 있음</td><td>바이트코드 직접 수정, 오버헤드 적음</td></tr>
+          <tr><td>설정 복잡도</td><td>스프링 컨테이너만 있으면 됨</td><td>별도 컴파일러 또는 에이전트 필요</td></tr>
+          <tr><td>내부 호출</td><td>AOP 미적용</td><td>적용 가능</td></tr>
+          <tr><td>적용 대상</td><td>스프링 빈만</td><td>모든 Java 객체</td></tr>
+          </tbody>
+          </table>
+
+          <p>실무에서는 대부분 Spring AOP만으로 충분하다. 필드 접근 감시나 생성자 인터셉트처럼 Spring AOP로 불가능한 요구사항이 있을 때만 AspectJ 도입을 검토한다.</p>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">내부 호출에서 AOP 미적용</div>
+            <p>위에서 자세히 다뤘지만, 가장 흔하고 디버깅이 어려운 실수다. <code>@Transactional</code> 내부 호출 문제도 동일한 원인이다. <mark>프록시를 경유하는 호출인지 항상 확인</mark>하자.</p>
+            <p>[!WARNING] private 메서드에 AOP 적용 시도</p>
+            <p><code>@Transactional</code>이나 <code>@Cacheable</code>을 private 메서드에 붙여도 동작하지 않는다. CGLIB는 상속 기반이므로 private 메서드를 오버라이드할 수 없다. <mark>AOP가 적용되어야 하는 메서드는 public</mark>이어야 한다.</p>
+            <p>[!WARNING] Aspect에 무거운 로직 넣기</p>
+            <p>Advice에서 DB 조회나 외부 API 호출 같은 무거운 작업을 하면, <mark>모든 Target 메서드의 성능에 영향</mark>을 준다. Aspect는 가볍게 유지하고, 무거운 작업은 비동기로 처리하거나 별도 서비스로 위임하자.</p>
+          </div>
+
+          <h2>면접 Q&A</h2>
+
+          <div class="callout callout-question">
+            <div class="callout-title">Spring AOP와 AspectJ의 차이점은?</div>
+            <p>Spring AOP는 런타임에 프록시 객체를 생성하는 방식이고, AspectJ는 컴파일 타임 또는 로드 타임에 바이트코드를 직접 조작하는 방식이다. Spring AOP는 메서드 실행 JoinPoint만 지원하고 스프링 빈에만 적용 가능하다. AspectJ는 필드 접근, 생성자 호출 등 더 다양한 JoinPoint를 지원하며 모든 Java 객체에 적용할 수 있다.</p>
+            <p>[!QUESTION] 프록시 기반 AOP에서 내부 호출이 문제가 되는 이유는?</p>
+            <p>같은 클래스 내에서 <code>this.method()</code>를 호출하면 프록시를 거치지 않고 원본 객체에서 직접 호출된다. AOP Advice는 프록시에 적용되어 있으므로, 프록시를 우회한 호출에는 Advice가 실행되지 않는다. 이는 <code>@Transactional</code>, <code>@Async</code>, <code>@Cacheable</code> 등 프록시 기반 모든 기능에 공통으로 해당하는 문제다.</p>
+            <p>[!QUESTION] @Transactional도 AOP로 동작하는 건가?</p>
+            <p>맞다. <code>@Transactional</code>은 <code>TransactionInterceptor</code>라는 Advice가 프록시를 통해 메서드 실행 전에 트랜잭션을 시작하고, 정상 완료 시 커밋, 예외 발생 시 롤백하는 <code>@Around</code> Advice와 동일한 구조다. 그래서 내부 호출 문제, private 메서드 미적용 문제 등이 똑같이 발생한다.</p>
+            <p>[!QUESTION] (함정) AOP를 사용하면 성능에 문제가 없나?</p>
+            <p>프록시 호출 자체의 오버헤드는 미미하다. 일반적인 웹 애플리케이션에서 네트워크 I/O나 DB 쿼리 시간에 비하면 무시할 수준이다. 하지만 Advice 내부에서 무거운 작업을 수행하면 문제가 된다. Advice 자체를 가볍게 유지하는 것이 핵심이다. 또한 너무 넓은 Pointcut으로 불필요한 메서드까지 프록시가 적용되면 객체 생성 비용이 늘어날 수 있다.</p>
+            <p>[!QUESTION] (함정) final 클래스에 @Transactional을 붙이면 어떻게 되나?</p>
+            <p>CGLIB는 상속으로 프록시를 만들기 때문에 final 클래스는 프록시를 생성할 수 없다. Spring Boot에서는 애플리케이션 시작 시점에 빈 생성 에러가 발생한다. final 메서드의 경우는 에러 없이 조용히 AOP가 적용되지 않는 것이 더 위험하다. 컴파일 에러 없이 런타임에도 에러가 나지 않아서 디버깅이 어렵다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Spring</span>
+          <span>#AOP</span>
+          <span>#Proxy</span>
+          <span>#CGLIB</span>
+          <span>#JDK동적프록시</span>
+          <span>#내부호출</span>
+          <span>#면접</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="spring-aop-2-advice-pointcut.html">&larr; 이전 글</a>
+          <a href="../pages/nbuntu.html">목록으로 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

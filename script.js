@@ -257,7 +257,7 @@ document.querySelectorAll('.post-content pre code[class*="language-"]').forEach(
   sidebar.classList.add('sidebar-neo');
   sidebar.innerHTML =
     '<div class="neo-identity">' +
-      '<div class="profile-img">사진 준비중</div>' +
+      '<img class="profile-img" src="' + (prefix === 'pages/' ? '' : '../') + 'profile.jpg" alt="nbh">' +
       '<div class="neo-hostname">nbh</div>' +
       '<div class="neo-bio">코드를 짜고 뜨개질을 합니다</div>' +
     '</div>' +
@@ -276,13 +276,13 @@ document.querySelectorAll('.post-content pre code[class*="language-"]').forEach(
       '<a href="' + pagesPrefix + 'nbuntu.html" class="neo-dir"><span><span class="neo-dir-tree">├─</span><span class="neo-dir-name">AWS/</span></span> <span class="neo-dir-count">1</span></a>' +
       '<a href="' + pagesPrefix + 'nbuntu.html" class="neo-dir"><span><span class="neo-dir-tree">├─</span><span class="neo-dir-name">JWT/</span></span> <span class="neo-dir-count">2</span></a>' +
       '<a href="' + pagesPrefix + 'nbuntu.html" class="neo-dir"><span><span class="neo-dir-tree">├─</span><span class="neo-dir-name">도구/</span></span> <span class="neo-dir-count">2</span></a>' +
-      '<a href="' + pagesPrefix + 'nbuntu.html" class="neo-dir"><span><span class="neo-dir-tree">├─</span><span class="neo-dir-name">코딩테스트/</span></span> <span class="neo-dir-count">3</span></a>' +
+      '<a href="' + pagesPrefix + 'nbuntu.html" class="neo-dir"><span><span class="neo-dir-tree">├─</span><span class="neo-dir-name">코딩테스트/</span></span> <span class="neo-dir-count">6</span></a>' +
       '<a href="' + pagesPrefix + 'knitting.html" class="neo-dir"><span><span class="neo-dir-tree">└─</span><span class="neo-dir-name">뜨개 공방/</span></span> <span class="neo-dir-count">1</span></a>' +
     '</div>' +
     '<hr class="neo-divider">' +
     '<div class="neo-fetch">' +
       '<div class="neo-cmd">uptime</div>' +
-      '<div class="neo-line"><span class="neo-key">visitors</span> <span class="neo-visitor-num">000,142</span></div>' +
+      '<div class="neo-line"><span class="neo-key">visitors</span> <span class="neo-visitor-num">---,---</span></div>' +
     '</div>' +
     '<div class="neo-bottom"><span>~$</span><span class="neo-cursor"></span></div>';
 })();
@@ -382,6 +382,54 @@ document.querySelectorAll('.post-content pre code[class*="language-"]').forEach(
 
 
 /* ========================================
+   데스크톱 사이드바 접기 (nav 안 ☰ 토글)
+   홈, 방명록: 기본 펼침 / nbuntu, 뜨개공방: 기본 접힘
+   ======================================== */
+
+(function() {
+  var sidebar = document.querySelector('.sidebar');
+  var nav = document.querySelector('.nav');
+  if (!sidebar || !nav) return;
+
+  // 페이지 판별
+  var path = window.location.pathname.toLowerCase();
+  var defaultOpen = path.indexOf('index') !== -1
+    || path.indexOf('guestbook') !== -1
+    || path === '/' || path.endsWith('/');
+
+  // ☰ 버튼 생성 (nav 맨 앞에 삽입)
+  var toggleBtn = document.createElement('button');
+  toggleBtn.className = 'sidebar-desktop-toggle';
+  toggleBtn.innerHTML = '&#9776;';
+  toggleBtn.title = '프로필 접기/펼치기';
+  nav.insertBefore(toggleBtn, nav.firstChild);
+
+  function collapse() {
+    sidebar.classList.add('desktop-collapsed');
+  }
+
+  function expand() {
+    sidebar.classList.remove('desktop-collapsed');
+  }
+
+  // 기본 상태
+  if (!defaultOpen) collapse();
+
+  toggleBtn.addEventListener('click', function() {
+    if (sidebar.classList.contains('desktop-collapsed')) expand();
+    else collapse();
+  });
+
+  // 768px 이하에서는 데스크톱 토글 숨기기 (모바일 토글이 대신함)
+  function checkWidth() {
+    toggleBtn.style.display = window.innerWidth <= 768 ? 'none' : '';
+  }
+  checkWidth();
+  window.addEventListener('resize', checkWidth);
+})();
+
+
+/* ========================================
    모바일 사이드바 토글
    ======================================== */
 
@@ -441,25 +489,66 @@ document.querySelectorAll('.post-content pre code[class*="language-"]').forEach(
    ======================================== */
 
 (function() {
-  // 폴더 접기/펼치기
-  document.querySelectorAll('.cat-folder-header').forEach(function(header) {
+  // 탭 전환
+  var tabDescs = {
+    lab:  '열심히 정리했는데 나만 볼 것 같은 느낌',
+    log:  '코드는 돌아갔다. 이유는 모른다.',
+    memo: '나중에 정리하려고 적어둔 것들. 나중은 오지 않는다.',
+    chat: '개발이랑 1도 관계없을 수도 있음. 그래도 괜찮음.'
+  };
+  var tabBtns = document.querySelectorAll('.tab-btn');
+  var tabDesc = document.getElementById('tab-desc');
+  tabBtns.forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      tabBtns.forEach(function(b) { b.classList.remove('active'); });
+      document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active'); });
+      btn.classList.add('active');
+      var panel = document.getElementById('tab-' + btn.dataset.tab);
+      if (panel) panel.classList.add('active');
+      if (tabDesc && tabDescs[btn.dataset.tab]) tabDesc.textContent = tabDescs[btn.dataset.tab];
+    });
+  });
+})();
+
+(function() {
+  // 시리즈 접기/펼치기
+  document.querySelectorAll('.cat-series-header').forEach(function(header) {
+    var list = header.nextElementSibling;
+    if (!list || !list.classList.contains('cat-series-list')) return;
+    list.style.maxHeight = list.scrollHeight + 'px';
     header.addEventListener('click', function() {
-      var folderId = 'folder-' + header.dataset.folder;
-      var body = document.getElementById(folderId);
-      if (!body) return;
-      header.classList.toggle('collapsed');
-      body.classList.toggle('collapsed');
+      var isCollapsed = header.classList.toggle('collapsed');
+      if (isCollapsed) {
+        list.style.maxHeight = list.scrollHeight + 'px';
+        requestAnimationFrame(function() { list.style.maxHeight = '0'; });
+      } else {
+        list.style.maxHeight = '1000px';
+      }
     });
   });
 
-  // 시리즈 접기/펼치기
-  document.querySelectorAll('.cat-series-header').forEach(function(header) {
+  // 폴더 접기/펼치기 (기본: 접힘)
+  document.querySelectorAll('.cat-folder-header').forEach(function(header) {
+    var folderId = 'folder-' + header.dataset.folder;
+    var body = document.getElementById(folderId);
+    if (!body) return;
+    // 기본 접힘 상태
+    header.classList.add('collapsed');
+    body.classList.add('collapsed');
+    body.style.maxHeight = '0';
     header.addEventListener('click', function() {
-      var seriesId = 'series-' + header.dataset.series;
-      var list = document.getElementById(seriesId);
-      if (!list) return;
-      header.classList.toggle('collapsed');
-      list.classList.toggle('collapsed');
+      var isCollapsed = header.classList.toggle('collapsed');
+      if (isCollapsed) {
+        body.style.maxHeight = body.scrollHeight + 'px';
+        requestAnimationFrame(function() {
+          body.style.maxHeight = '0';
+          body.style.borderTopColor = 'transparent';
+        });
+      } else {
+        body.style.borderTopColor = '';
+        body.style.maxHeight = '2000px';
+      }
+      body.classList.toggle('collapsed', isCollapsed);
     });
   });
 })();
@@ -530,7 +619,7 @@ document.querySelectorAll('.post-content pre code[class*="language-"]').forEach(
 
     // ── 5. 상태 ──
     var scale = 1, panX = 0, panY = 0;
-    var MIN = 0.05, MAX = 8;
+    var MIN = 0.3, MAX = 8;
 
     function apply() {
       canvas.style.transform = 'translate(' + panX + 'px, ' + panY + 'px) scale(' + scale + ')';
@@ -559,7 +648,7 @@ document.querySelectorAll('.post-content pre code[class*="language-"]').forEach(
       scale = Math.min(scaleByW, scaleByH, 1);
       scale = Math.max(scale, MIN);
 
-      var vpH = Math.max(Math.round(origH * scale) + PAD, 150);
+      var vpH = Math.max(Math.round(origH * scale) + PAD, Math.round(vw / 3), 150);
       viewport.style.height = vpH + 'px';
 
       panX = (vw - origW * scale) / 2;
@@ -575,7 +664,7 @@ document.querySelectorAll('.post-content pre code[class*="language-"]').forEach(
       var maxH = Math.min(window.innerHeight * 0.72, 680);
       var s = Math.min((vw - PAD) / origW, (maxH - PAD) / origH, 1);
       scale = Math.max(MIN, s);
-      var vpH = Math.max(Math.round(origH * scale) + PAD, 150);
+      var vpH = Math.max(Math.round(origH * scale) + PAD, Math.round(vw / 3), 150);
       viewport.style.height = vpH + 'px';
       panX = (vw - origW * scale) / 2;
       panY = (vpH - origH * scale) / 2;

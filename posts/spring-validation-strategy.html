@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Spring] 입력 검증, 어디서 뭘 검증해야 할까 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Spring] 입력 검증, 어디서 뭘 검증해야 할까</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.03.12
+        </div>
+
+        <div class="post-content">
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">단독 가이드</div>
+            <p>Bean Validation(<code>@Valid</code>)과 서비스 계층 Validator의 역할 분리를 다룹니다.</p>
+          </div>
+
+          <p>API를 만들다 보면 검증 코드를 어디에 넣어야 할지 헷갈리는 순간이 옵니다. DTO에 <code>@NotNull</code>을 붙이면 되는 건지, 서비스에서 따로 검증해야 하는 건지, 아니면 둘 다 해야 하는 건지. 결론부터 말하면 <strong>둘 다 쓰되, 각자 다른 질문에 답하게</strong> 만들어야 합니다.</p>
+
+          <hr>
+
+          <h2>검증의 두 가지 질문</h2>
+
+          <p>모든 검증은 결국 두 가지 질문 중 하나에 답합니다.</p>
+
+          <ol>
+            <li><strong>"형식이 맞는가?"</strong> — null인가, 빈 문자열인가, 이메일 포맷인가</li>
+            <li><strong>"비즈니스 규칙에 맞는가?"</strong> — 설정값 기반 길이 제한, 중복 여부, 권한 조건</li>
+          </ol>
+
+          <p>이 두 질문을 <strong>한 곳에서 다 처리하려고 하면</strong> 코드가 뒤엉킵니다. 그래서 계층을 나눕니다.</p>
+
+          <h2>1계층. Controller — Bean Validation</h2>
+
+          <p>컨트롤러는 <mark>형식 검증</mark>만 담당합니다. "이 요청이 처리할 가치가 있는가?"를 판단하는 문지기 역할이죠.</p>
+
+<pre><code class="language-java">public record UserCreateRequest(
+    @NotBlank(message = "아이디는 필수입니다.")
+    String username,
+
+    @NotBlank(message = "비밀번호는 필수입니다.")
+    String password,
+
+    @NotNull
+    @Email(message = "올바른 이메일 형식이 아닙니다.")
+    String email
+) {}</code></pre>
+          <ul>
+            <li><code>@NotBlank</code>, <code>@NotNull</code> — null이나 빈 값 차단</li>
+            <li><code>@Email</code> — 이메일 포맷 검증</li>
+            <li><code>@Size(min = 1, max = 2000)</code> — 고정된 길이 제한</li>
+          </ul>
+
+          <p>컨트롤러에서 <code>@Valid</code>를 붙이면 Spring이 자동으로 검증하고, 실패 시 <code>MethodArgumentNotValidException</code>을 던집니다.</p>
+
+<pre><code class="language-java">@PostMapping
+public ResponseEntity&lt;UserDto&gt; create(
+    @Valid @RequestBody UserCreateRequest request) { ... }</code></pre>
+          <div class="callout callout-tip">
+            <div class="callout-title">Bean Validation이 잘하는 것</div>
+            <p><strong>값 자체의 형식</strong>을 검증하는 일. null 체크, 포맷 체크, 고정 범위 체크처럼 <em>요청 데이터만 보고 판단할 수 있는</em> 검증입니다.</p>
+          </div>
+
+          <h2>2계층. Service — 비즈니스 Validator</h2>
+
+          <p>서비스 계층은 <mark>비즈니스 규칙 검증</mark>을 담당합니다. "이 값이 우리 시스템의 정책에 맞는가?"를 판단합니다.</p>
+
+<pre><code class="language-java">@Component
+@RequiredArgsConstructor
+public class UserValidator {
+
+    private final ValidationProperties props;
+
+    public void validateId(String id) {
+        if (id.length() &lt; props.id().minLength()
+                || id.length() &gt; props.id().maxLength()) {
+            throw new ValidationException(
+                String.format("아이디는 %d~%d자여야 합니다.",
+                    props.id().minLength(), props.id().maxLength()));
+        }
+        if (!id.matches("^[a-zA-Z0-9_]+$")) {
+            throw new ValidationException(
+                "아이디는 영문자, 숫자, 언더바만 사용 가능합니다.");
+        }
+    }
+}</code></pre>
+          <ul>
+            <li>길이 제한이 <code>@ConfigurationProperties</code>에서 오는 경우 → <code>@Size</code>로는 불가능 (SpEL 미지원)</li>
+            <li>정규식 패턴이 설정 파일에서 오는 경우 → <code>@Pattern</code>으로는 불가능</li>
+            <li>DB 조회가 필요한 검증 (중복 체크 등) → Bean Validation으로 절대 불가능</li>
+          </ul>
+
+          <p>서비스 메서드에서 비즈니스 로직 실행 전에 호출합니다.</p>
+
+<pre><code class="language-java">@Service
+@RequiredArgsConstructor
+public class UserService {
+
+    private final UserValidator validator;
+
+    @Transactional
+    public UserDto signUp(UserCreateRequest dto) {
+        validator.validateId(dto.username());
+        validator.validatePassword(dto.password());
+        // ... 비즈니스 로직
+    }
+}</code></pre>
+          <h2>경계선을 긋는 기준</h2>
+
+          <p>어떤 검증을 어디에 넣을지 헷갈릴 때, 이 기준으로 판단하면 됩니다.</p>
+
+          <h4>"요청 데이터만 보고 판단할 수 있는가?"</h4>
+
+          <p><strong>Yes</strong> → DTO + Bean Validation</p>
+
+          <ul>
+            <li>null/빈 값 체크</li>
+            <li>이메일, URL 등 포맷 체크</li>
+            <li>고정된 길이 제한 (<code>@Size(max = 2000)</code>)</li>
+          </ul>
+
+          <p><strong>No</strong> → Service + Validator</p>
+
+          <ul>
+            <li>설정값(<code>application.yml</code>) 기반 길이 제한</li>
+            <li>설정값 기반 정규식 패턴</li>
+            <li>DB 조회 필요 (중복 아이디, 존재하는 채널인지 등)</li>
+            <li>엔티티 간 관계 검증 (이 사용자가 이 채널에 참여 중인가?)</li>
+            <li>비즈니스 정책 (관리자만 가능, 하루 5회 제한 등)</li>
+          </ul>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">[실수] 두 계층에서 같은 검증 반복하기</div>
+            <p>DTO에 <code>@NotBlank</code>를 붙여놓고, Validator에서도 <code>if (id == null || id.isBlank())</code>를 또 하는 건 중복입니다. DTO가 null/빈 값을 막아주니까, Validator는 <strong>"값이 있다는 전제 하에"</strong> 규칙만 검증하면 됩니다.</p>
+          </div>
+
+          <h2>예외 타입 통일</h2>
+
+          <p>검증 실패 시 던지는 예외도 계층별로 다릅니다.</p>
+
+          <h4>Bean Validation 실패</h4>
+
+          <p>Spring이 자동으로 <code>MethodArgumentNotValidException</code>을 던집니다. <code>GlobalExceptionHandler</code>에서 잡아서 400 응답을 만들면 됩니다.</p>
+
+<pre><code class="language-java">@ExceptionHandler(MethodArgumentNotValidException.class)
+public ResponseEntity&lt;ErrorResponse&gt; handleValidation(
+        MethodArgumentNotValidException e) {
+    String message = e.getBindingResult()
+            .getFieldErrors().stream()
+            .map(FieldError::getDefaultMessage)
+            .collect(Collectors.joining(", "));
+    return ResponseEntity.badRequest().body(new ErrorResponse(message));
+}</code></pre>
+          <h4>비즈니스 Validator 실패</h4>
+
+          <p>커스텀 예외를 던져야 합니다. <code>IllegalArgumentException</code>을 쓰면 다른 라이브러리가 던지는 것과 구분이 안 되기 때문입니다.</p>
+
+<pre><code class="language-java">// 전용 예외 클래스
+public class ValidationException extends DiscodeitException {
+    public ValidationException(String message) {
+        super(/* ... */);
+    }
+}</code></pre>
+          <p>이렇게 하면 <code>GlobalExceptionHandler</code>에서 Bean Validation 실패와 비즈니스 검증 실패를 <strong>각각 다른 방식으로</strong> 처리할 수 있습니다.</p>
+
+          <h2>심화. 커스텀 제약 어노테이션</h2>
+
+          <p>설정값 기반 검증도 어노테이션처럼 쓰고 싶다면, 커스텀 <code>ConstraintValidator</code>를 만들 수 있습니다.</p>
+
+<pre><code class="language-java">@Target({ElementType.FIELD})
+@Retention(RetentionPolicy.RUNTIME)
+@Constraint(validatedBy = UsernameValidator.class)
+public @interface ValidUsername {
+    String message() default "올바르지 않은 아이디입니다.";
+    Class&lt;?&gt;[] groups() default {};
+    Class&lt;? extends Payload&gt;[] payload() default {};
+}</code></pre>
+
+<pre><code class="language-java">@Component
+public class UsernameValidator
+        implements ConstraintValidator&lt;ValidUsername, String&gt; {
+
+    @Autowired
+    private ValidationProperties props;
+
+    @Override
+    public boolean isValid(String value, ConstraintValidatorContext ctx) {
+        if (value == null) return true;  // @NotBlank가 담당
+        return value.length() &gt;= props.id().minLength()
+            &amp;&amp; value.length() &lt;= props.id().maxLength()
+            &amp;&amp; value.matches(props.emailRegex());
+    }
+}</code></pre>
+          <p>이렇게 하면 DTO에서 <code>@ValidUsername</code>으로 선언적으로 쓸 수 있습니다. 하지만 단순한 프로젝트에서는 오버엔지니어링이 될 수 있으니, <strong>Validator 컴포넌트 방식으로 충분하다면 굳이 만들 필요는 없습니다.</strong></p>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">[실수] Validator에서 null 체크를 중복으로 하기</div>
+            <p>DTO의 <code>@NotBlank</code>가 이미 null/빈 값을 막아줍니다. Validator에서는 "값이 넘어왔다"는 전제로 비즈니스 규칙만 검증하세요.</p>
+            <p>[!WARNING] [실수] IllegalArgumentException 남용</p>
+            <p><code>IllegalArgumentException</code>은 Java 표준 라이브러리도 던집니다. 비즈니스 검증 실패에 이걸 쓰면 <code>GlobalExceptionHandler</code>에서 의도치 않은 예외까지 잡게 됩니다. 커스텀 예외를 사용하세요.</p>
+            <p>[!WARNING] [실수] @Size에 설정값 넣으려고 하기</p>
+            <p><code>@Size(min = ${props.minLength})</code>는 동작하지 않습니다. Bean Validation 어노테이션의 속성은 컴파일 타임 상수만 받습니다. 설정값 기반 길이 제한은 서비스 계층 Validator나 커스텀 <code>ConstraintValidator</code>로 처리하세요.</p>
+          </div>
+
+          <h2>정리</h2>
+
+<div class="mermaid">
+flowchart LR
+    A[요청 진입] --> B{형식이 맞는가?}
+    B -- "No" --> C["MethodArgumentNotValidException\n(400 Bad Request)"]
+    B -- "Yes" --> D{비즈니스 규칙에 맞는가?}
+    D -- "No" --> E["ValidationException\n(400 Bad Request)"]
+    D -- "Yes" --> F[비즈니스 로직 실행]
+</div>
+          <ul>
+            <li><strong>1계층 (DTO)</strong>: null, 빈 값, 포맷 → <code>@Valid</code> + Bean Validation</li>
+            <li><strong>2계층 (Service)</strong>: 설정값 기반, DB 조회 필요, 정책 → Validator 컴포넌트</li>
+          </ul>
+
+          <p>두 계층이 <strong>서로 다른 질문에 답하도록</strong> 역할을 나누면, 검증 로직이 깔끔하게 정리됩니다.</p>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Spring</span>
+          <span>#Validation</span>
+          <span>#BeanValidation</span>
+          <span>#검증</span>
+          <span>#가이드</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

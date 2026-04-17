@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[코딩테스트] 3. 타뷸레이션 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[코딩테스트] 3. 타뷸레이션</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.03.12
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">DP 가이드 (3/11)</div>
+            <p>이전 편: <a href="dp-2-memoization.html">[코딩테스트] 2. 메모이제이션</a></p>
+            <p>다음 편: <a href="dp-4-state-definition.html">[코딩테스트] 4. 상태 정의</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">DP 기본 개념 시리즈</div>
+            <p><a href="dp-1-recursion-limits.html">재귀의 한계</a> · <a href="dp-2-memoization.html">메모이제이션</a> · <a href="dp-3-tabulation.html">타뷸레이션</a></p>
+            <p>DP 가이드 : <strong>기본 개념</strong> → <a href="dp-4-state-definition.html">설계 전략</a> → <a href="dp-7-linear.html">유형별 패턴</a></p>
+          </div>
+
+          <p>메모이제이션은 재귀 기반이라 스택 오버플로우 위험이 있다. <mark>작은 문제부터 순서대로 채워 올라가면</mark> 재귀 없이도 같은 결과를 낼 수 있다. 이 방식이 Bottom-up DP, 타뷸레이션이다.</p>
+
+          <h2>발상의 전환</h2>
+
+          <p>메모이제이션은 큰 문제(fib(n))에서 시작해서 필요한 작은 문제를 재귀로 찾아 내려간다. 반대로 생각하면 어떨까.</p>
+
+          <p><code>fib(1)</code>, <code>fib(2)</code>는 바로 알 수 있다. 이걸 이용해서 <code>fib(3)</code>을 구할 수 있다. <code>fib(3)</code>이 있으면 <code>fib(4)</code>를 구할 수 있다. 이런 식으로 작은 것부터 차례로 채우면 재귀 없이 <code>fib(n)</code>에 도달한다.</p>
+
+          <h2>구현</h2>
+
+<pre><code class="language-java">int[] dp = new int[n + 1];
+dp[1] = 1;
+dp[2] = 1;
+for (int i = 3; i &lt;= n; i++) {
+    dp[i] = dp[i - 1] + dp[i - 2];
+}</code></pre>
+          <p>재귀가 전혀 없다. 배열을 앞에서부터 채울 뿐이다.</p>
+
+          <p><code>dp[i]</code>를 계산할 때 <code>dp[i-1]</code>과 <code>dp[i-2]</code>는 이미 채워진 상태이므로, 그냥 더하면 된다.</p>
+
+          <p>아래는 <code>n=6</code>일 때 배열이 채워지는 과정이다.</p>
+
+<pre><code>초기: [_, 1, 1, _, _, _, _]
+i=3: [_, 1, 1, 2, _, _, _]   dp[3] = dp[2] + dp[1] = 2
+i=4: [_, 1, 1, 2, 3, _, _]   dp[4] = dp[3] + dp[2] = 3
+i=5: [_, 1, 1, 2, 3, 5, _]   dp[5] = dp[4] + dp[3] = 5
+i=6: [_, 1, 1, 2, 3, 5, 8]   dp[6] = dp[5] + dp[4] = 8</code></pre>
+          <h2>메모이제이션 vs 타뷸레이션</h2>
+
+          <p>같은 문제를 푸는 두 가지 방식이다. 어떤 차이가 있는지 비교해보자.</p>
+
+          <ul>
+            <li><strong>접근 방향</strong> : 메모이제이션은 큰 문제 → 작은 문제 (Top-down), 타뷸레이션은 작은 문제 → 큰 문제 (Bottom-up)</li>
+            <li><strong>구현 방식</strong> : 메모이제이션은 재귀 + 저장, 타뷸레이션은 반복문</li>
+            <li><strong>스택 오버플로우</strong> : 메모이제이션은 가능성 있음, 타뷸레이션은 없음</li>
+            <li><strong>불필요한 계산</strong> : 메모이제이션은 필요한 것만 계산, 타뷸레이션은 전부 계산</li>
+          </ul>
+
+          <p>코딩테스트에서는 <mark>타뷸레이션이 표준</mark>이다. 재귀 오버헤드가 없고 최적화하기 쉽다.</p>
+
+          <h2>공간 최적화</h2>
+
+          <p>타뷸레이션의 장점 중 하나는 공간 최적화가 쉽다는 점이다. 피보나치처럼 <code>dp[i]</code>가 직전 두 값만 사용한다면, 배열 전체를 저장할 필요가 없다.</p>
+
+<pre><code class="language-java">int a = 1, b = 1;
+for (int i = 3; i &lt;= n; i++) {
+    int c = a + b;
+    a = b;
+    b = c;
+}</code></pre>
+          <p>O(N) 공간을 <mark>O(1)</mark>로 줄였다. 모든 문제에 적용 가능하지는 않지만, 가능한 경우 시도해볼 만하다.</p>
+
+          <div class="callout callout-info">
+            <div class="callout-title">기본 개념 정리</div>
+            <p>- 재귀는 중복 계산 때문에 O(2^N)으로 느리다</p>
+            <p>- 메모이제이션 : 재귀 + 결과 저장 → O(N), Top-down</p>
+            <p>- 타뷸레이션 : 반복문으로 작은 것부터 채우기 → O(N), Bottom-up</p>
+            <p>- 코딩테스트에서는 타뷸레이션 기본</p>
+          </div>
+
+          <p>다음 시리즈에서는 새로운 문제를 보고 DP를 어떻게 설계하는지 배운다.</p>
+
+          <p>→ <a href="dp-4-state-definition.html">다음 시리즈 : DP 설계 전략</a></p>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#코딩테스트</span>
+          <span>#DP</span>
+          <span>#타뷸레이션</span>
+          <span>#다이나믹프로그래밍</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="dp-2-memoization.html">&larr; 이전 글</a>
+          <a href="dp-4-state-definition.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

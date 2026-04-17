@@ -6,6 +6,183 @@
   <title>뜨개 공방 - nbh의 갠홈</title>
   <link rel="stylesheet" href="../style.css">
   <link rel="stylesheet" href="../themes/knitting/theme.css">
+  <style>
+    /* ── 뜨개공방 통합 박스 (nbuntu 구조 동일) ── */
+    .knitting-box {
+      border: none;
+      background: #ffffff;
+    }
+
+    .main {
+      padding: 0;
+    }
+
+    .knitting-box .tab-bar {
+      background: var(--bg-color);
+      border-bottom: 1px solid var(--border-color);
+      margin-bottom: 0;
+      padding: 5px 8px 0;
+    }
+    .knitting-box .tab-btn {
+      font-size: 12px;
+      padding: 5px 14px;
+      color: var(--text-light);
+      margin-bottom: 0;
+    }
+    .knitting-box .tab-btn.active {
+      border-bottom-color: #ffffff;
+      margin-bottom: -1px;
+    }
+    .knitting-box .tab-panel {
+      padding-top: 0;
+    }
+
+    /* ── 좌측 카테고리 탭 + 우측 패널 ── */
+    .lab-panel {
+      display: flex;
+      min-height: 300px;
+      margin-top: 0;
+    }
+
+    .lab-cat-tabs {
+      width: 90px;
+      flex-shrink: 0;
+      background: var(--bg-color);
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .lab-cat-tab {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      padding: 9px 10px 8px;
+      cursor: pointer;
+      border: none;
+      background: transparent;
+      font-family: 'NeoDunggeunmo', 'Courier New', monospace;
+      font-size: 12px;
+      color: var(--text-color);
+      text-align: left;
+      border-bottom: 1px solid var(--border-color);
+      line-height: 1.4;
+      transition: background 0.1s;
+      width: 100%;
+      position: relative;
+      word-break: keep-all;
+    }
+
+    .lab-cat-tab:last-child { border-bottom: none; }
+
+    .lab-cat-tab:hover { background: var(--nav-hover); }
+
+    .lab-cat-tab.active {
+      background: #ffffff;
+      color: var(--accent);
+      font-weight: bold;
+      border-right: 1px solid #ffffff;
+      margin-right: -1px;
+      z-index: 1;
+    }
+
+    .lab-cat-tab .cat-tab-count {
+      display: block;
+      font-size: 10px;
+      color: var(--text-light);
+      margin-top: 1px;
+    }
+
+    .lab-cat-tab.active .cat-tab-count {
+      color: var(--accent);
+      opacity: 0.7;
+    }
+
+    /* ── 우측 콘텐츠 패널 ── */
+    .lab-content-panel {
+      flex: 1;
+      background: #ffffff;
+      overflow-y: auto;
+      padding: 14px 16px;
+    }
+
+    .lab-content-section { display: none; }
+    .lab-content-section.active { display: block; }
+
+    .lab-content-heading {
+      font-size: 12px;
+      font-weight: bold;
+      color: var(--accent);
+      padding-bottom: 8px;
+      margin-bottom: 10px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .lab-content-heading .hcount {
+      font-size: 10px;
+      color: var(--text-light);
+      font-weight: normal;
+    }
+
+    /* ── 시리즈 2컬럼 ── */
+    .lab-series {
+      display: grid;
+      grid-template-columns: 80px 1fr;
+      gap: 0;
+      padding: 9px 0;
+      border-bottom: 1px solid #fef0e6;
+    }
+    .lab-series:last-child { border-bottom: none; }
+
+    .lab-series-name-col {
+      padding: 1px 10px 0 0;
+      border-right: 1px solid var(--border-color);
+    }
+    .lab-series-name {
+      font-size: 11px;
+      font-weight: bold;
+      color: var(--accent);
+      line-height: 1.4;
+      word-break: keep-all;
+    }
+    .lab-series-count {
+      display: block;
+      font-size: 9px;
+      color: var(--text-light);
+      margin-top: 2px;
+    }
+
+    .lab-series-list-col { padding-left: 10px; }
+
+    .lab-post-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .lab-post-list li {
+      display: flex;
+      align-items: baseline;
+      gap: 5px;
+      padding: 3px 0;
+      font-size: 12px;
+    }
+    .lab-post-list .pnum {
+      font-size: 9px;
+      color: var(--text-light);
+      min-width: 14px;
+      flex-shrink: 0;
+    }
+    .lab-post-list a {
+      color: var(--link-color);
+      font-size: 12px;
+    }
+    .lab-post-list a:hover {
+      color: var(--accent);
+      text-decoration: underline;
+    }
+  </style>
 </head>
 <body>
   <div class="container">
@@ -15,8 +192,13 @@
       <div class="banner-subtitle">B급 개발자의 아지트</div>
     </div>
 
-    <div class="ticker">
-      <span>뜨개질은 반복문이다. 근데 디버깅이 안 된다.</span>
+    <div class="typing-bar">
+      <span class="tb-prompt">&gt;_&nbsp;</span>
+      <span class="tb-host">nbh</span>
+      <span class="tb-dollar">$&nbsp;</span>
+      <span class="tb-cmd" id="tb-cmd"></span>
+      <span class="tb-output" id="tb-output"></span>
+      <span class="tb-cursor blink" id="tb-cursor"></span>
     </div>
 
     <nav class="nav">
@@ -29,24 +211,81 @@
     <div class="content">
 
       <aside class="sidebar">
-        <div class="profile-img">
-          사진 준비중
-        </div>
+        <img class="profile-img" src="../profile.jpg" alt="nbh">
         <div class="profile-name">nbh</div>
         <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
       </aside>
 
       <div class="main">
-        <h1 class="page-header">뜨개 공방</h1>
-        <p class="page-description">실과 바늘로 만드는 것들. for문보다 정직한 반복.</p>
 
-        <ul class="post-list">
-          <li>
-            <span class="post-category">뜨개일기</span>
-            <a href="../posts/knitting-first-scarf.html">첫 목도리 도전기</a>
-            <span class="post-date">2026.02.14</span>
-          </li>
-        </ul>
+        <div class="knitting-box">
+
+          <div class="tab-bar">
+            <button class="tab-btn active" data-tab="works">작품집</button>
+            <button class="tab-btn" data-tab="diary">뜨개일기</button>
+            <button class="tab-btn" data-tab="pattern">패턴노트</button>
+            <button class="tab-btn" data-tab="chat">수다방</button>
+          </div>
+
+          <!-- 작품집 -->
+          <div class="tab-panel active" id="tab-works">
+            <div class="lab-panel">
+
+              <!-- 좌측: 카테고리 탭 -->
+              <div class="lab-cat-tabs">
+                <button class="lab-cat-tab active" data-cat="knit-diary">
+                  뜨개일기
+                  <span class="cat-tab-count">1편</span>
+                </button>
+              </div>
+
+              <!-- 우측: 콘텐츠 패널 -->
+              <div class="lab-content-panel">
+
+                <!-- 뜨개일기 -->
+                <div class="lab-content-section active" id="cat-knit-diary">
+                  <div class="lab-content-heading">뜨개일기 <span class="hcount">1편</span></div>
+
+                  <div class="lab-series">
+                    <div class="lab-series-name-col">
+                      <div class="lab-series-name">뜨개일기</div>
+                      <span class="lab-series-count">1편</span>
+                    </div>
+                    <div class="lab-series-list-col">
+                      <ul class="lab-post-list">
+                        <li><span class="pnum">01</span><a href="../posts/knitting-first-scarf.html">첫 목도리 도전기</a></li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+              </div><!-- /lab-content-panel -->
+            </div><!-- /lab-panel -->
+          </div><!-- /tab-works -->
+
+          <!-- 뜨개일기 -->
+          <div class="tab-panel" id="tab-diary">
+            <div class="tab-empty">
+              실과 바늘 들고 있느라 기록할 손이 없음.
+            </div>
+          </div>
+
+          <!-- 패턴노트 -->
+          <div class="tab-panel" id="tab-pattern">
+            <div class="tab-empty">
+              패턴 적어두려고 했는데... 코 세다가 까먹음.
+            </div>
+          </div>
+
+          <!-- 수다방 -->
+          <div class="tab-panel" id="tab-chat">
+            <div class="tab-empty">
+              아직 조용함. 실만 풀리고 있음.
+            </div>
+          </div>
+
+        </div><!-- /knitting-box -->
+
       </div>
     </div>
 
@@ -57,5 +296,101 @@
   </div>
 
   <script src="../script.js"></script>
+
+  <script>
+    /* ── 타이핑 바 애니메이션 ──
+     *
+     * 커스텀 방법:
+     *  - SEQ 배열에 { cmd: '명령어', result: '결과' } 추가/수정/삭제
+     *  - cmd: 타이핑되는 텍스트 (터미널 명령어처럼)
+     *  - result: → 뒤에 나오는 결과 텍스트
+     *  - 순서대로 반복 재생됨
+     *
+     * 속도 조절:
+     *  - TYPE_SPEED: 글자 하나당 ms (작을수록 빠름)
+     *  - RESULT_DELAY: 결과 표시 후 다음까지 대기 ms
+     */
+    (function () {
+      var TYPE_SPEED   = 75;
+      var ENTER_DELAY  = 280;
+      var RESULT_DELAY = 2200;
+      var CLEAR_DELAY  = 350;
+
+      var SEQ = [
+        { cmd: 'cast-on 30',             result: '첫 번째 코가 시작됩니다' },
+        { cmd: 'knit --pattern',          result: '배색 + 바늘비우기 + 아란 = 무한반복' },
+        { cmd: 'yarn --count',            result: '실 재고: 위험할 정도로 많음' },
+        { cmd: 'stitch status',           result: '한 코도 놓치지 않았다 (아마도)' },
+        { cmd: 'cat tension.log',         result: '게이지가 또 안 맞는다' },
+        { cmd: 'frog 3rows',              result: '세 줄 풀었다… 눈물도 풀린다' },
+        { cmd: 'ls basket/',              result: '실 7개, 대바늘 4세트, 후회 0개' },
+        { cmd: 'diff plan.txt result.txt', result: '계획과 결과가 일치하지 않습니다' },
+        { cmd: 'make sweater',            result: '스웨터 제작중... ETA: 모름' },
+        { cmd: 'cat mood.txt',            result: '오늘은 뜨개질 하기 좋은 날' },
+        { cmd: 'needle --size',           result: '6mm 추천인데 5mm로 뜨는 중' },
+        { cmd: 'wc -l pattern.txt',       result: '283줄… 이걸 언제 다 읽지' },
+        { cmd: 'grep "실수" knit.log',    result: '47 matches found' },
+        { cmd: 'tail -1 progress.txt',    result: '소매 반쪽 완성 (올해 목표: 한 쪽)' },
+        { cmd: 'du -sh stash/',           result: '3.2kg — 정리는 다음 생에' },
+      ];
+
+      var elCmd    = document.getElementById('tb-cmd');
+      var elOutput = document.getElementById('tb-output');
+      var elCursor = document.getElementById('tb-cursor');
+      var seqIdx = 0;
+
+      function clearAll() {
+        elCmd.textContent    = '';
+        elOutput.textContent = '';
+      }
+
+      function startSequence() {
+        var item = SEQ[seqIdx % SEQ.length];
+        seqIdx++;
+        clearAll();
+
+        typeCommand(item.cmd, 0, function () {
+          elCursor.classList.remove('blink');
+          setTimeout(function () {
+            elOutput.textContent = ' → ' + item.result;
+            elCursor.classList.add('blink');
+            setTimeout(function () {
+              elCursor.classList.remove('blink');
+              setTimeout(function () {
+                elCursor.classList.add('blink');
+                startSequence();
+              }, CLEAR_DELAY);
+            }, RESULT_DELAY);
+          }, ENTER_DELAY);
+        });
+      }
+
+      function typeCommand(text, charIdx, onDone) {
+        if (charIdx > text.length) { onDone(); return; }
+        elCmd.textContent = text.slice(0, charIdx);
+        setTimeout(function () { typeCommand(text, charIdx + 1, onDone); }, TYPE_SPEED);
+      }
+
+      setTimeout(startSequence, 500);
+    })();
+  </script>
+
+  <script>
+    /* ── 뜨개공방 카테고리 탭 전환 ── */
+    (function() {
+      var catTabs = document.querySelectorAll('.lab-cat-tab');
+      var catSections = document.querySelectorAll('.lab-content-section');
+
+      catTabs.forEach(function(tab) {
+        tab.addEventListener('click', function() {
+          catTabs.forEach(function(t) { t.classList.remove('active'); });
+          tab.classList.add('active');
+          catSections.forEach(function(s) { s.classList.remove('active'); });
+          var target = document.getElementById('cat-' + tab.dataset.cat);
+          if (target) target.classList.add('active');
+        });
+      });
+    })();
+  </script>
 </body>
 </html>

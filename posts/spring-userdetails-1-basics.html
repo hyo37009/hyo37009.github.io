@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Spring Security] 1. UserDetails와 GrantedAuthority - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Spring Security] 1. UserDetails와 GrantedAuthority</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.03.12
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">UserDetails (1/4)</div>
+            <p>다음 편: <a href="spring-userdetails-2-success-handler.html">[Spring Security] 2. AuthenticationSuccessHandler 구현</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">이 문서는 단독 가이드입니다.</div>
+            <p>Spring Security가 인증 과정에서 사용자 정보를 어떻게 다루는지, <code>UserDetails</code>와 <code>GrantedAuthority</code>가 무엇인지 설명합니다.</p>
+          </div>
+
+          <hr>
+
+          <h2>1. UserDetails란?</h2>
+
+          <p>Spring Security는 인증된 사용자 정보를 직접 다루지 않습니다. 대신 <mark><code>UserDetails</code></mark> 인터페이스를 통해 사용자 정보를 표준화된 방식으로 받아옵니다.</p>
+
+          <p>쉽게 말하면, Spring Security가 "이 사람 누구야?"라고 물을 때 내놓는 <strong>신분증 양식</strong>입니다. 양식만 맞추면 내부 구현은 자유롭게 할 수 있습니다.</p>
+
+          <p><code>UserDetails</code> 인터페이스가 요구하는 메서드:</p>
+
+          <table>
+          <thead>
+          <tr><th>메서드</th><th>역할</th></tr>
+          </thead>
+          <tbody>
+          <tr><td><code>getUsername()</code></td><td>식별자 반환 (username, email 등)</td></tr>
+          <tr><td><code>getPassword()</code></td><td>해시된 비밀번호 반환</td></tr>
+          <tr><td><code>getAuthorities()</code></td><td>권한 목록 반환</td></tr>
+          <tr><td><code>isAccountNonExpired()</code></td><td>계정 만료 여부</td></tr>
+          <tr><td><code>isAccountNonLocked()</code></td><td>계정 잠금 여부</td></tr>
+          <tr><td><code>isCredentialsNonExpired()</code></td><td>비밀번호 만료 여부</td></tr>
+          <tr><td><code>isEnabled()</code></td><td>계정 활성화 여부</td></tr>
+          </tbody>
+          </table>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">계정 상태 메서드 4개는 기본값으로 두어도 됩니다.</div>
+            <p><code>isAccountNonExpired()</code>, <code>isAccountNonLocked()</code>, <code>isCredentialsNonExpired()</code>, <code>isEnabled()</code>는 별도 관리가 필요 없다면 모두 <code>true</code>를 반환하도록 구현하면 됩니다. <code>UserDetails</code> 인터페이스에 <code>default</code> 구현이 있어 오버라이드하지 않아도 <code>true</code>가 반환됩니다.</p>
+          </div>
+
+          <hr>
+
+          <h2>2. GrantedAuthority란?</h2>
+
+          <p><mark><code>GrantedAuthority</code></mark> 는 사용자에게 부여된 <strong>권한 하나</strong>를 나타내는 인터페이스입니다.</p>
+
+          <p><code>getAuthorities()</code>가 반환하는 <code>Collection&lt;? extends GrantedAuthority&gt;</code> 가 바로 이 권한들의 목록입니다.</p>
+
+          <p>일반적으로 <code>SimpleGrantedAuthority</code>를 사용해 문자열로 권한을 표현합니다:</p>
+
+<pre><code class="language-java">List.of(new SimpleGrantedAuthority("ROLE_USER"))</code></pre>
+          <div class="callout callout-info">
+            <div class="callout-title">ROLE_ 접두사</div>
+            <p>Spring Security는 역할(Role)을 권한(Authority)과 구분하기 위해 <code>ROLE_</code> 접두사를 사용합니다.</p>
+            <p>- <strong>역할</strong>: <code>ROLE_USER</code>, <code>ROLE_ADMIN</code> — 사용자의 신분</p>
+            <p>- <strong>권한</strong>: <code>READ_POST</code>, <code>DELETE_POST</code> — 특정 행위 가능 여부</p>
+            <p><code>hasRole("USER")</code>는 내부적으로 <code>ROLE_USER</code>를 찾습니다. <code>hasAuthority("ROLE_USER")</code>와 동일합니다.</p>
+          </div>
+
+          <hr>
+
+          <h2>3. 현재 코드 분석</h2>
+
+<pre><code class="language-java">@Override
+public Collection&lt;? extends GrantedAuthority&gt; getAuthorities() {
+    return List.of();
+}</code></pre>
+          <ul>
+            <li><code>List.of()</code> : 빈 컬렉션을 반환 → 이 사용자는 <strong>아무 권한도 없음</strong></li>
+            <li>현재는 역할 구분 없이 인증만 하면 모든 기능을 사용할 수 있는 구조이므로 빈 리스트로 두어도 동작은 합니다.</li>
+          </ul>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">[실수] 권한 없이 <code>hasRole()</code> 체크를 하면 항상 거부됩니다.</div>
+            <p><code>SecurityConfig</code>에서 특정 경로에 <code>hasRole("USER")</code> 같은 조건을 걸었다면, <code>getAuthorities()</code>가 빈 리스트를 반환하는 한 모든 요청이 403으로 거부됩니다.</p>
+          </div>
+
+          <hr>
+
+          <h2>4. 권한이 필요할 때 구현하는 방법</h2>
+
+          <p>역할 기반 접근 제어가 필요해지면 다음과 같이 구현합니다.</p>
+
+          <h4>User 엔티티에 role 필드 추가</h4>
+
+<pre><code class="language-java">@Column(nullable = false)
+private String role; // "ROLE_USER", "ROLE_ADMIN" 등</code></pre>
+          <h4>getAuthorities()에서 역할 반환</h4>
+
+<pre><code class="language-java">@Override
+public Collection&lt;? extends GrantedAuthority&gt; getAuthorities() {
+    return List.of(new SimpleGrantedAuthority(userDto.role()));
+}</code></pre>
+          <ul>
+            <li><code>SimpleGrantedAuthority</code> : <code>GrantedAuthority</code>의 가장 간단한 구현체. 문자열 하나를 권한으로 등록합니다.</li>
+            <li><code>userDto.role()</code> : <code>UserDto</code>에서 역할 문자열을 꺼내 권한으로 변환합니다.</li>
+          </ul>
+
+          <hr>
+
+          <h2>5. 전체 흐름</h2>
+
+<div class="mermaid">
+sequenceDiagram
+    participant Client
+    participant Filter as Security Filter
+    participant UDS as UserDetailsService
+    participant UD as UserDetails
+
+    Client->>Filter: 로그인 요청 (username, password)
+    Filter->>UDS: loadUserByUsername(username)
+    UDS->>UD: DiscodeitUserDetails 생성 및 반환
+    UD-->>Filter: username, password, authorities 제공
+    Filter->>Filter: 비밀번호 검증 (PasswordEncoder.matches)
+    Filter-->>Client: 인증 성공 / 실패
+</div>
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#spring-security</span>
+          <span>#userdetails</span>
+          <span>#grantedauthority</span>
+          <span>#인증</span>
+          <span>#권한</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+          <a href="spring-userdetails-2-success-handler.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

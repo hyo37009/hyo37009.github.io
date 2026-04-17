@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[백트래킹] 2. 가지치기와 최적화 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[백트래킹] 2. 가지치기와 최적화</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.02.27
+        </div>
+
+        <div class="post-content">
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">백트래킹 가이드 시리즈 (2/3)</div>
+            <p>이 시리즈는 백트래킹의 원리를 이해하고 코딩테스트에서 활용하는 감각을 기르기 위한 가이드다.</p>
+            <p>1. <a href="backtracking-1-basics.html">백트래킹 기본 개념</a></p>
+            <p>2. <strong>가지치기와 최적화</strong> ← 현재 문서</p>
+            <p>3. <a href="backtracking-3-patterns.html">실전 패턴과 면접 대비</a></p>
+          </div>
+
+          <h2>가지치기가 왜 중요한가</h2>
+
+          <p>백트래킹의 성능은 <mark>가지치기를 얼마나 잘 하느냐</mark>에 달려 있다. 가지치기 없는 백트래킹은 그냥 완전탐색이고, 가지치기를 잘 설계하면 탐색 공간을 수십, 수백 배 줄일 수 있다.</p>
+
+          <p>N-Queens 문제에서 8×8 체스판의 전체 경우의 수는 8^8 = 16,777,216개다. 하지만 같은 열 검사만 추가해도 8! = 40,320개로 줄고, 대각선 검사까지 하면 실제로 방문하는 노드는 수천 개 수준이 된다.</p>
+
+          <h2>가지치기 전략</h2>
+
+          <h3>제약 조건 기반 가지치기</h3>
+
+          <p>문제에서 주어진 제약 조건을 그대로 유망성 검사에 활용하는 방식이다. 가장 기본적이면서 가장 중요하다.</p>
+
+          <p>N-Queens에서 "같은 열, 같은 대각선 금지"가 바로 이것이다. 조건을 위반하는 선택을 아예 시도하지 않는다.</p>
+
+<pre><code class="language-java">if (!isPromising(row, col)) continue;</code></pre>
+          <p>문제를 읽었을 때 "~하면 안 된다", "~을 만족해야 한다"라는 조건이 보이면, 그걸 곧바로 가지치기 조건으로 쓸 수 있는지 따져봐야 한다.</p>
+
+          <h3>한계값 가지치기 (Bound Pruning)</h3>
+
+          <p>"최솟값을 구하라"는 최적화 문제에서 쓰는 전략이다. 현재까지의 비용이 이미 알려진 최솟값 이상이면, 더 탐색해봐야 더 나은 답이 나올 수 없으므로 즉시 되돌아간다.</p>
+
+<pre><code class="language-java">static int minResult = Integer.MAX_VALUE;
+
+void backtrack(int depth, int currentCost) {
+    if (currentCost &gt;= minResult) return;
+
+    if (depth == 목표) {
+        minResult = Math.min(minResult, currentCost);
+        return;
+    }
+    // ...
+}</code></pre>
+          <ul>
+            <li><code>minResult</code>는 지금까지 찾은 최선의 답이다.</li>
+            <li>탐색 중간에 <code>currentCost</code>가 <code>minResult</code>에 도달하면 그 이후는 볼 필요가 없다.</li>
+          </ul>
+
+          <p>이 전략이 효과를 발휘하려면 <mark>좋은 답을 빨리 찾는 것</mark>이 중요하다. 초기에 <code>minResult</code>가 클수록 가지치기가 덜 일어나기 때문이다.</p>
+
+          <h3>대칭성 제거</h3>
+
+          <p>동일한 답이 순서만 바뀌어 여러 번 나오는 경우, 대칭을 제거하면 탐색 공간을 절반 이상 줄일 수 있다.</p>
+
+          <p>예를 들어 부분집합 문제에서 {1, 2}와 {2, 1}은 같은 집합이다. 이걸 방지하려면 이전에 선택한 원소보다 큰 것만 고르도록 제한한다.</p>
+
+<pre><code class="language-java">void subsets(int start, List&lt;Integer&gt; current) {
+    결과 처리(current);
+
+    for (int i = start; i &lt; n; i++) {
+        current.add(arr[i]);
+        subsets(i + 1, current);
+        current.remove(current.size() - 1);
+    }
+}</code></pre>
+          <ul>
+            <li><code>start</code> 파라미터가 핵심이다. 이전에 선택한 인덱스 이후부터만 탐색한다.</li>
+            <li>순열이면 <code>start</code> 없이 전체를 순회하고, 조합이면 <code>start</code>로 제한한다.</li>
+          </ul>
+
+          <h2>탐색 순서 최적화</h2>
+
+          <p>가지치기와 함께, <mark>어떤 순서로 선택지를 시도하느냐</mark>도 성능에 큰 영향을 미친다.</p>
+
+          <h3>가장 제약이 강한 것부터 (MRV)</h3>
+
+          <p>선택지가 가장 적은 변수를 먼저 처리하면, 초반에 가지가 많이 잘려서 전체 탐색 공간이 줄어든다. 이걸 <strong>MRV(Minimum Remaining Values)</strong> 전략이라고 한다.</p>
+
+          <p>스도쿠를 예로 들면, 빈 칸 중에서 넣을 수 있는 숫자가 가장 적은 칸부터 채우는 것이다. 선택지가 1개뿐인 칸을 먼저 처리하면 연쇄적으로 다른 칸의 선택지도 줄어든다.</p>
+
+          <h3>최적해에 가까운 것부터</h3>
+
+          <p>"최솟값을 구하라"는 문제에서 큰 것부터 시도하면, 초반에 좋은 답을 빨리 찾아서 한계값 가지치기가 더 강하게 작동한다.</p>
+
+          <p>예를 들어 <a href="#">BOJ17136 색종이 붙이기</a>에서 색종이를 5×5부터 시도하면, 큰 색종이로 많이 덮어서 최솟값이 빨리 줄어들고, 이후 가지치기가 더 효과적이다.</p>
+
+<pre><code class="language-java">for (int size = 5; size &gt;= 1; size--) {
+    // 큰 색종이부터 시도
+}</code></pre>
+          <div class="callout callout-tip">
+            <div class="callout-title">순서 최적화의 효과</div>
+            <p>탐색 순서를 바꾸는 것만으로 실행 시간이 10배 이상 차이 나는 경우도 있다. 답의 정확성에는 영향이 없으니, 시간 초과가 나면 순서를 바꿔보는 것도 방법이다.</p>
+          </div>
+
+          <h2>시간복잡도 분석</h2>
+
+          <p>백트래킹의 시간복잡도는 정확히 계산하기 어렵다. 가지치기 효과는 입력에 따라 달라지기 때문이다. 그래서 보통 <mark>최악의 경우</mark>를 기준으로 판단한다.</p>
+
+          <h3>대표적인 시간복잡도</h3>
+
+          <table>
+          <thead>
+          <tr><th>유형</th><th>최악 시간복잡도</th><th>설명</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>순열</td><td>O(N!)</td><td>N개 원소의 모든 순열</td></tr>
+          <tr><td>조합</td><td>O(2^N)</td><td>N개 원소의 모든 부분집합</td></tr>
+          <tr><td>N-Queens</td><td>O(N!)</td><td>실제로는 가지치기로 훨씬 적음</td></tr>
+          <tr><td>스도쿠</td><td>O(9^81) 이론상</td><td>실제로는 제약 전파로 매우 빠름</td></tr>
+          </tbody>
+          </table>
+
+          <p>이론적 최악과 실제 실행 시간의 괴리가 크다는 걸 인지해야 한다. 면접에서 "백트래킹의 시간복잡도는?"이라고 물으면, 최악을 말하되 "가지치기로 실제로는 훨씬 빠르다"고 덧붙이는 게 좋다.</p>
+
+          <h3>시간 내에 들어올지 판단하는 법</h3>
+
+          <p>코딩테스트에서는 이론적 복잡도보다 실전적 감각이 더 중요하다.</p>
+
+          <ol>
+            <li>N이 <strong>20 이하</strong>면 → O(2^N) 이하의 백트래킹이 보통 통과</li>
+            <li>N이 <strong>10 이하</strong>면 → O(N!) 도 가능</li>
+            <li>N이 <strong>30 이상</strong>이면 → 순수 백트래킹으로는 어렵고, DP나 다른 기법이 필요할 가능성이 높다</li>
+          </ol>
+
+          <div class="callout callout-info">
+            <div class="callout-title">시간 제한과의 관계</div>
+            <p>Java 기준 1초에 약 1~2억 번 연산이 가능하다. 10! = 3,628,800이고 2^20 = 1,048,576이므로, 이 정도까지는 백트래킹이 충분히 가능하다. 더 자세한 내용은 <a href="time-complexity-1-basics.html">시간복잡도 가이드</a>를 참고하라.</p>
+          </div>
+
+          <h2>가지치기 설계 체크리스트</h2>
+
+          <p>새로운 백트래킹 문제를 만났을 때, 아래 순서로 가지치기를 설계하면 된다.</p>
+
+          <ol>
+            <li><strong>제약 조건 나열</strong> — 문제에서 "~하면 안 된다"는 조건을 전부 뽑는다</li>
+            <li><strong>유망 함수 작성</strong> — 각 조건을 선택 전에 검사하는 함수로 만든다</li>
+            <li><strong>한계값 설정</strong> — 최적화 문제면 현재 비용과 최솟값을 비교한다</li>
+            <li><strong>탐색 순서 결정</strong> — 제약이 강한 것부터, 또는 최적해에 가까운 것부터</li>
+            <li><strong>대칭 제거</strong> — 같은 답이 여러 번 나오는지 확인하고, 순서를 강제한다</li>
+          </ol>
+
+          <h2>자주 하는 실수</h2>
+
+          <h3>가지치기 조건이 너무 느슨한 경우</h3>
+
+          <p>가지치기를 넣었는데도 시간 초과가 나면, 조건을 더 강화할 수 있는지 따져봐야 한다. 예를 들어 "남은 색종이로 남은 1을 다 덮을 수 있는가?"처럼 미래의 가능성까지 계산하는 가지치기를 추가할 수 있다.</p>
+
+          <h3>한계값을 갱신하지 않는 경우</h3>
+
+<pre><code class="language-java">// 잘못된 코드 — minResult가 갱신되지 않음
+if (depth == 목표) {
+    System.out.println(currentCost);
+    return;
+}
+
+// 올바른 코드
+if (depth == 목표) {
+    minResult = Math.min(minResult, currentCost);
+    return;
+}</code></pre>
+          <p>답을 찾을 때마다 <code>minResult</code>를 갱신해야 이후 가지치기가 점점 강해진다. 갱신을 안 하면 가지치기가 전혀 작동하지 않는다.</p>
+
+          <h2>정리</h2>
+
+          <table>
+          <thead>
+          <tr><th>핵심 포인트</th><th>설명</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>제약 조건 → 가지치기</td><td>문제의 제약을 그대로 유망성 검사로</td></tr>
+          <tr><td>한계값 가지치기</td><td>현재 비용 ≥ 최솟값이면 즉시 중단</td></tr>
+          <tr><td>탐색 순서가 성능을 좌우</td><td>큰 것부터, 제약 강한 것부터</td></tr>
+          <tr><td>대칭 제거</td><td>start 파라미터로 중복 방지</td></tr>
+          </tbody>
+          </table>
+
+          <p>다음 문서에서는 <mark>실전에서 자주 나오는 백트래킹 유형</mark>을 패턴별로 정리하고, 면접 대비 Q&A를 다룬다.</p>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#코딩테스트</span>
+          <span>#백트래킹</span>
+          <span>#가지치기</span>
+          <span>#최적화</span>
+          <span>#알고리즘</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="backtracking-1-basics.html">&larr; 이전 글</a>
+          <a href="backtracking-3-patterns.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

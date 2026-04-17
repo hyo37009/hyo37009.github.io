@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[코딩테스트] 6. 초기값과 탐색 순서 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[코딩테스트] 6. 초기값과 탐색 순서</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.03.12
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">DP 가이드 (6/11)</div>
+            <p>이전 편: <a href="dp-5-recurrence.html">[코딩테스트] 5. 점화식 도출</a></p>
+            <p>다음 편: <a href="dp-7-linear.html">[코딩테스트] 7. 선형 DP</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">DP 설계 전략 시리즈</div>
+            <p><a href="dp-4-state-definition.html">상태 정의</a> · <a href="dp-5-recurrence.html">점화식 도출</a> · <a href="dp-6-initialization.html">초기값과 탐색 순서</a></p>
+            <p>DP 가이드 : <a href="dp-1-recursion-limits.html">기본 개념</a> → <strong>설계 전략</strong> → <a href="dp-7-linear.html">유형별 패턴</a></p>
+          </div>
+
+          <p>상태 정의와 점화식을 세웠으면 두 가지가 남았다. <mark>초기값</mark>과 <mark>탐색 순서</mark>다. 이 두 가지를 빠뜨리면 점화식이 맞아도 틀린 답이 나온다.</p>
+
+          <h2>초기값 (Base Case)</h2>
+
+          <p>점화식은 이전 상태를 참조해서 현재 상태를 계산한다. 그런데 "이전 상태"가 없는 가장 작은 경우는 어떻게 할까. 이것을 직접 값으로 채워주는 게 초기값이다.</p>
+
+          <p>피보나치에서 <code>dp[1] = 1</code>, <code>dp[2] = 1</code>이 초기값이었다. 이걸 정해주지 않으면 <code>dp[3] = dp[2] + dp[1]</code>을 계산할 수 없다.</p>
+
+          <p>동전 교환 문제에서:</p>
+
+          <ul>
+            <li><code>dp[0] = 0</code> : 0원을 만드는 데 동전 0개 필요</li>
+            <li><code>dp[i] = INF</code> (i > 0) : 아직 계산 전, 만들 수 없음을 표시</li>
+          </ul>
+
+          <h4>초기값 타입별 정리</h4>
+
+          <ul>
+            <li><strong>최솟값을 구하는 문제</strong> → <code>INF</code>로 초기화 (<code>Integer.MAX_VALUE</code> 또는 큰 숫자)</li>
+            <li><strong>최댓값을 구하는 문제</strong> → <code>-INF</code>로 초기화 (<code>Integer.MIN_VALUE</code> 또는 0)</li>
+            <li><strong>경우의 수를 구하는 문제</strong> → <code>0</code>으로 초기화 후 base case에서 <code>1</code> 설정</li>
+          </ul>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">0으로 초기화하는 함정</div>
+            <p>최솟값 문제에서 <code>dp[i] = 0</code>으로 초기화하면, "아직 계산 전(만들 수 없음)"과 "0이 최솟값"을 구분할 수 없다. 의도치 않게 0이 최솟값으로 사용되어 엉뚱한 답이 나온다.</p>
+          </div>
+
+          <h2>탐색 순서</h2>
+
+          <p>Bottom-up DP는 반복문으로 <code>dp</code> 배열을 채운다. 채우는 순서가 중요한데, 규칙은 하나다. <mark><code>dp[i]</code>를 계산할 때 참조하는 값이 이미 채워져 있어야 한다.</mark></p>
+
+          <p>점화식에서 의존 방향을 파악하면 순서를 결정할 수 있다.</p>
+
+<div class="mermaid">
+flowchart LR
+    A["점화식 확인\ndp[i] = f(dp[j])"] --> B{j < i ?}
+    B -->|"항상 작음"| C["오름차순\ni = 1 → N"]
+    B -->|"항상 큼"| D["내림차순\ni = N → 1"]
+    B -->|"복잡"| E["2D 또는\n위상 정렬 필요"]
+</div>
+          <ul>
+            <li>동전 문제 : <code>dp[i]</code>는 <code>dp[i-c]</code>에 의존. <code>i-c &lt; i</code>이므로 → 오름차순</li>
+            <li>배낭 1D 최적화 : <code>dp[j]</code>는 <code>dp[j-w]</code>에 의존하되 <mark>같은 물건 중복 금지</mark> → 역순(내림차순)</li>
+          </ul>
+
+          <h4>2D DP의 탐색 순서</h4>
+
+          <p>2차원 배열에서 <code>dp[i][j]</code>가 <code>dp[i-1][j]</code>와 <code>dp[i][j-1]</code>에 의존한다면, <code>i</code>와 <code>j</code> 모두 오름차순으로 채우면 된다.</p>
+
+<pre><code class="language-java">for (int i = 1; i &lt;= n; i++) {
+    for (int j = 1; j &lt;= m; j++) {
+        dp[i][j] = Math.max(dp[i-1][j], dp[i][j-1]) + grid[i][j];
+    }
+}</code></pre>
+          <p><code>i</code>행을 처리할 때 <code>i-1</code>행은 이미 완성된 상태. 같은 행에서 <code>j</code>를 채울 때 <code>j-1</code>은 이미 채워진 상태.</p>
+
+          <div class="callout callout-info">
+            <div class="callout-title">설계 전략 정리</div>
+            <p>1. <strong>상태 정의</strong> : <code>dp[i]</code>에 저장할 값 결정 — "지금 모르는 게 뭔가?"</p>
+            <p>2. <strong>점화식</strong> : 마지막 결정을 기준으로 경우를 나눠 점화식 도출</p>
+            <p>3. <strong>초기값</strong> : base case를 직접 값으로 설정. 최소 문제면 INF로 초기화</p>
+            <p>4. <strong>탐색 순서</strong> : 의존 방향을 확인해 오름/내림차순 결정</p>
+          </div>
+
+          <p>다음 시리즈에서는 이 설계 방법을 실전 유형에 적용해보자.</p>
+
+          <p>→ <a href="dp-7-linear.html">다음 시리즈 : DP 유형별 패턴</a></p>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#코딩테스트</span>
+          <span>#DP</span>
+          <span>#다이나믹프로그래밍</span>
+          <span>#초기값</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="dp-5-recurrence.html">&larr; 이전 글</a>
+          <a href="dp-7-linear.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

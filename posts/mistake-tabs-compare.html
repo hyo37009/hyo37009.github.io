@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>탭 디자인 시안 비교</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=IBM+Plex+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'IBM Plex Sans KR', sans-serif;
+      background: #f0f4f8;
+      padding: 24px;
+      color: #333;
+    }
+    h1 {
+      text-align: center;
+      font-size: 20px;
+      margin-bottom: 8px;
+    }
+    .subtitle {
+      text-align: center;
+      font-size: 13px;
+      color: #6a737d;
+      margin-bottom: 32px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+    @media (max-width: 800px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+
+    /* 각 시안 카드 */
+    .demo {
+      background: #fff;
+      border: 2px solid #d0d7de;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .demo-header {
+      background: #edf2f7;
+      padding: 12px 16px;
+      border-bottom: 1px solid #d0d7de;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .demo-num {
+      background: #d73a49;
+      color: #fff;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      font-weight: bold;
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+    }
+    .demo-name {
+      font-size: 14px;
+      font-weight: bold;
+    }
+    .demo-desc {
+      font-size: 11px;
+      color: #6a737d;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .demo-body {
+      padding: 16px;
+    }
+    /* 모바일 프레임 */
+    .phone-frame {
+      width: 100%;
+      max-width: 380px;
+      margin: 0 auto;
+      border: 2px solid #d0d7de;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #fff;
+    }
+
+    /* ═══ 공통 컴포넌트 ═══ */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      background: #f6f8fa;
+      border-bottom: 1px solid #edf2f7;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10.5px;
+      color: #6a737d;
+    }
+    .status-bar .dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: #d73a49;
+      display: inline-block;
+      margin-right: 6px;
+    }
+    .status-bar .nav-btns {
+      display: flex;
+      gap: 4px;
+    }
+    .status-bar .nav-btn {
+      padding: 2px 6px;
+      background: #edf2f7;
+      border: 1px solid #d0d7de;
+      border-radius: 3px;
+      font-family: inherit;
+      font-size: 10px;
+      color: #6a737d;
+      cursor: pointer;
+    }
+    .content-placeholder {
+      padding: 16px;
+      font-size: 12px;
+      color: #9ca3af;
+      text-align: center;
+      min-height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-top: 1px dashed #e2e8f0;
+    }
+
+    /* 탭 공통 */
+    .tab-active-color { background: #059669 !important; }
+
+    /* ═══════════════════
+       A: 세로 리스트
+       ═══════════════════ */
+    .a-list {
+      border-bottom: 1px solid #d0d7de;
+    }
+    .a-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      border-bottom: 1px solid #edf2f7;
+      cursor: pointer;
+      transition: background 0.12s;
+      font-size: 12px;
+    }
+    .a-item:last-child { border-bottom: none; }
+    .a-item:hover { background: #f8fbff; }
+    .a-item.active { background: #eef6fc; }
+    .a-item .num {
+      width: 22px; height: 22px;
+      background: #d73a49;
+      color: #fff;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+    .a-item.active .num { background: #059669; }
+    .a-item .title { flex: 1; }
+    .a-item .src {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      color: #9ca3af;
+    }
+    .a-item .arrow {
+      color: #d0d7de;
+      font-size: 11px;
+    }
+    .a-item.active .arrow { color: #059669; }
+
+    /* ═══════════════════
+       B: 드롭다운
+       ═══════════════════ */
+    .b-dropdown-wrap {
+      padding: 10px 12px;
+      background: #edf2f7;
+      border-bottom: 1px solid #d0d7de;
+    }
+    .b-dropdown {
+      width: 100%;
+      padding: 10px 36px 10px 12px;
+      font-family: 'JetBrains Mono', 'IBM Plex Sans KR', monospace;
+      font-size: 12px;
+      color: #333;
+      background: #fff;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      appearance: none;
+      -webkit-appearance: none;
+      cursor: pointer;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 5l3 3 3-3' fill='none' stroke='%236a737d' stroke-width='1.5'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+    }
+    .b-dropdown:focus {
+      outline: none;
+      border-color: #059669;
+      box-shadow: 0 0 0 2px rgba(5,150,105,0.15);
+    }
+
+    /* ═══════════════════
+       C: 번호 필 + 제목 표시
+       ═══════════════════ */
+    .c-pills-wrap {
+      padding: 10px 12px;
+      background: #edf2f7;
+      border-bottom: 1px solid #d0d7de;
+    }
+    .c-pills {
+      display: flex;
+      gap: 6px;
+      justify-content: center;
+      margin-bottom: 8px;
+    }
+    .c-pill {
+      width: 32px; height: 32px;
+      background: #e2e8f0;
+      border: 2px solid #d0d7de;
+      color: #6a737d;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .c-pill:hover { border-color: #059669; color: #059669; }
+    .c-pill.active {
+      background: #059669;
+      border-color: #059669;
+      color: #fff;
+    }
+    .c-selected-title {
+      text-align: center;
+      font-size: 12px;
+      font-weight: bold;
+      color: #333;
+      padding: 4px 0;
+    }
+    .c-selected-src {
+      text-align: center;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9.5px;
+      color: #6a737d;
+    }
+
+    /* ═══════════════════
+       D: 접이식 셀렉터
+       ═══════════════════ */
+    .d-selector {
+      border-bottom: 1px solid #d0d7de;
+    }
+    .d-current {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px;
+      background: #edf2f7;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: bold;
+    }
+    .d-current .num {
+      width: 22px; height: 22px;
+      background: #059669;
+      color: #fff;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+    .d-current .chevron {
+      margin-left: auto;
+      font-size: 10px;
+      color: #6a737d;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .d-expanded {
+      /* 펼쳐진 상태 시뮬레이션 */
+    }
+    .d-option {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      font-size: 11px;
+      color: #6a737d;
+      border-top: 1px solid #edf2f7;
+      cursor: pointer;
+    }
+    .d-option:hover { background: #f8fbff; }
+    .d-option .num {
+      width: 18px; height: 18px;
+      background: #d73a49;
+      color: #fff;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+
+    /* ═══════════════════
+       E: 2행 균등 그리드
+       ═══════════════════ */
+    .e-grid-wrap {
+      padding: 10px 10px 0;
+      background: #edf2f7;
+      border-bottom: 1px solid #d0d7de;
+    }
+    .e-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 5px;
+      margin-bottom: 10px;
+    }
+    .e-tab {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 7px 8px;
+      background: #e2e8f0;
+      border: 1px solid #d0d7de;
+      border-radius: 5px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: #6a737d;
+      cursor: pointer;
+      transition: all 0.12s;
+      overflow: hidden;
+    }
+    .e-tab:hover { background: #f0f4f8; }
+    .e-tab.active {
+      background: #fff;
+      color: #333;
+      font-weight: bold;
+      border-color: #059669;
+    }
+    .e-tab .num {
+      width: 18px; height: 18px;
+      background: #d73a49;
+      color: #fff;
+      font-size: 9px;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+    .e-tab.active .num { background: #059669; }
+    .e-tab .label {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* ═══════════════════
+       F: 슬라이드 스트립
+       ═══════════════════ */
+    .f-strip-wrap {
+      background: #edf2f7;
+      border-bottom: 1px solid #d0d7de;
+      position: relative;
+    }
+    .f-strip-inner {
+      padding: 10px 12px 0;
+    }
+    .f-current-label {
+      font-size: 13px;
+      font-weight: bold;
+      color: #333;
+      margin-bottom: 4px;
+    }
+    .f-current-sub {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: #6a737d;
+      margin-bottom: 10px;
+    }
+    .f-dots {
+      display: flex;
+      gap: 0;
+      border-top: 1px solid #d0d7de;
+    }
+    .f-dot {
+      flex: 1;
+      text-align: center;
+      padding: 8px 0;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: bold;
+      color: #9ca3af;
+      cursor: pointer;
+      transition: all 0.12s;
+      border-right: 1px solid #d0d7de;
+      position: relative;
+    }
+    .f-dot:last-child { border-right: none; }
+    .f-dot:hover { background: #f0f4f8; color: #333; }
+    .f-dot.active {
+      color: #059669;
+      background: #fff;
+    }
+    .f-dot.active::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: #059669;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>모바일 탭 디자인 시안 비교</h1>
+  <p class="subtitle">380px 모바일 뷰포트 기준 &middot; 5번 실수 (캐스팅 누락) 선택 상태</p>
+
+  <div class="grid">
+
+    <!-- ═══ A: 세로 리스트 ═══ -->
+    <div class="demo">
+      <div class="demo-header">
+        <span class="demo-num">A</span>
+        <div>
+          <div class="demo-name">세로 리스트</div>
+          <div class="demo-desc">전체 목록이 항상 보임. 스크롤 필요할 수 있음</div>
+        </div>
+      </div>
+      <div class="demo-body">
+        <div class="phone-frame">
+          <div class="a-list">
+            <div class="a-item"><span class="num">1</span><span class="title">그리디에 그리디 사용</span><span class="src">17136</span><span class="arrow">›</span></div>
+            <div class="a-item"><span class="num">2</span><span class="title">그리디를 완전탐색으로</span><span class="src">13305</span><span class="arrow">›</span></div>
+            <div class="a-item"><span class="num">3</span><span class="title">정렬 최적화 시도</span><span class="src">7568</span><span class="arrow">›</span></div>
+            <div class="a-item"><span class="num">4</span><span class="title">괄호 누락</span><span class="src">2531</span><span class="arrow">›</span></div>
+            <div class="a-item active"><span class="num">5</span><span class="title">instanceof 캐스팅 누락</span><span class="src">19236</span><span class="arrow">›</span></div>
+          </div>
+          <div class="content-placeholder">[ 선택된 실수 내용 표시 ]</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ B: 드롭다운 ═══ -->
+    <div class="demo">
+      <div class="demo-header">
+        <span class="demo-num">B</span>
+        <div>
+          <div class="demo-name">드롭다운 셀렉트</div>
+          <div class="demo-desc">가장 컴팩트. 네이티브 UI 활용</div>
+        </div>
+      </div>
+      <div class="demo-body">
+        <div class="phone-frame">
+          <div class="b-dropdown-wrap">
+            <select class="b-dropdown">
+              <option>#1 그리디 적용 불가 문제에 그리디 사용</option>
+              <option>#2 그리디 문제를 완전탐색으로 접근</option>
+              <option>#3 브루트포스에 정렬 최적화 시도</option>
+              <option>#4 연산자 우선순위 괄호 누락</option>
+              <option selected>#5 instanceof 후 캐스팅 누락</option>
+            </select>
+          </div>
+          <div class="status-bar">
+            <span><span class="dot"></span>BOJ19236</span>
+            <div class="nav-btns">
+              <button class="nav-btn">&larr;</button>
+              <button class="nav-btn">5/5</button>
+              <button class="nav-btn" disabled>&rarr;</button>
+            </div>
+          </div>
+          <div class="content-placeholder">[ 선택된 실수 내용 표시 ]</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ C: 번호 필 + 아래 제목 ═══ -->
+    <div class="demo">
+      <div class="demo-header">
+        <span class="demo-num">C</span>
+        <div>
+          <div class="demo-name">번호 원형 + 제목 표시</div>
+          <div class="demo-desc">번호로 빠르게 선택, 아래에 제목 표시</div>
+        </div>
+      </div>
+      <div class="demo-body">
+        <div class="phone-frame">
+          <div class="c-pills-wrap">
+            <div class="c-pills">
+              <span class="c-pill">1</span>
+              <span class="c-pill">2</span>
+              <span class="c-pill">3</span>
+              <span class="c-pill">4</span>
+              <span class="c-pill active">5</span>
+            </div>
+            <div class="c-selected-title">instanceof 후 캐스팅 누락</div>
+            <div class="c-selected-src">BOJ19236 청소년 상어</div>
+          </div>
+          <div class="content-placeholder">[ 선택된 실수 내용 표시 ]</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ D: 접이식 ═══ -->
+    <div class="demo">
+      <div class="demo-header">
+        <span class="demo-num">D</span>
+        <div>
+          <div class="demo-name">접이식 셀렉터</div>
+          <div class="demo-desc">현재 선택만 보이고, 탭하면 목록 펼침</div>
+        </div>
+      </div>
+      <div class="demo-body">
+        <div class="phone-frame">
+          <div class="d-selector">
+            <div class="d-current">
+              <span class="num">5</span>
+              instanceof 후 캐스팅 누락
+              <span class="chevron">[목록 ▼]</span>
+            </div>
+            <div class="d-expanded">
+              <div class="d-option"><span class="num">1</span> 그리디 적용 불가 문제에 그리디 사용</div>
+              <div class="d-option"><span class="num">2</span> 그리디 문제를 완전탐색으로 접근</div>
+              <div class="d-option"><span class="num">3</span> 브루트포스에 정렬 최적화 시도</div>
+              <div class="d-option"><span class="num">4</span> 연산자 우선순위 괄호 누락</div>
+            </div>
+          </div>
+          <div class="content-placeholder">[ 선택된 실수 내용 표시 ]</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ E: 2행 그리드 ═══ -->
+    <div class="demo">
+      <div class="demo-header">
+        <span class="demo-num">E</span>
+        <div>
+          <div class="demo-name">균등 그리드 (3+2)</div>
+          <div class="demo-desc">제목 축약해서 그리드 배치. 말줄임 처리</div>
+        </div>
+      </div>
+      <div class="demo-body">
+        <div class="phone-frame">
+          <div class="e-grid-wrap">
+            <div class="e-grid">
+              <div class="e-tab"><span class="num">1</span><span class="label">그리디에 그리디</span></div>
+              <div class="e-tab"><span class="num">2</span><span class="label">완전탐색</span></div>
+              <div class="e-tab"><span class="num">3</span><span class="label">정렬 최적화</span></div>
+              <div class="e-tab"><span class="num">4</span><span class="label">괄호 누락</span></div>
+              <div class="e-tab active"><span class="num">5</span><span class="label">캐스팅 누락</span></div>
+            </div>
+          </div>
+          <div class="status-bar">
+            <span><span class="dot"></span>instanceof 후 캐스팅 누락 &mdash; BOJ19236</span>
+          </div>
+          <div class="content-placeholder">[ 선택된 실수 내용 표시 ]</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ F: 넘버 스트립 ═══ -->
+    <div class="demo">
+      <div class="demo-header">
+        <span class="demo-num">F</span>
+        <div>
+          <div class="demo-name">넘버 스트립 + 상단 제목</div>
+          <div class="demo-desc">제목이 위에 크게, 번호가 하단 탭바처럼</div>
+        </div>
+      </div>
+      <div class="demo-body">
+        <div class="phone-frame">
+          <div class="f-strip-wrap">
+            <div class="f-strip-inner">
+              <div class="f-current-label">#5 instanceof 후 캐스팅 누락</div>
+              <div class="f-current-sub">BOJ19236 청소년 상어 &middot; 5/5</div>
+            </div>
+            <div class="f-dots">
+              <span class="f-dot">1</span>
+              <span class="f-dot">2</span>
+              <span class="f-dot">3</span>
+              <span class="f-dot">4</span>
+              <span class="f-dot active">5</span>
+            </div>
+          </div>
+          <div class="content-placeholder">[ 선택된 실수 내용 표시 ]</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</body>
+</html>

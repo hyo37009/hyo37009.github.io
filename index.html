@@ -16,9 +16,14 @@
       <div class="banner-subtitle">B급 개발자의 아지트</div>
     </div>
 
-    <!-- 티커 -->
-    <div class="ticker">
-      <span>환영합니다! 이 홈페이지는 공사중입니다. 버그가 아니라 기능입니다. 아마도요.</span>
+    <!-- 타이핑 바 -->
+    <div class="typing-bar">
+      <span class="tb-prompt">&gt;_&nbsp;</span>
+      <span class="tb-host">nbh</span>
+      <span class="tb-dollar">$&nbsp;</span>
+      <span class="tb-cmd" id="tb-cmd"></span>
+      <span class="tb-output" id="tb-output"></span>
+      <span class="tb-cursor blink" id="tb-cursor"></span>
     </div>
 
     <!-- 네비게이션 -->
@@ -34,9 +39,7 @@
 
       <!-- 사이드바 -->
       <aside class="sidebar">
-        <div class="profile-img">
-          사진 준비중
-        </div>
+        <img class="profile-img" src="profile.jpg" alt="nbh">
         <div class="profile-name">nbh</div>
         <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
 
@@ -48,7 +51,7 @@
         <div class="sidebar-section">
           <h3>카테고리</h3>
           <div class="sidebar-categories">
-            <a href="pages/nbuntu.html">nbuntu <span class="cat-count">30</span></a>
+            <a href="pages/nbuntu.html">nbuntu <span class="cat-count">33</span></a>
             <a href="pages/knitting.html">뜨개 공방 <span class="cat-count">1</span></a>
           </div>
         </div>
@@ -73,6 +76,21 @@
 
         <ul class="post-list">
           <li>
+            <span class="post-category">코딩테스트</span>
+            <a href="posts/backtracking-1-basics.html">기본 개념</a>
+            <span class="post-date">2026.02.27</span>
+          </li>
+          <li>
+            <span class="post-category">코딩테스트</span>
+            <a href="posts/backtracking-2-pruning.html">가지치기와 최적화</a>
+            <span class="post-date">2026.02.27</span>
+          </li>
+          <li>
+            <span class="post-category">코딩테스트</span>
+            <a href="posts/backtracking-3-patterns.html">실전 패턴과 면접 대비</a>
+            <span class="post-date">2026.02.27</span>
+          </li>
+          <li>
             <span class="post-category">JWT</span>
             <a href="posts/jwt-1-token-auth.html">토큰 기반 인증의 개념과 필요성</a>
             <span class="post-date">2026.02.23</span>
@@ -81,21 +99,6 @@
             <span class="post-category">JWT</span>
             <a href="posts/jwt-2-structure.html">JWT의 구조와 원리</a>
             <span class="post-date">2026.02.23</span>
-          </li>
-          <li>
-            <span class="post-category">Spring</span>
-            <a href="posts/spring-csrf-1-concept.html">CSRF 공격의 원리와 방어 전략</a>
-            <span class="post-date">2026.02.20</span>
-          </li>
-          <li>
-            <span class="post-category">Spring</span>
-            <a href="posts/spring-session-1-concurrent-login.html">동시 로그인 방지와 SessionRegistry</a>
-            <span class="post-date">2026.02.20</span>
-          </li>
-          <li>
-            <span class="post-category">Spring</span>
-            <a href="posts/spring-async-1-basics.html">@Async와 비동기 처리의 기본</a>
-            <span class="post-date">2026.02.20</span>
           </li>
         </ul>
 
@@ -115,5 +118,65 @@
   <script src="firebase-config.js"></script>
 
   <script src="script.js"></script>
+
+  <script>
+    /* ── 타이핑 바 애니메이션 ── */
+    (function () {
+      var TYPE_SPEED   = 75;
+      var ENTER_DELAY  = 280;
+      var RESULT_DELAY = 2200;
+      var CLEAR_DELAY  = 350;
+
+      var SEQ = [
+        { cmd: 'cat welcome.txt',       result: '갠홈에 오신 걸 환영합니다' },
+        { cmd: 'whoami',                result: 'nbh — 아직 공사중' },
+        { cmd: 'ls -la',                result: 'posts/  images/  coffee.txt' },
+        { cmd: 'cat status.txt',        result: '이 홈페이지는 버그가 아니라 기능' },
+        { cmd: './coffee --brew',       result: '커피 한 잔 하면서 둘러보세요' },
+        { cmd: 'cat hidden.txt',        result: '숨겨진 게 있을지도...?' },
+        { cmd: 'git log -1',            result: 'feat: 오늘도 무사히' },
+      ];
+
+      var elCmd    = document.getElementById('tb-cmd');
+      var elOutput = document.getElementById('tb-output');
+      var elCursor = document.getElementById('tb-cursor');
+      if (!elCmd || !elOutput || !elCursor) return;
+      var seqIdx = 0;
+
+      function clearAll() {
+        elCmd.textContent    = '';
+        elOutput.textContent = '';
+      }
+
+      function startSequence() {
+        var item = SEQ[seqIdx % SEQ.length];
+        seqIdx++;
+        clearAll();
+
+        typeCommand(item.cmd, 0, function () {
+          elCursor.classList.remove('blink');
+          setTimeout(function () {
+            elOutput.textContent = ' → ' + item.result;
+            elCursor.classList.add('blink');
+            setTimeout(function () {
+              elCursor.classList.remove('blink');
+              setTimeout(function () {
+                elCursor.classList.add('blink');
+                startSequence();
+              }, CLEAR_DELAY);
+            }, RESULT_DELAY);
+          }, ENTER_DELAY);
+        });
+      }
+
+      function typeCommand(text, charIdx, onDone) {
+        if (charIdx > text.length) { onDone(); return; }
+        elCmd.textContent = text.slice(0, charIdx);
+        setTimeout(function () { typeCommand(text, charIdx + 1, onDone); }, TYPE_SPEED);
+      }
+
+      setTimeout(startSequence, 500);
+    })();
+  </script>
 </body>
 </html>

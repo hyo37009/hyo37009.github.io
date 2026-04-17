@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>탭 디자인 시안 비교 v2</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=IBM+Plex+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'IBM Plex Sans KR', sans-serif;
+      background: #f0f4f8;
+      padding: 24px;
+      color: #333;
+    }
+    h1 { text-align: center; font-size: 20px; margin-bottom: 6px; }
+    .subtitle {
+      text-align: center; font-size: 12px; color: #6a737d;
+      font-family: 'JetBrains Mono', monospace; margin-bottom: 32px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+    @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+
+    .demo {
+      background: #fff;
+      border: 2px solid #d0d7de;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .demo-header {
+      background: #edf2f7;
+      padding: 12px 16px;
+      border-bottom: 1px solid #d0d7de;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .demo-num {
+      background: #d73a49; color: #fff;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px; font-weight: bold;
+      width: 28px; height: 28px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 6px;
+    }
+    .demo-name { font-size: 14px; font-weight: bold; }
+    .demo-desc { font-size: 11px; color: #6a737d; font-family: 'JetBrains Mono', monospace; }
+    .demo-body { padding: 16px; }
+
+    .phone {
+      width: 100%; max-width: 380px; margin: 0 auto;
+      border: 2px solid #d0d7de; border-radius: 8px;
+      overflow: hidden; background: #fff;
+    }
+    .fake-content {
+      padding: 16px; font-size: 12px; color: #9ca3af;
+      text-align: center; min-height: 50px;
+      display: flex; align-items: center; justify-content: center;
+      border-top: 1px dashed #e2e8f0;
+    }
+
+    /* ═══════════════════════════════════
+       A — 풀 카드 목록 (제목이 주인공)
+       ═══════════════════════════════════ */
+    .a-cards {
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      background: #f6f8fa;
+      border-bottom: 1px solid #d0d7de;
+    }
+    .a-card {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px;
+      background: #fff;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .a-card:hover { border-color: #b8d4e3; }
+    .a-card.active {
+      border-color: #059669;
+      background: #f0fdf4;
+      box-shadow: 0 0 0 1px #059669;
+    }
+    .a-card .idx {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 18px;
+      font-weight: bold;
+      color: #d0d7de;
+      min-width: 24px;
+    }
+    .a-card.active .idx { color: #059669; }
+    .a-card .body { flex: 1; }
+    .a-card .title {
+      font-size: 13px;
+      font-weight: bold;
+      line-height: 1.3;
+      color: #333;
+    }
+    .a-card .src {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9.5px;
+      color: #9ca3af;
+      margin-top: 2px;
+    }
+
+    /* ═══════════════════════════════════
+       B — 세로 탭 바 (왼쪽 라인)
+       ═══════════════════════════════════ */
+    .b-vtabs {
+      border-bottom: 1px solid #d0d7de;
+    }
+    .b-vtab {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 11px 14px;
+      cursor: pointer;
+      transition: background 0.12s;
+      border-left: 3px solid transparent;
+      font-size: 12.5px;
+      color: #6a737d;
+    }
+    .b-vtab + .b-vtab { border-top: 1px solid #f0f4f8; }
+    .b-vtab:hover { background: #f8fbff; }
+    .b-vtab.active {
+      border-left-color: #059669;
+      background: #f0fdf4;
+      color: #333;
+      font-weight: bold;
+    }
+    .b-vtab .num {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: #9ca3af;
+      min-width: 16px;
+    }
+    .b-vtab.active .num { color: #059669; }
+
+    /* ═══════════════════════════════════
+       C — 태그 클라우드 (자연스러운 흐름)
+       ═══════════════════════════════════ */
+    .c-cloud {
+      padding: 14px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      background: #f6f8fa;
+      border-bottom: 1px solid #d0d7de;
+    }
+    .c-tag {
+      padding: 8px 14px;
+      background: #fff;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 20px;
+      font-size: 12px;
+      color: #555;
+      cursor: pointer;
+      transition: all 0.15s;
+      line-height: 1.2;
+    }
+    .c-tag:hover {
+      border-color: #93c5fd;
+      color: #0550ae;
+    }
+    .c-tag.active {
+      background: #059669;
+      border-color: #059669;
+      color: #fff;
+      font-weight: bold;
+    }
+
+    /* ═══════════════════════════════════
+       D — 스택 칩 (2열, 제목 전체 표시)
+       ═══════════════════════════════════ */
+    .d-chips-wrap {
+      padding: 10px;
+      background: #f6f8fa;
+      border-bottom: 1px solid #d0d7de;
+    }
+    .d-chips {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+    .d-chip {
+      padding: 10px 10px;
+      background: #fff;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 6px;
+      font-size: 11.5px;
+      color: #555;
+      cursor: pointer;
+      transition: all 0.15s;
+      line-height: 1.35;
+      text-align: center;
+    }
+    .d-chip:hover { border-color: #93c5fd; }
+    .d-chip.active {
+      background: #eef6fc;
+      border-color: #059669;
+      color: #059669;
+      font-weight: bold;
+    }
+    .d-chip:last-child:nth-child(odd) {
+      grid-column: 1 / -1;
+      max-width: 50%;
+      justify-self: center;
+    }
+
+    /* ═══════════════════════════════════
+       E — 사이드 인디케이터 카드
+       ═══════════════════════════════════ */
+    .e-list {
+      border-bottom: 1px solid #d0d7de;
+    }
+    .e-item {
+      display: flex;
+      gap: 0;
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+    .e-item + .e-item { border-top: 1px solid #f0f4f8; }
+    .e-item:hover { background: #f8fbff; }
+    .e-indicator {
+      width: 5px;
+      background: transparent;
+      flex-shrink: 0;
+      transition: background 0.15s;
+    }
+    .e-item.active .e-indicator { background: #059669; }
+    .e-item-body {
+      flex: 1;
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .e-item .num {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 16px;
+      font-weight: bold;
+      color: #e2e8f0;
+      min-width: 20px;
+    }
+    .e-item.active .num { color: #059669; }
+    .e-item .title {
+      font-size: 12.5px;
+      color: #6a737d;
+    }
+    .e-item.active .title {
+      color: #333;
+      font-weight: bold;
+    }
+
+    /* ═══════════════════════════════════
+       F — 토글 버튼 그룹 (풀너비 스택)
+       ═══════════════════════════════════ */
+    .f-toggles {
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      background: #edf2f7;
+      border-bottom: 1px solid #d0d7de;
+    }
+    .f-btn {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      background: #f6f8fa;
+      border: none;
+      border-radius: 6px;
+      font-family: 'IBM Plex Sans KR', sans-serif;
+      font-size: 12.5px;
+      color: #6a737d;
+      cursor: pointer;
+      transition: all 0.12s;
+      text-align: left;
+      width: 100%;
+    }
+    .f-btn:hover { background: #fff; color: #333; }
+    .f-btn.active {
+      background: #fff;
+      color: #333;
+      font-weight: bold;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+    .f-btn .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #d0d7de;
+      flex-shrink: 0;
+    }
+    .f-btn.active .dot { background: #059669; }
+    .f-btn .title { flex: 1; }
+    .f-btn .src {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      color: #b0bec5;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>모바일 탭 디자인 시안 v2</h1>
+  <p class="subtitle">핵심: 제목이 다 보임 &middot; 바로 누를 수 있음 &middot; 답답하지 않음</p>
+
+  <div class="grid">
+
+    <!-- A: 카드 목록 -->
+    <div class="demo">
+      <div class="demo-header">
+        <span class="demo-num">A</span>
+        <div>
+          <div class="demo-name">카드 목록</div>
+          <div class="demo-desc">각 실수가 독립된 카드. 여백으로 숨쉬기</div>
+        </div>
+      </div>
+      <div class="demo-body">
+        <div class="phone">
+          <div class="a-cards">
+            <div class="a-card"><span class="idx">1</span><div class="body"><div class="title">그리디 적용 불가 문제에 그리디 사용</div><div class="src">BOJ17136</div></div></div>
+            <div class="a-card"><span class="idx">2</span><div class="body"><div class="title">그리디 문제를 완전탐색으로 접근</div><div class="src">BOJ13305</div></div></div>
+            <div class="a-card"><span class="idx">3</span><div class="body"><div class="title">브루트포스에 정렬 최적화 시도</div><div class="src">BOJ7568</div></div></div>
+            <div class="a-card"><span class="idx">4</span><div class="body"><div class="title">연산자 우선순위 괄호 누락</div><div class="src">BOJ2531</div></div></div>
+            <div class="a-card active"><span class="idx">5</span><div class="body"><div class="title">instanceof 후 캐스팅 누락</div><div class="src">BOJ19236</div></div></div>
+          </div>
+          <div class="fake-content">[ 선택된 내용 ]</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- B: 사이드 라인 탭 -->
+    <div class="demo">
+      <div class="demo-header">
+        <span class="demo-num">B</span>
+        <div>
+          <div class="demo-name">사이드 라인</div>
+          <div class="demo-desc">왼쪽 초록 바로 현재 위치 표시. 미니멀</div>
+        </div>
+      </div>
+      <div class="demo-body">
+        <div class="phone">
+          <div class="b-vtabs">
+            <div class="b-vtab"><span class="num">#1</span> 그리디 적용 불가 문제에 그리디 사용</div>
+            <div class="b-vtab"><span class="num">#2</span> 그리디 문제를 완전탐색으로 접근</div>
+            <div class="b-vtab"><span class="num">#3</span> 브루트포스에 정렬 최적화 시도</div>
+            <div class="b-vtab"><span class="num">#4</span> 연산자 우선순위 괄호 누락</div>
+            <div class="b-vtab active"><span class="num">#5</span> instanceof 후 캐스팅 누락</div>
+          </div>
+          <div class="fake-content">[ 선택된 내용 ]</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- C: 태그 클라우드 -->
+    <div class="demo">
+      <div class="demo-header">
+        <span class="demo-num">C</span>
+        <div>
+          <div class="demo-name">태그 클라우드</div>
+          <div class="demo-desc">둥근 태그가 자연스럽게 흐름. 가장 가벼움</div>
+        </div>
+      </div>
+      <div class="demo-body">
+        <div class="phone">
+          <div class="c-cloud">
+            <span class="c-tag">그리디에 그리디 사용</span>
+            <span class="c-tag">그리디를 완전탐색</span>
+            <span class="c-tag">정렬 최적화 시도</span>
+            <span class="c-tag">괄호 누락</span>
+            <span class="c-tag active">캐스팅 누락</span>
+          </div>
+          <div class="fake-content">[ 선택된 내용 ]</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- D: 2열 칩 -->
+    <div class="demo">
+      <div class="demo-header">
+        <span class="demo-num">D</span>
+        <div>
+          <div class="demo-name">2열 칩 그리드</div>
+          <div class="demo-desc">균등 2열 배치. 홀수면 가운데 정렬</div>
+        </div>
+      </div>
+      <div class="demo-body">
+        <div class="phone">
+          <div class="d-chips-wrap">
+            <div class="d-chips">
+              <div class="d-chip">그리디에<br>그리디 사용</div>
+              <div class="d-chip">그리디를<br>완전탐색</div>
+              <div class="d-chip">정렬<br>최적화 시도</div>
+              <div class="d-chip">괄호 누락</div>
+              <div class="d-chip active">캐스팅 누락</div>
+            </div>
+          </div>
+          <div class="fake-content">[ 선택된 내용 ]</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- E: 인디케이터 리스트 -->
+    <div class="demo">
+      <div class="demo-header">
+        <span class="demo-num">E</span>
+        <div>
+          <div class="demo-name">인디케이터 리스트</div>
+          <div class="demo-desc">왼쪽 컬러 바 + 큰 번호. 시원한 간격</div>
+        </div>
+      </div>
+      <div class="demo-body">
+        <div class="phone">
+          <div class="e-list">
+            <div class="e-item"><span class="e-indicator"></span><div class="e-item-body"><span class="num">1</span><span class="title">그리디 적용 불가 문제에 그리디 사용</span></div></div>
+            <div class="e-item"><span class="e-indicator"></span><div class="e-item-body"><span class="num">2</span><span class="title">그리디 문제를 완전탐색으로 접근</span></div></div>
+            <div class="e-item"><span class="e-indicator"></span><div class="e-item-body"><span class="num">3</span><span class="title">브루트포스에 정렬 최적화 시도</span></div></div>
+            <div class="e-item"><span class="e-indicator"></span><div class="e-item-body"><span class="num">4</span><span class="title">연산자 우선순위 괄호 누락</span></div></div>
+            <div class="e-item active"><span class="e-indicator"></span><div class="e-item-body"><span class="num">5</span><span class="title">instanceof 후 캐스팅 누락</span></div></div>
+          </div>
+          <div class="fake-content">[ 선택된 내용 ]</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- F: 토글 버튼 -->
+    <div class="demo">
+      <div class="demo-header">
+        <span class="demo-num">F</span>
+        <div>
+          <div class="demo-name">토글 버튼 스택</div>
+          <div class="demo-desc">라디오 버튼 느낌. 활성 카드만 돌출</div>
+        </div>
+      </div>
+      <div class="demo-body">
+        <div class="phone">
+          <div class="f-toggles">
+            <button class="f-btn"><span class="dot"></span><span class="title">그리디 적용 불가 문제에 그리디 사용</span><span class="src">17136</span></button>
+            <button class="f-btn"><span class="dot"></span><span class="title">그리디 문제를 완전탐색으로 접근</span><span class="src">13305</span></button>
+            <button class="f-btn"><span class="dot"></span><span class="title">브루트포스에 정렬 최적화 시도</span><span class="src">7568</span></button>
+            <button class="f-btn"><span class="dot"></span><span class="title">연산자 우선순위 괄호 누락</span><span class="src">2531</span></button>
+            <button class="f-btn active"><span class="dot"></span><span class="title">instanceof 후 캐스팅 누락</span><span class="src">19236</span></button>
+          </div>
+          <div class="fake-content">[ 선택된 내용 ]</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</body>
+</html>

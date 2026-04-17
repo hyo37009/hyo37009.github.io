@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[JWT] 3. JWT의 구조 해부 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[JWT] 3. JWT의 구조 해부</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.03.12
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">JWT deep dive (3/5)</div>
+            <p>이전 편: <a href="jwt-deep-dive-2-stateless.html">[JWT] 2. Stateless 인증이란</a></p>
+            <p>다음 편: <a href="jwt-deep-dive-4-signature.html">[JWT] 4. 서명과 검증의 원리</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">JWT deep dive 시리즈</div>
+            <p>1. <a href="jwt-deep-dive-1-session-limits.html">1 세션의 한계와 토큰의 등장</a></p>
+            <p>2. <a href="jwt-deep-dive-2-stateless.html">2 Stateless 인증이란</a></p>
+            <p>3. <strong>JWT의 구조 해부</strong> (현재 글)</p>
+            <p>4. <a href="jwt-deep-dive-4-signature.html">4 서명과 검증의 원리</a></p>
+            <p>5. <a href="jwt-deep-dive-5-tips.html">5 JWT 실전 팁과 면접 대비</a></p>
+          </div>
+
+          <p><a href="jwt-deep-dive-2-stateless.html">이전 편</a>에서 토큰 기반 인증의 원리와 장점을 살펴봤다. 이번 편에서는 그 토큰의 실체인 JWT(JSON Web Token)가 어떻게 생겼고, 각 부분이 어떤 역할을 하는지 하나씩 뜯어본다.</p>
+
+          <h2>JWT란</h2>
+
+          <p>JWT(JSON Web Token)는 <mark>JSON 형식으로 인코딩된, 서명이 포함된 토큰</mark>이다. RFC 7519 표준으로 정의되어 있고, API 인증에서 사실상의 표준으로 자리 잡았다.</p>
+
+          <p>JWT 이전에는 회사마다 토큰 형식이 제각각이었다. 토큰의 구조, 검증 방식이 통일되지 않으니 서비스 간 상호 운용성도 떨어졌고, 보안 취약점도 많았다. JWT는 이 혼란을 해결하기 위해 토큰의 구조와 검증 방식을 표준화한 것이다.</p>
+
+          <h3>Opaque Token과의 차이</h3>
+
+          <p>토큰은 크게 두 종류로 나뉜다.</p>
+
+          <p><strong>Opaque Token (불투명 토큰)</strong> — <code>7a9f2c8e1b4d3a5f6e8c9d0a</code> 같은 랜덤 문자열이다. 이 문자열을 봐서는 누구의 토큰인지, 어떤 권한이 있는지 전혀 알 수 없다. 결국 서버가 DB를 조회해야만 정보를 알 수 있다. 세션 ID와 본질적으로 같은 구조다.</p>
+
+          <p><strong>JWT (Self-contained 토큰)</strong> — 토큰 안에 사용자 정보가 JSON으로 들어 있다. 서버는 토큰을 파싱하면 바로 사용자를 식별할 수 있다. <a href="jwt-deep-dive-2-stateless.html">이전 편</a>에서 설명한 "Self-contained" 특성이 바로 이것이다.</p>
+
+          <p>이 차이가 결정적이다. Opaque Token은 결국 저장소 조회가 필요하니까 세션의 한계를 벗어나지 못한다. JWT는 토큰 자체에 정보가 있으니까 외부 저장소 없이도 인증이 가능하다.</p>
+
+          <h2>점 세 개로 나뉜 구조</h2>
+
+          <p>실제 JWT를 보면 이렇게 생겼다.</p>
+
+<pre><code>eyJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2lkIjoxfQ.SflKxwRJSMeKKF2QT4f</code></pre>
+          <p>무작위 문자열처럼 보이지만, 점(<code>.</code>)을 기준으로 세 부분으로 나뉜다.</p>
+
+<pre><code>eyJhbGciOiJIUzI1NiJ9 . eyJ1c2VyX2lkIjoxfQ . SflKxwRJSMeKKF2QT4f
+├── Header ───────────┤ ├── Payload ─────────┤ ├── Signature ────────┤</code></pre>
+          <p>각 부분은 JSON을 <mark>Base64URL로 인코딩</mark>한 문자열이다. 인코딩이지 암호화가 아니니까, 디코딩하면 원래 JSON이 그대로 나온다. 이 세 부분이 무엇을 담고 있는지 하나씩 살펴보자.</p>
+
+<div class="mermaid">
+graph TD
+    subgraph "JWT"
+        H["Header<br/>(메타데이터)"]
+        P["Payload<br/>(사용자 데이터)"]
+        S["Signature<br/>(무결성 서명)"]
+    end
+
+    H --- P --- S
+
+    H1["어떤 알고리즘으로<br/>서명했는가"]
+    P1["누가, 어떤 권한으로,<br/>언제까지 유효한가"]
+    S1["위 내용이<br/>변조되지 않았는가"]
+
+    H -.-> H1
+    P -.-> P1
+    S -.-> S1
+
+    style H fill:#42A5F5,stroke:#333,stroke-width:2px,color:#fff
+    style P fill:#AB47BC,stroke:#333,stroke-width:2px,color:#fff
+    style S fill:#EF5350,stroke:#333,stroke-width:2px,color:#fff
+</div>
+          <h2>Header — 토큰의 메타데이터</h2>
+
+          <p>Header는 이 토큰이 어떤 타입이고, 어떤 알고리즘으로 서명되었는지를 알려주는 <mark>메타데이터</mark>다.</p>
+
+          <p>Base64URL 디코딩하면 이런 JSON이 나온다.</p>
+
+<pre><code class="language-json">{
+  "alg": "HS256",
+  "typ": "JWT"
+}</code></pre>
+          <p>딱 두 가지 필드다.</p>
+
+          <ul>
+            <li><code>alg</code> — 서명에 사용한 알고리즘. 서버가 토큰을 검증할 때 이 값을 보고 어떤 방식으로 서명을 확인할지 결정한다</li>
+            <li><code>typ</code> — 토큰의 타입. JWT에서는 항상 <code>"JWT"</code>다</li>
+          </ul>
+
+          <p><code>alg</code> 값으로 올 수 있는 대표적인 알고리즘은 세 가지다.</p>
+
+          <table>
+          <thead>
+          <tr><th>알고리즘</th><th>방식</th><th>한 줄 설명</th></tr>
+          </thead>
+          <tbody>
+          <tr><td><strong>HS256</strong></td><td>대칭키 (HMAC)</td><td>같은 키로 서명하고 검증한다</td></tr>
+          <tr><td><strong>RS256</strong></td><td>비대칭키 (RSA)</td><td>개인키로 서명, 공개키로 검증한다</td></tr>
+          <tr><td><strong>ES256</strong></td><td>비대칭키 (ECDSA)</td><td>RSA보다 키가 작고 빠르다</td></tr>
+          </tbody>
+          </table>
+
+          <p>각 알고리즘의 차이와 선택 기준은 <a href="jwt-deep-dive-4-signature.html">4 서명과 검증의 원리</a>에서 자세히 다룬다. 지금은 "Header가 서명 방식을 지정한다"는 것만 기억하면 된다.</p>
+
+          <h2>Payload — 실제 데이터 (클레임)</h2>
+
+          <p>Payload는 토큰의 핵심이다. 사용자 정보, 권한, 만료 시간 같은 <mark>실제 데이터</mark>를 담는다. 이 데이터 하나하나를 <strong>클레임(Claim)</strong>이라고 부른다. Key-Value 쌍으로 된 정보 조각이라고 생각하면 된다.</p>
+
+<pre><code class="language-json">{
+  "sub": "user@example.com",
+  "user_id": 1,
+  "role": "USER",
+  "iat": 1669996400,
+  "exp": 1670000000
+}</code></pre>
+          <p>클레임은 크게 세 종류로 나뉜다.</p>
+
+          <h3>등록된 클레임 (Registered Claims)</h3>
+
+          <p>JWT 표준에서 미리 정의해놓은 예약어다. 의미가 약속되어 있어서, 어떤 JWT 라이브러리든 이 클레임을 인식하고 자동으로 처리한다.</p>
+
+          <table>
+          <thead>
+          <tr><th>클레임</th><th>이름</th><th>설명</th></tr>
+          </thead>
+          <tbody>
+          <tr><td><code>iss</code></td><td>Issuer</td><td>토큰을 발급한 주체. <code>"https://auth.example.com"</code> 같은 값</td></tr>
+          <tr><td><code>sub</code></td><td>Subject</td><td>토큰의 주체. 보통 사용자 이메일이나 ID</td></tr>
+          <tr><td><code>aud</code></td><td>Audience</td><td>토큰의 수신 대상. 어떤 서비스를 위한 토큰인지</td></tr>
+          <tr><td><code>exp</code></td><td>Expiration</td><td>만료 시간. Unix timestamp 형식</td></tr>
+          <tr><td><code>nbf</code></td><td>Not Before</td><td>이 시간 이전에는 유효하지 않음</td></tr>
+          <tr><td><code>iat</code></td><td>Issued At</td><td>토큰 발급 시간</td></tr>
+          <tr><td><code>jti</code></td><td>JWT ID</td><td>토큰의 고유 식별자</td></tr>
+          </tbody>
+          </table>
+
+          <p>모두 선택 사항이지만, 이 중 <mark><code>exp</code>가 가장 중요</mark>하다. 서버는 토큰을 받으면 <code>exp</code>를 현재 시간과 비교해서, 만료된 토큰은 자동으로 거부한다.</p>
+
+          <p><code>iss</code>와 <code>aud</code>는 "이 토큰이 어디서 발급되어서, 누구를 위한 것인지"를 검증하는 데 쓴다. 마이크로서비스 환경에서 다른 서비스의 토큰이 내 서비스에서 통용되는 것을 막을 수 있다.</p>
+
+          <h3>비공개 클레임 (Private Claims)</h3>
+
+          <p>개발자가 자유롭게 정의하는 커스텀 클레임이다. 실무에서 가장 많이 다루게 되는 부분이기도 하다.</p>
+
+<pre><code class="language-json">{
+  "user_id": 1,
+  "role": "USER",
+  "permissions": ["read", "write"]
+}</code></pre>
+          <p><code>user_id</code>, <code>role</code>, <code>permissions</code> 같이 서비스에 필요한 정보를 자유롭게 넣으면 된다. 다만 이름이 다른 시스템의 클레임과 충돌하지 않도록 주의해야 한다.</p>
+
+          <h3>공개 클레임 (Public Claims)</h3>
+
+          <p>충돌 방지를 위해 IANA에 등록하거나 URL 형식으로 작성하는 클레임인데, 실무에서는 거의 사용하지 않으니 이런 게 있다는 것만 알아두면 된다.</p>
+
+          <div class="callout callout-info">
+            <div class="callout-title">Payload에 민감 정보 금지</div>
+            <p>JWT는 <mark>인코딩되었을 뿐 암호화되지 않는다</mark>. Base64URL 디코딩은 누구나 할 수 있다. 비밀번호, 카드번호, 주민등록번호 같은 민감한 정보는 절대 Payload에 넣으면 안 된다.</p>
+          </div>
+
+          <h3>jjwt로 클레임 다루기</h3>
+
+          <p>Spring에서 자주 쓰는 jjwt 라이브러리로 클레임을 생성하고 읽는 코드를 보자.</p>
+
+          <p>토큰 생성 시에는 빌더 패턴으로 클레임을 하나씩 추가한다.</p>
+
+<pre><code class="language-java">String jwt = Jwts.builder()
+    .setSubject("user@example.com")
+    .setIssuedAt(new Date())
+    .setExpiration(new Date(System.currentTimeMillis() + 3600000))
+    .claim("user_id", 1)
+    .claim("role", "USER")
+    .signWith(SignatureAlgorithm.HS256, secretKey)
+    .compact();</code></pre>
+          <ul>
+            <li><code>.setSubject()</code>, <code>.setIssuedAt()</code>, <code>.setExpiration()</code> — 등록된 클레임을 설정하는 전용 메서드</li>
+            <li><code>.claim("user_id", 1)</code> — 비공개 클레임은 Key-Value 쌍으로 추가</li>
+          </ul>
+
+          <p>토큰을 받아서 파싱할 때는 이렇게 꺼낸다.</p>
+
+<pre><code class="language-java">Claims claims = Jwts.parser()
+    .setSigningKey(secretKey)
+    .parseClaimsJws(jwt)
+    .getBody();
+
+String email = claims.getSubject();
+Integer userId = claims.get("user_id", Integer.class);
+String role = claims.get("role", String.class);</code></pre>
+          <ul>
+            <li><code>.getSubject()</code> — 등록된 클레임 <code>sub</code>를 바로 꺼내는 편의 메서드</li>
+            <li><code>.get("user_id", Integer.class)</code> — 비공개 클레임은 Key와 타입을 지정해서 꺼낸다</li>
+          </ul>
+
+          <h2>Signature — 무결성 보장</h2>
+
+          <p>Signature는 <mark>토큰이 변조되지 않았는지</mark>를 보장하는 서명이다. Header와 Payload가 "내용"이라면, Signature는 그 내용에 찍힌 "봉인"이다.</p>
+
+          <p>서명이 없다면 아무나 Payload를 수정해서 자기 맘대로 권한을 바꿀 수 있다. 서명이 있기 때문에 서버는 "이 토큰이 내가 발급한 그대로인가"를 확인할 수 있다.</p>
+
+          <p>서명이 만들어지는 과정을 간단히 보면 이렇다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    participant H as Header
+    participant P as Payload
+    participant E as Base64URL 인코더
+    participant HMAC as 서명 알고리즘
+    participant JWT as 완성된 JWT
+
+    H->>E: {"alg":"HS256","typ":"JWT"}
+    E-->>E: eyJhbGciOiJIUzI1NiJ9
+
+    P->>E: {"user_id":1,"role":"USER"}
+    E-->>E: eyJ1c2VyX2lkIjoxfQ
+
+    Note over E: 두 문자열을 점으로 연결<br/>header.payload
+
+    E->>HMAC: header.payload + Secret Key
+    Note over HMAC: 서명 생성<br/>(Secret Key를 아는<br/>사람만 가능)
+
+    HMAC->>JWT: header.payload.signature
+    Note over JWT: 세 부분이 점으로<br/>연결된 최종 문자열
+</div>
+          <ol>
+            <li>Header와 Payload를 각각 Base64URL 인코딩한다</li>
+            <li>두 문자열을 점(<code>.</code>)으로 연결한다</li>
+            <li>연결된 문자열을 Secret Key와 함께 서명 알고리즘에 넣어 서명을 생성한다</li>
+            <li>Header + <code>.</code> + Payload + <code>.</code> + Signature를 합쳐 최종 JWT를 만든다</li>
+          </ol>
+
+          <p>핵심은 3번이다. <mark>Secret Key를 모르면 올바른 서명을 만들 수 없다</mark>. 그래서 누군가 Payload를 변조해도, 원래 서명과 일치하지 않게 되어 서버가 위변조를 감지할 수 있다. 서명과 검증의 구체적인 원리는 <a href="jwt-deep-dive-4-signature.html">4 서명과 검증의 원리</a>에서 깊이 다룬다.</p>
+
+          <h2>Base64URL 인코딩</h2>
+
+          <p>JWT의 Header와 Payload는 Base64URL로 인코딩된다. 이게 뭔지 간단히 짚고 넘어가자.</p>
+
+          <p>Base64는 바이너리 데이터를 ASCII 문자로 변환하는 인코딩 방식이다. 하지만 일반 Base64는 <code>+</code>, <code>/</code>, <code>=</code> 문자를 사용하는데, 이것들이 URL에서 특별한 의미를 갖는다. <code>+</code>는 공백, <code>/</code>는 경로 구분자, <code>=</code>는 쿼리 파라미터 구분자와 혼동될 수 있다.</p>
+
+          <p>Base64URL은 이 문제를 해결한 변형이다.</p>
+
+          <table>
+          <thead>
+          <tr><th>일반 Base64</th><th>Base64URL</th><th>이유</th></tr>
+          </thead>
+          <tbody>
+          <tr><td><code>+</code></td><td><code>-</code></td><td>URL에서 공백으로 해석됨</td></tr>
+          <tr><td><code>/</code></td><td><code>_</code></td><td>URL 경로 구분자와 충돌</td></tr>
+          <tr><td><code>=</code> (패딩)</td><td>제거</td><td>URL 파라미터와 충돌</td></tr>
+          </tbody>
+          </table>
+
+          <p>다시 한 번 강조하지만, 이건 <mark>인코딩이지 암호화가 아니다</mark>. 변환 규칙이 공개되어 있으니, 누구나 원래 값으로 되돌릴 수 있다. jwt.io 같은 사이트에 토큰을 붙여넣으면 바로 디코딩된 내용을 볼 수 있는 이유가 이것이다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">jwt.io 디버거</div>
+            <p>개발 중 토큰 관련 오류가 나면 jwt.io에 토큰을 먼저 붙여넣어 보자. Header, Payload를 자동으로 디코딩해서 보여주고, Secret Key를 입력하면 서명 검증까지 해준다.</p>
+          </div>
+
+          <h2>정리</h2>
+
+          <p>JWT의 세 구성 요소를 한 문장씩 정리하면 이렇다.</p>
+
+          <ul>
+            <li><strong>Header</strong> — "이 토큰은 JWT이고, HS256으로 서명했다"</li>
+            <li><strong>Payload</strong> — "이 사용자는 user_id 1이고, USER 권한이며, 1시간 후 만료된다"</li>
+            <li><strong>Signature</strong> — "위 내용이 발급 이후 변조되지 않았음을 보증한다"</li>
+          </ul>
+
+          <p>이 세 요소가 점으로 연결되어 하나의 JWT 문자열이 된다. 다음 편에서는 Signature가 어떤 원리로 위변조를 감지하는지, 대칭키와 비대칭키 서명이 어떻게 다른지를 깊이 파고들어 본다.</p>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#JWT</span>
+          <span>#인증</span>
+          <span>#토큰</span>
+          <span>#Header</span>
+          <span>#Payload</span>
+          <span>#Signature</span>
+          <span>#Base64URL</span>
+          <span>#클레임</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="jwt-deep-dive-2-stateless.html">&larr; 이전 글</a>
+          <a href="jwt-deep-dive-4-signature.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

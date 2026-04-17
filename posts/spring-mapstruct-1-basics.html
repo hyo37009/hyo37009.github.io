@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[스프링] 1. MapStruct — 직접 만든 Mapper와 비교하며 시작하기 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[스프링] 1. MapStruct — 직접 만든 Mapper와 비교하며 시작하기</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.03.12
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">MapStruct (1/2)</div>
+            <p>다음 편: <a href="spring-mapstruct-2-advanced.html">[스프링] 2. MapStruct — 의존성 주입과 커스텀 변환</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">시리즈 안내</div>
+            <p>이 문서는 MapStruct 시리즈 1편이다.</p>
+            <p>- <strong>1편</strong> — 직접 만든 Mapper와 비교하며 시작하기 (현재)</p>
+            <p>- <a href="spring-mapstruct-2-advanced.html">2편</a> — 의존성 주입, 커스텀 변환, 자주 하는 실수</p>
+          </div>
+
+          <p>Entity를 DTO로 변환하는 코드는 프로젝트 어디에나 있다. 처음엔 간단해 보이지만, 필드가 늘어나고 중첩 객체가 생기면 Mapper 클래스가 금세 복잡해진다. <mark>MapStruct</mark>는 이 변환 코드를 컴파일 타임에 자동으로 생성해준다. 런타임 리플렉션 없이, 직접 작성한 코드와 동일한 품질로.</p>
+
+          <h2>직접 만든 Mapper의 모습</h2>
+
+          <p>discodeit 프로젝트의 <code>BinaryContentMapper</code>를 보자. 가장 단순한 형태다.</p>
+
+<pre><code class="language-java">@Component
+public class BinaryContentMapper {
+    public BinaryContentDto toDto(BinaryContent binaryContent) {
+        return new BinaryContentDto(
+                binaryContent.getId(),
+                binaryContent.getFileName(),
+                binaryContent.getSize(),
+                binaryContent.getContentType()
+        );
+    }
+}</code></pre>
+          <p>필드 이름이 같고 타입도 같으면 이 코드는 그냥 나열이다. <code>BinaryContent</code>에 필드가 추가될 때마다 여기도 수동으로 추가해야 한다. 빠뜨려도 컴파일러는 아무 말이 없다.</p>
+
+          <p><code>UserMapper</code>는 조금 더 복잡하다. 다른 Mapper를 주입받고, 조건 분기도 들어간다.</p>
+
+<pre><code class="language-java">@Component
+@RequiredArgsConstructor
+public class UserMapper {
+    private final SessionManager sessionManager;
+    private final BinaryContentMapper binaryContentMapper;
+
+    public UserDto toDto(User user) {
+        return new UserDto(
+                user.getId(),
+                user.getRole(),
+                user.getUsername(),
+                user.getEmail(),
+                user.getProfile() == null ? null : binaryContentMapper.toDto(user.getProfile()),
+                sessionManager.isOnline(user.getUsername())
+        );
+    }
+}</code></pre>
+          <p><code>profile</code>이 null일 수 있어서 직접 null 체크를 해야 하고, <code>online</code> 필드는 Entity에 없는 값이라 <code>SessionManager</code>를 통해 직접 계산한다. 이런 케이스가 많아질수록 Mapper 코드는 점점 손이 많이 간다.</p>
+
+          <h2>MapStruct가 하는 일</h2>
+
+          <p>MapStruct는 <code>@Mapper</code> 인터페이스를 보고 <mark>컴파일 타임에 구현체를 자동으로 생성</mark>한다. 애노테이션 프로세서(annotation processor)가 빌드 시점에 실제 Java 코드를 만들어내기 때문에, 런타임에 리플렉션이 전혀 없다.</p>
+
+          <p>아래는 MapStruct가 생성하는 구현체의 실제 모습이다. <code>target/generated-sources</code>에서 확인할 수 있다.</p>
+
+<pre><code class="language-java">// MapStruct가 생성한 코드 (직접 작성하지 않음)
+@Component
+public class BinaryContentMapperImpl implements BinaryContentMapper {
+    @Override
+    public BinaryContentDto toDto(BinaryContent binaryContent) {
+        if (binaryContent == null) {
+            return null;
+        }
+        UUID id = binaryContent.getId();
+        String fileName = binaryContent.getFileName();
+        Long size = binaryContent.getSize();
+        String contentType = binaryContent.getContentType();
+        BinaryContentDto binaryContentDto = new BinaryContentDto(id, fileName, size, contentType);
+        return binaryContentDto;
+    }
+}</code></pre>
+          <p>직접 작성한 코드와 구조가 동일하다. 차이는 null 체크가 자동으로 들어간다는 것과, 이 코드를 내가 쓰지 않았다는 것이다.</p>
+
+          <p>아래 다이어그램은 MapStruct가 빌드 과정에 어떻게 개입하는지를 나타낸다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    participant Dev as 개발자
+    participant Compiler as javac
+    participant AP as 애노테이션 프로세서<br/>(MapStruct)
+    participant Output as 생성된 구현체
+
+    Dev->>Compiler: 빌드 실행
+    Compiler->>AP: @Mapper 인터페이스 감지
+    Note over AP: 인터페이스 메서드 분석<br/>필드명/타입 매핑 규칙 계산
+    AP->>Output: XxxMapperImpl.java 생성
+    Compiler->>Output: 생성된 파일 컴파일
+    Note over Output: 일반 Java 클래스로 존재<br/>리플렉션 없음
+</div>
+          <p>생성된 구현체는 빌드 결과물의 일부로 존재한다. IDE에서도 열어볼 수 있고, 디버깅도 가능하다.</p>
+
+          <h2>의존성 설정</h2>
+
+          <p>Gradle 기준으로 두 가지를 추가해야 한다. 의존성 하나, 애노테이션 프로세서 하나.</p>
+
+<pre><code class="language-groovy">dependencies {
+    implementation 'org.mapstruct:mapstruct:1.5.5.Final'
+    annotationProcessor 'org.mapstruct:mapstruct-processor:1.5.5.Final'
+}</code></pre>
+          <p>Lombok도 함께 쓴다면 순서가 중요하다. Lombok의 <code>annotationProcessor</code>가 MapStruct보다 먼저 선언되어야 한다.</p>
+
+<pre><code class="language-groovy">annotationProcessor 'org.projectlombok:lombok'
+annotationProcessor 'org.projectlombok:lombok-mapstruct-binding:0.2.0'
+annotationProcessor 'org.mapstruct:mapstruct-processor:1.5.5.Final'</code></pre>
+          <div class="callout callout-warning">
+            <div class="callout-title">Lombok과의 순서 문제</div>
+            <p>Lombok이 먼저 실행되어야 <code>@Getter</code>로 생성된 메서드를 MapStruct가 감지할 수 있다. 순서가 바뀌면 MapStruct가 getter를 못 찾아 매핑에 실패한다.</p>
+          </div>
+
+          <h2>기본 매핑 작성</h2>
+
+          <p><code>BinaryContentMapper</code>를 MapStruct로 바꿔보자. 클래스 대신 인터페이스로 선언하고 <code>@Mapper</code>만 붙이면 된다.</p>
+
+<pre><code class="language-java">@Mapper(componentModel = "spring")
+public interface BinaryContentMapper {
+    BinaryContentDto toDto(BinaryContent binaryContent);
+}</code></pre>
+          <ul>
+            <li><code>componentModel = "spring"</code> : 생성된 구현체를 Spring Bean으로 등록한다. 기존처럼 <code>@Autowired</code>나 생성자 주입으로 쓸 수 있다.</li>
+            <li>메서드 시그니처만 선언하면 나머지는 MapStruct가 채운다.</li>
+            <li>필드명이 같으면 자동으로 매핑된다.</li>
+          </ul>
+
+          <p>필드명이 다를 때는 <code>@Mapping</code>으로 명시한다.</p>
+
+<pre><code class="language-java">@Mapper(componentModel = "spring")
+public interface BinaryContentMapper {
+
+    @Mapping(source = "fileName", target = "name")
+    BinaryContentDto toDto(BinaryContent binaryContent);
+}</code></pre>
+          <p><code>source</code>는 Entity 필드명, <code>target</code>은 DTO 필드명이다.</p>
+
+          <h2>필드명이 같을 때와 다를 때</h2>
+
+          <p>MapStruct의 기본 전략은 <mark>이름 기반 매핑</mark>이다. 소스와 타겟의 필드명이 같으면 자동으로 연결된다. 타입이 달라도 기본 타입 간 변환(<code>int</code> → <code>long</code>, <code>String</code> → <code>int</code> 등)은 자동으로 처리한다.</p>
+
+          <p>이름이 다를 때는 <code>@Mapping</code>이 필요하다. 아예 무시하고 싶은 필드는 <code>ignore = true</code>를 쓴다.</p>
+
+<pre><code class="language-java">@Mapping(target = "createdAt", ignore = true)
+BinaryContentDto toDto(BinaryContent binaryContent);</code></pre>
+          <p>타겟 필드를 null로 두겠다는 뜻이다. DTO에 Entity에 없는 필드가 있을 때 유용하다.</p>
+
+          <div class="callout callout-info">
+            <div class="callout-title">1편 핵심 정리</div>
+            <p>- MapStruct는 <code>@Mapper</code> 인터페이스를 보고 컴파일 타임에 구현체를 생성한다</p>
+            <p>- 런타임 리플렉션 없음 → 성능 부담 없음</p>
+            <p>- 필드명이 같으면 자동 매핑, 다르면 <code>@Mapping(source, target)</code>으로 지정</p>
+            <p>- Lombok과 함께 쓸 때 <code>annotationProcessor</code> 순서 주의</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#스프링</span>
+          <span>#MapStruct</span>
+          <span>#매퍼</span>
+          <span>#DTO</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+          <a href="spring-mapstruct-2-advanced.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

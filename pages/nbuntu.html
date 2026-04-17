@@ -5,6 +5,218 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>nbuntu - nbh의 갠홈</title>
   <link rel="stylesheet" href="../style.css">
+  <style>
+    /* ── nbuntu 통합 박스 ── */
+    .nbuntu-box {
+      border: none;
+      background: #ffffff;
+    }
+
+    /* ── 타이핑 바 (ticker 대체) ── */
+    .typing-bar {
+      background: #ffffff;
+      border-bottom: 2px solid var(--border-color);
+      padding: 6px 15px;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      white-space: nowrap;
+      overflow: hidden;
+      min-height: 32px;
+    }
+    .tb-prompt { color: #33aa66; flex-shrink: 0; }
+    .tb-host   { color: #3a7a9f; flex-shrink: 0; }
+    .tb-dollar { color: #888; flex-shrink: 0; margin-right: 4px; }
+    .tb-cmd    { color: #2a5070; flex-shrink: 0; }
+    .tb-output { color: #22aa55; flex-shrink: 0; margin-left: 4px; font-weight: bold; }
+
+    .tb-cursor {
+      display: inline-block;
+      width: 8px;
+      height: 13px;
+      background: #2a5070;
+      vertical-align: text-bottom;
+      flex-shrink: 0;
+      margin-left: 1px;
+    }
+    .tb-cursor.blink { animation: tbBlink 1s step-end infinite; }
+    @keyframes tbBlink {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0; }
+    }
+
+    /* .main 패딩 무력화 — 박스가 main 가장자리까지 꽉 차게 */
+    .main {
+      padding: 0;
+    }
+
+    /* tab-bar를 박스 내부에 딱 붙이기 위해 오버라이드 */
+    .nbuntu-box .tab-bar {
+      background: var(--bg-color);
+      border-bottom: 1px solid var(--border-color);
+      margin-bottom: 0;
+      padding: 5px 8px 0;
+    }
+    .nbuntu-box .tab-btn {
+      font-size: 12px;
+      padding: 5px 14px;
+      color: var(--text-light);
+      margin-bottom: 0;
+    }
+    .nbuntu-box .tab-btn.active {
+      border-bottom-color: #ffffff;
+      margin-bottom: -1px;
+    }
+    .nbuntu-box .tab-panel {
+      padding-top: 0;
+    }
+
+    /* ── 좌측 카테고리 탭 + 우측 패널 ── */
+    .lab-panel {
+      display: flex;
+      min-height: 300px;
+      margin-top: 0;
+    }
+
+    .lab-cat-tabs {
+      width: 90px;
+      flex-shrink: 0;
+      background: var(--bg-color);
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .lab-cat-tab {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      padding: 9px 10px 8px;
+      cursor: pointer;
+      border: none;
+      background: transparent;
+      font-family: 'NeoDunggeunmo', 'Courier New', monospace;
+      font-size: 12px;
+      color: var(--text-color);
+      text-align: left;
+      border-bottom: 1px solid var(--border-color);
+      line-height: 1.4;
+      transition: background 0.1s;
+      width: 100%;
+      position: relative;
+      word-break: keep-all;
+    }
+
+    .lab-cat-tab:last-child { border-bottom: none; }
+
+    .lab-cat-tab:hover { background: var(--nav-hover); }
+
+    .lab-cat-tab.active {
+      background: #ffffff;
+      color: var(--accent);
+      font-weight: bold;
+      border-right: 1px solid #ffffff;
+      margin-right: -1px;
+      z-index: 1;
+    }
+
+    .lab-cat-tab .cat-tab-count {
+      display: block;
+      font-size: 10px;
+      color: var(--text-light);
+      margin-top: 1px;
+    }
+
+    .lab-cat-tab.active .cat-tab-count {
+      color: var(--accent);
+      opacity: 0.7;
+    }
+
+    /* ── 우측 콘텐츠 패널 ── */
+    .lab-content-panel {
+      flex: 1;
+      background: #ffffff;
+      overflow-y: auto;
+      padding: 14px 16px;
+    }
+
+    .lab-content-section { display: none; }
+    .lab-content-section.active { display: block; }
+
+    .lab-content-heading {
+      font-size: 12px;
+      font-weight: bold;
+      color: var(--accent);
+      padding-bottom: 8px;
+      margin-bottom: 10px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .lab-content-heading .hcount {
+      font-size: 10px;
+      color: var(--text-light);
+      font-weight: normal;
+    }
+
+    /* ── 시리즈 2컬럼 (샘플4) ── */
+    .lab-series {
+      display: grid;
+      grid-template-columns: 80px 1fr;
+      gap: 0;
+      padding: 9px 0;
+      border-bottom: 1px solid #edf4fa;
+    }
+    .lab-series:last-child { border-bottom: none; }
+
+    .lab-series-name-col {
+      padding: 1px 10px 0 0;
+      border-right: 1px solid #d0e8f5;
+    }
+    .lab-series-name {
+      font-size: 11px;
+      font-weight: bold;
+      color: var(--accent);
+      line-height: 1.4;
+      word-break: keep-all;
+    }
+    .lab-series-count {
+      display: block;
+      font-size: 9px;
+      color: var(--text-light);
+      margin-top: 2px;
+    }
+
+    .lab-series-list-col { padding-left: 10px; }
+
+    .lab-post-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .lab-post-list li {
+      display: flex;
+      align-items: baseline;
+      gap: 5px;
+      padding: 3px 0;
+      font-size: 12px;
+    }
+    .lab-post-list .pnum {
+      font-size: 9px;
+      color: var(--text-light);
+      min-width: 14px;
+      flex-shrink: 0;
+    }
+    .lab-post-list a {
+      color: var(--link-color);
+      font-size: 12px;
+    }
+    .lab-post-list a:hover {
+      color: var(--accent);
+      text-decoration: underline;
+    }
+  </style>
 </head>
 <body>
   <div class="container">
@@ -14,8 +226,13 @@
       <div class="banner-subtitle">B급 개발자의 아지트</div>
     </div>
 
-    <div class="ticker">
-      <span>nbuntu: nb + Ubuntu. 완전히 새로운 개발 블로그. 스프링 리팩토링 패턴 시리즈 업로드!</span>
+    <div class="typing-bar">
+      <span class="tb-prompt">&gt;_&nbsp;</span>
+      <span class="tb-host">nbh</span>
+      <span class="tb-dollar">$&nbsp;</span>
+      <span class="tb-cmd" id="tb-cmd"></span>
+      <span class="tb-output" id="tb-output"></span>
+      <span class="tb-cursor blink" id="tb-cursor"></span>
     </div>
 
     <nav class="nav">
@@ -28,293 +245,253 @@
     <div class="content">
 
       <aside class="sidebar">
-        <div class="profile-img">
-          사진 준비중
-        </div>
+        <img class="profile-img" src="../profile.jpg" alt="nbh">
         <div class="profile-name">nbh</div>
         <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
       </aside>
 
       <div class="main">
-        <h1 class="page-header">nbuntu</h1>
-        <p class="page-description">개발 삽질 일지, 공부 기록, 그리고 가끔 작동하는 코드</p>
 
-        <!-- Spring -->
-        <div class="cat-folder">
-          <div class="cat-folder-header" data-folder="spring">
-            <span class="cat-folder-icon">&#128194;</span>
-            <span class="cat-folder-name">Spring</span>
-            <span class="cat-folder-count">19</span>
+        <div class="nbuntu-box">
+
+          <div class="tab-bar">
+            <button class="tab-btn active" data-tab="lab">연구소</button>
+            <button class="tab-btn" data-tab="log">작업일지</button>
+            <button class="tab-btn" data-tab="memo">메모장</button>
+            <button class="tab-btn" data-tab="chat">잡담</button>
           </div>
-          <div class="cat-folder-body" id="folder-spring">
 
-            <div class="cat-series">
-              <div class="cat-series-header" data-series="csrf">
-                <span class="cat-series-icon">&#128196;</span>
-                <span class="cat-series-name">CSRF</span>
-                <span class="cat-series-count">4</span>
-              </div>
-              <ul class="post-list cat-series-list" id="series-csrf">
-                <li>
-                  <span class="post-num">01</span>
-                  <a href="../posts/spring-csrf-1-concept.html">CSRF 공격의 원리와 방어 전략</a>
-                  <span class="post-date">2026.02.20</span>
-                </li>
-                <li>
-                  <span class="post-num">02</span>
-                  <a href="../posts/spring-csrf-2-token-repository.html">CSRF 토큰 저장소 설정</a>
-                  <span class="post-date">2026.02.20</span>
-                </li>
-                <li>
-                  <span class="post-num">03</span>
-                  <a href="../posts/spring-csrf-3-handler.html">CSRF 핸들러 커스터마이징</a>
-                  <span class="post-date">2026.02.20</span>
-                </li>
-                <li>
-                  <span class="post-num">04</span>
-                  <a href="../posts/spring-csrf-4-api-endpoint.html">CSRF API 엔드포인트 구현</a>
-                  <span class="post-date">2026.02.20</span>
-                </li>
-              </ul>
+        <!-- 연구소 -->
+        <div class="tab-panel active" id="tab-lab">
+          <div class="lab-panel">
+
+            <!-- 좌측: 카테고리 탭 -->
+            <div class="lab-cat-tabs">
+              <button class="lab-cat-tab active" data-cat="spring">
+                Spring
+                <span class="cat-tab-count">19편</span>
+              </button>
+              <button class="lab-cat-tab" data-cat="java">
+                Java
+                <span class="cat-tab-count">3편</span>
+              </button>
+              <button class="lab-cat-tab" data-cat="aws">
+                AWS
+                <span class="cat-tab-count">1편</span>
+              </button>
+              <button class="lab-cat-tab" data-cat="jwt">
+                JWT
+                <span class="cat-tab-count">2편</span>
+              </button>
+              <button class="lab-cat-tab" data-cat="tools">
+                도구
+                <span class="cat-tab-count">2편</span>
+              </button>
+              <button class="lab-cat-tab" data-cat="codingtest">
+                코딩테스트
+                <span class="cat-tab-count">6편</span>
+              </button>
             </div>
 
-            <div class="cat-series">
-              <div class="cat-series-header" data-series="session">
-                <span class="cat-series-icon">&#128196;</span>
-                <span class="cat-series-name">세션 관리 고도화</span>
-                <span class="cat-series-count">4</span>
-              </div>
-              <ul class="post-list cat-series-list" id="series-session">
-                <li>
-                  <span class="post-num">01</span>
-                  <a href="../posts/spring-session-1-concurrent-login.html">동시 로그인 방지와 SessionRegistry</a>
-                  <span class="post-date">2026.02.20</span>
-                </li>
-                <li>
-                  <span class="post-num">02</span>
-                  <a href="../posts/spring-session-2-privilege-invalidation.html">권한 변경 시 세션 무효화</a>
-                  <span class="post-date">2026.02.20</span>
-                </li>
-                <li>
-                  <span class="post-num">03</span>
-                  <a href="../posts/spring-session-3-online-status.html">SessionRegistry로 온라인 상태 관리</a>
-                  <span class="post-date">2026.02.20</span>
-                </li>
-                <li>
-                  <span class="post-num">04</span>
-                  <a href="../posts/spring-session-4-remember-me.html">RememberMe 자동 로그인</a>
-                  <span class="post-date">2026.02.20</span>
-                </li>
-              </ul>
-            </div>
+            <!-- 우측: 콘텐츠 패널 -->
+            <div class="lab-content-panel">
 
-            <div class="cat-series">
-              <div class="cat-series-header" data-series="async">
-                <span class="cat-series-icon">&#128196;</span>
-                <span class="cat-series-name">비동기</span>
-                <span class="cat-series-count">6</span>
-              </div>
-              <ul class="post-list cat-series-list" id="series-async">
-                <li>
-                  <span class="post-num">01</span>
-                  <a href="../posts/spring-async-1-basics.html">@Async와 비동기 처리의 기본</a>
-                  <span class="post-date">2026.02.20</span>
-                </li>
-                <li>
-                  <span class="post-num">02</span>
-                  <a href="../posts/spring-async-2-thread-pool.html">ThreadPoolTaskExecutor 설정과 스레드 풀 관리</a>
-                  <span class="post-date">2026.02.20</span>
-                </li>
-                <li>
-                  <span class="post-num">03</span>
-                  <a href="../posts/spring-async-3-event.html">Spring Event 기반 비동기 처리</a>
-                  <span class="post-date">2026.02.20</span>
-                </li>
-                <li>
-                  <span class="post-num">04</span>
-                  <a href="../posts/spring-async-4-exception.html">비동기 예외 처리와 재시도 전략</a>
-                  <span class="post-date">2026.02.20</span>
-                </li>
-                <li>
-                  <span class="post-num">05</span>
-                  <a href="../posts/spring-async-5-decorator.html">TaskDecorator와 컨텍스트 전파</a>
-                  <span class="post-date">2026.02.20</span>
-                </li>
-                <li>
-                  <span class="post-num">06</span>
-                  <a href="../posts/spring-async-6-webclient.html">WebClient를 활용한 비동기 HTTP 통신</a>
-                  <span class="post-date">2026.02.20</span>
-                </li>
-              </ul>
-            </div>
+              <!-- Spring -->
+              <div class="lab-content-section active" id="cat-spring">
+                <div class="lab-content-heading">Spring <span class="hcount">19편</span></div>
 
-            <div class="cat-series">
-              <div class="cat-series-header" data-series="refactoring">
-                <span class="cat-series-icon">&#128196;</span>
-                <span class="cat-series-name">리팩토링 패턴</span>
-                <span class="cat-series-count">5</span>
-              </div>
-              <ul class="post-list cat-series-list" id="series-refactoring">
-                <li>
-                  <span class="post-num">01</span>
-                  <a href="../posts/refactoring-1-configuration-properties.html">설정 관리와 @ConfigurationProperties</a>
-                  <span class="post-date">2026.02.13</span>
-                </li>
-                <li>
-                  <span class="post-num">02</span>
-                  <a href="../posts/refactoring-2-transaction.html">트랜잭션과 데이터 일관성</a>
-                  <span class="post-date">2026.02.13</span>
-                </li>
-                <li>
-                  <span class="post-num">03</span>
-                  <a href="../posts/refactoring-3-exception-handling.html">예외 처리 전략 설계</a>
-                  <span class="post-date">2026.02.13</span>
-                </li>
-                <li>
-                  <span class="post-num">04</span>
-                  <a href="../posts/refactoring-4-rest-api.html">REST API 설계 원칙</a>
-                  <span class="post-date">2026.02.13</span>
-                </li>
-                <li>
-                  <span class="post-num">05</span>
-                  <a href="../posts/refactoring-5-code-consistency.html">코드 일관성과 쿼리 최적화</a>
-                  <span class="post-date">2026.02.13</span>
-                </li>
-              </ul>
-            </div>
+                <div class="lab-series">
+                  <div class="lab-series-name-col">
+                    <div class="lab-series-name">CSRF</div>
+                    <span class="lab-series-count">4편</span>
+                  </div>
+                  <div class="lab-series-list-col">
+                    <ul class="lab-post-list">
+                      <li><span class="pnum">01</span><a href="../posts/spring-csrf-1-concept.html">CSRF 공격의 원리와 방어 전략</a></li>
+                      <li><span class="pnum">02</span><a href="../posts/spring-csrf-2-token-repository.html">CSRF 토큰 저장소 설정</a></li>
+                      <li><span class="pnum">03</span><a href="../posts/spring-csrf-3-handler.html">CSRF 핸들러 커스터마이징</a></li>
+                      <li><span class="pnum">04</span><a href="../posts/spring-csrf-4-api-endpoint.html">CSRF API 엔드포인트 구현</a></li>
+                    </ul>
+                  </div>
+                </div>
 
+                <div class="lab-series">
+                  <div class="lab-series-name-col">
+                    <div class="lab-series-name">세션 관리 고도화</div>
+                    <span class="lab-series-count">4편</span>
+                  </div>
+                  <div class="lab-series-list-col">
+                    <ul class="lab-post-list">
+                      <li><span class="pnum">01</span><a href="../posts/spring-session-1-concurrent-login.html">동시 로그인 방지와 SessionRegistry</a></li>
+                      <li><span class="pnum">02</span><a href="../posts/spring-session-2-privilege-invalidation.html">권한 변경 시 세션 무효화</a></li>
+                      <li><span class="pnum">03</span><a href="../posts/spring-session-3-online-status.html">SessionRegistry로 온라인 상태 관리</a></li>
+                      <li><span class="pnum">04</span><a href="../posts/spring-session-4-remember-me.html">RememberMe 자동 로그인</a></li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col">
+                    <div class="lab-series-name">비동기</div>
+                    <span class="lab-series-count">6편</span>
+                  </div>
+                  <div class="lab-series-list-col">
+                    <ul class="lab-post-list">
+                      <li><span class="pnum">01</span><a href="../posts/spring-async-1-basics.html">@Async와 비동기 처리의 기본</a></li>
+                      <li><span class="pnum">02</span><a href="../posts/spring-async-2-thread-pool.html">ThreadPoolTaskExecutor 설정과 스레드 풀 관리</a></li>
+                      <li><span class="pnum">03</span><a href="../posts/spring-async-3-event.html">Spring Event 기반 비동기 처리</a></li>
+                      <li><span class="pnum">04</span><a href="../posts/spring-async-4-exception.html">비동기 예외 처리와 재시도 전략</a></li>
+                      <li><span class="pnum">05</span><a href="../posts/spring-async-5-decorator.html">TaskDecorator와 컨텍스트 전파</a></li>
+                      <li><span class="pnum">06</span><a href="../posts/spring-async-6-webclient.html">WebClient를 활용한 비동기 HTTP 통신</a></li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col">
+                    <div class="lab-series-name">리팩토링 패턴</div>
+                    <span class="lab-series-count">5편</span>
+                  </div>
+                  <div class="lab-series-list-col">
+                    <ul class="lab-post-list">
+                      <li><span class="pnum">01</span><a href="../posts/refactoring-1-configuration-properties.html">설정 관리와 @ConfigurationProperties</a></li>
+                      <li><span class="pnum">02</span><a href="../posts/refactoring-2-transaction.html">트랜잭션과 데이터 일관성</a></li>
+                      <li><span class="pnum">03</span><a href="../posts/refactoring-3-exception-handling.html">예외 처리 전략 설계</a></li>
+                      <li><span class="pnum">04</span><a href="../posts/refactoring-4-rest-api.html">REST API 설계 원칙</a></li>
+                      <li><span class="pnum">05</span><a href="../posts/refactoring-5-code-consistency.html">코드 일관성과 쿼리 최적화</a></li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Java -->
+              <div class="lab-content-section" id="cat-java">
+                <div class="lab-content-heading">Java <span class="hcount">3편</span></div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col">
+                    <div class="lab-series-name">예외처리</div>
+                    <span class="lab-series-count">3편</span>
+                  </div>
+                  <div class="lab-series-list-col">
+                    <ul class="lab-post-list">
+                      <li><a href="../posts/java-catch-axis.html">catch 축 구분법</a></li>
+                      <li><a href="../posts/java-sdk-exception-hierarchy.html">SDK 예외 계층 확인법</a></li>
+                      <li><a href="../posts/java-custom-exception-cause.html">커스텀 예외에서 cause 전달 시점과 이유</a></li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              <!-- AWS -->
+              <div class="lab-content-section" id="cat-aws">
+                <div class="lab-content-heading">AWS <span class="hcount">1편</span></div>
+                <div class="lab-series">
+                  <div class="lab-series-name-col">
+                    <div class="lab-series-name">S3</div>
+                    <span class="lab-series-count">1편</span>
+                  </div>
+                  <div class="lab-series-list-col">
+                    <ul class="lab-post-list">
+                      <li><a href="../posts/spring-s3-exception-handling.html">S3BinaryContentStorage 예외 처리</a></li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              <!-- JWT -->
+              <div class="lab-content-section" id="cat-jwt">
+                <div class="lab-content-heading">JWT <span class="hcount">2편</span></div>
+                <div class="lab-series">
+                  <div class="lab-series-name-col">
+                    <div class="lab-series-name">JWT</div>
+                    <span class="lab-series-count">2편</span>
+                  </div>
+                  <div class="lab-series-list-col">
+                    <ul class="lab-post-list">
+                      <li><span class="pnum">01</span><a href="../posts/jwt-1-token-auth.html">토큰 기반 인증의 개념과 필요성</a></li>
+                      <li><span class="pnum">02</span><a href="../posts/jwt-2-structure.html">JWT의 구조와 원리</a></li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 도구 -->
+              <div class="lab-content-section" id="cat-tools">
+                <div class="lab-content-heading">도구 <span class="hcount">2편</span></div>
+                <div class="lab-series">
+                  <div class="lab-series-name-col">
+                    <div class="lab-series-name">도구</div>
+                    <span class="lab-series-count">2편</span>
+                  </div>
+                  <div class="lab-series-list-col">
+                    <ul class="lab-post-list">
+                      <li><a href="../posts/firebase-overview.html">Firebase 개요</a></li>
+                      <li><a href="../posts/intellij-mcp-guide.html">Gemini CLI와 MCP로 스마트하게 작업하는 방법</a></li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 코딩테스트 -->
+              <div class="lab-content-section" id="cat-codingtest">
+                <div class="lab-content-heading">코딩테스트 <span class="hcount">6편</span></div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col">
+                    <div class="lab-series-name">시간복잡도</div>
+                    <span class="lab-series-count">3편</span>
+                  </div>
+                  <div class="lab-series-list-col">
+                    <ul class="lab-post-list">
+                      <li><span class="pnum">01</span><a href="../posts/time-complexity-1-basics.html">시간복잡도 기본 개념</a></li>
+                      <li><span class="pnum">02</span><a href="../posts/time-complexity-2-input-size.html">입력 크기로 허용 복잡도 판단하기</a></li>
+                      <li><span class="pnum">03</span><a href="../posts/time-complexity-3-case-study.html">실전 사례 분석</a></li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col">
+                    <div class="lab-series-name">백트래킹</div>
+                    <span class="lab-series-count">3편</span>
+                  </div>
+                  <div class="lab-series-list-col">
+                    <ul class="lab-post-list">
+                      <li><span class="pnum">01</span><a href="../posts/backtracking-1-basics.html">기본 개념</a></li>
+                      <li><span class="pnum">02</span><a href="../posts/backtracking-2-pruning.html">가지치기와 최적화</a></li>
+                      <li><span class="pnum">03</span><a href="../posts/backtracking-3-patterns.html">실전 패턴과 면접 대비</a></li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+            </div><!-- /lab-content-panel -->
+          </div><!-- /lab-panel -->
+        </div><!-- /tab-lab -->
+
+        <!-- 작업일지 -->
+        <div class="tab-panel" id="tab-log">
+          <div class="tab-empty">
+            아직 없음. 삽질을 안 한 게 아니라 기록을 안 한 것임.
           </div>
         </div>
 
-        <!-- Java -->
-        <div class="cat-folder">
-          <div class="cat-folder-header" data-folder="java">
-            <span class="cat-folder-icon">&#128194;</span>
-            <span class="cat-folder-name">Java</span>
-            <span class="cat-folder-count">3</span>
-          </div>
-          <div class="cat-folder-body" id="folder-java">
-
-            <div class="cat-series">
-              <div class="cat-series-header" data-series="exception">
-                <span class="cat-series-icon">&#128196;</span>
-                <span class="cat-series-name">예외처리</span>
-                <span class="cat-series-count">3</span>
-              </div>
-              <ul class="post-list cat-series-list" id="series-exception">
-                <li>
-                  <a href="../posts/java-catch-axis.html">catch 축 구분법</a>
-                  <span class="post-date">2026.02.20</span>
-                </li>
-                <li>
-                  <a href="../posts/java-sdk-exception-hierarchy.html">SDK 예외 계층 확인법</a>
-                  <span class="post-date">2026.02.20</span>
-                </li>
-                <li>
-                  <a href="../posts/java-custom-exception-cause.html">커스텀 예외에서 cause 전달 시점과 이유</a>
-                  <span class="post-date">2026.02.20</span>
-                </li>
-              </ul>
-            </div>
-
+        <!-- 메모장 -->
+        <div class="tab-panel" id="tab-memo">
+          <div class="tab-empty">
+            텅 빔. 메모할 게 없는 게 아니라 적기 귀찮은 것임.
           </div>
         </div>
 
-        <!-- AWS -->
-        <div class="cat-folder">
-          <div class="cat-folder-header" data-folder="aws">
-            <span class="cat-folder-icon">&#128194;</span>
-            <span class="cat-folder-name">AWS</span>
-            <span class="cat-folder-count">1</span>
-          </div>
-          <div class="cat-folder-body" id="folder-aws">
-            <ul class="post-list">
-              <li>
-                <a href="../posts/spring-s3-exception-handling.html">S3BinaryContentStorage 예외 처리</a>
-                <span class="post-date">2026.02.20</span>
-              </li>
-            </ul>
+        <!-- 잡담 -->
+        <div class="tab-panel" id="tab-chat">
+          <div class="tab-empty">
+            준비 중... 은 아니고 그냥 할 말이 없음.
           </div>
         </div>
 
-        <!-- JWT -->
-        <div class="cat-folder">
-          <div class="cat-folder-header" data-folder="jwt">
-            <span class="cat-folder-icon">&#128194;</span>
-            <span class="cat-folder-name">JWT</span>
-            <span class="cat-folder-count">2</span>
-          </div>
-          <div class="cat-folder-body" id="folder-jwt">
-            <ul class="post-list">
-              <li>
-                <span class="post-num">01</span>
-                <a href="../posts/jwt-1-token-auth.html">토큰 기반 인증의 개념과 필요성</a>
-                <span class="post-date">2026.02.23</span>
-              </li>
-              <li>
-                <span class="post-num">02</span>
-                <a href="../posts/jwt-2-structure.html">JWT의 구조와 원리</a>
-                <span class="post-date">2026.02.23</span>
-              </li>
-            </ul>
-          </div>
-        </div>
-
-        <!-- 도구 -->
-        <div class="cat-folder">
-          <div class="cat-folder-header" data-folder="tools">
-            <span class="cat-folder-icon">&#128194;</span>
-            <span class="cat-folder-name">도구</span>
-            <span class="cat-folder-count">2</span>
-          </div>
-          <div class="cat-folder-body" id="folder-tools">
-            <ul class="post-list">
-              <li>
-                <a href="../posts/firebase-overview.html">Firebase 개요</a>
-                <span class="post-date">2026.02.20</span>
-              </li>
-              <li>
-                <a href="../posts/intellij-mcp-guide.html">Gemini CLI와 MCP로 스마트하게 작업하는 방법</a>
-                <span class="post-date">2026.02.20</span>
-              </li>
-            </ul>
-          </div>
-        </div>
-
-        <!-- 코딩테스트 -->
-        <div class="cat-folder">
-          <div class="cat-folder-header" data-folder="codingtest">
-            <span class="cat-folder-icon">&#128194;</span>
-            <span class="cat-folder-name">코딩테스트</span>
-            <span class="cat-folder-count">3</span>
-          </div>
-          <div class="cat-folder-body" id="folder-codingtest">
-            <div class="cat-series">
-              <div class="cat-series-header" data-series="time-complexity">
-                <span class="cat-series-icon">&#128196;</span>
-                <span class="cat-series-name">시간복잡도</span>
-                <span class="cat-series-count">3</span>
-              </div>
-              <ul class="post-list cat-series-list" id="series-time-complexity">
-                <li>
-                  <span class="post-num">01</span>
-                  <a href="../posts/time-complexity-1-basics.html">시간복잡도 기본 개념</a>
-                  <span class="post-date">2026.02.19</span>
-                </li>
-                <li>
-                  <span class="post-num">02</span>
-                  <a href="../posts/time-complexity-2-input-size.html">입력 크기로 허용 복잡도 판단하기</a>
-                  <span class="post-date">2026.02.19</span>
-                </li>
-                <li>
-                  <span class="post-num">03</span>
-                  <a href="../posts/time-complexity-3-case-study.html">실전 사례 분석</a>
-                  <span class="post-date">2026.02.19</span>
-                </li>
-              </ul>
-            </div>
-          </div>
-        </div>
+        </div><!-- /nbuntu-box -->
 
       </div>
     </div>
@@ -329,7 +506,95 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
   <script src="../firebase-config.js"></script>
-
   <script src="../script.js"></script>
+
+  <script>
+    /* ── 타이핑 바 애니메이션 ──
+     *
+     * 커스텀 방법:
+     *  - SEQ 배열에 { cmd: '명령어', result: '결과' } 추가/수정/삭제
+     *  - cmd: 타이핑되는 텍스트 (터미널 명령어처럼)
+     *  - result: → 뒤에 나오는 결과 텍스트
+     *  - 순서대로 반복 재생됨
+     *
+     * 속도 조절:
+     *  - TYPE_SPEED: 글자 하나당 ms (작을수록 빠름)
+     *  - RESULT_DELAY: 결과 표시 후 다음까지 대기 ms
+     */
+    (function () {
+      var TYPE_SPEED   = 75;
+      var ENTER_DELAY  = 280;
+      var RESULT_DELAY = 2200;
+      var CLEAR_DELAY  = 350;
+
+      var SEQ = [
+        { cmd: 'whoami',              result: 'nbh — B급 개발자' },
+        { cmd: 'cat motto.txt',       result: '이 홈페이지는 버그가 아니라 기능입니다' },
+        { cmd: 'ls posts/ | wc -l',   result: '33 posts and counting' },
+        { cmd: 'uptime',              result: '∞ days (always online)' },
+        { cmd: 'git log --oneline -1', result: 'fix: 아무것도 안 고침' },
+        { cmd: 'cat /etc/hostname',   result: 'nbh-dev-station' },
+        { cmd: 'echo $MOOD',          result: '커피 주입 필요' },
+        { cmd: 'cat TODO.txt',        result: '리팩토링... 내일부터' },
+        { cmd: 'ping google.com',     result: '64 bytes — 인터넷은 살아있다' },
+      ];
+
+      var elCmd    = document.getElementById('tb-cmd');
+      var elOutput = document.getElementById('tb-output');
+      var elCursor = document.getElementById('tb-cursor');
+      var seqIdx = 0;
+
+      function clearAll() {
+        elCmd.textContent    = '';
+        elOutput.textContent = '';
+      }
+
+      function startSequence() {
+        var item = SEQ[seqIdx % SEQ.length];
+        seqIdx++;
+        clearAll();
+
+        typeCommand(item.cmd, 0, function () {
+          elCursor.classList.remove('blink');
+          setTimeout(function () {
+            elOutput.textContent = ' → ' + item.result;
+            elCursor.classList.add('blink');
+            setTimeout(function () {
+              elCursor.classList.remove('blink');
+              setTimeout(function () {
+                elCursor.classList.add('blink');
+                startSequence();
+              }, CLEAR_DELAY);
+            }, RESULT_DELAY);
+          }, ENTER_DELAY);
+        });
+      }
+
+      function typeCommand(text, charIdx, onDone) {
+        if (charIdx > text.length) { onDone(); return; }
+        elCmd.textContent = text.slice(0, charIdx);
+        setTimeout(function () { typeCommand(text, charIdx + 1, onDone); }, TYPE_SPEED);
+      }
+
+      setTimeout(startSequence, 500);
+    })();
+  </script>
+
+  <script>
+    (function() {
+      var catTabs = document.querySelectorAll('.lab-cat-tab');
+      var catSections = document.querySelectorAll('.lab-content-section');
+
+      catTabs.forEach(function(tab) {
+        tab.addEventListener('click', function() {
+          catTabs.forEach(function(t) { t.classList.remove('active'); });
+          tab.classList.add('active');
+          catSections.forEach(function(s) { s.classList.remove('active'); });
+          var target = document.getElementById('cat-' + tab.dataset.cat);
+          if (target) target.classList.add('active');
+        });
+      });
+    })();
+  </script>
 </body>
 </html>

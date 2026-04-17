@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Spring Cache] Spring Cache 추상화 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Spring Cache] Spring Cache 추상화</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.03.12
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Spring Cache (2/5)</div>
+            <p>이전 편: <a href="spring-cache-1-what-is-cache.html">[Spring Cache] 캐시란 무엇인가</a></p>
+            <p>다음 편: <a href="spring-cache-3-caffeine.html">[Spring Cache] Caffeine 설정과 활용</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">시리즈 안내</div>
+            <p>1. <a href="스프링spring-cache1-캐시란-무엇인가.html">캐시란 무엇인가</a></p>
+            <p>2. <strong>Spring Cache 추상화</strong> ← 현재 문서</p>
+            <p>3. <a href="spring-cache-3-caffeine.html">Caffeine 설정과 활용</a></p>
+            <p>4. <a href="spring-cache-4-loading-cache.html">LoadingCache와 캐시 스탬피드</a></p>
+            <p>5. <a href="spring-cache-5-actuator.html">Actuator로 캐시 모니터링</a></p>
+          </div>
+
+          <h2>왜 추상화인가</h2>
+
+          <p>캐시 라이브러리는 여러 가지다. Caffeine, Ehcache, Redis, Hazelcast… 각각 API가 다르다. Caffeine은 <code>Cache.get()</code>, Redis는 <code>RedisTemplate.opsForValue().get()</code>, Ehcache는 <code>CacheManager.getCache()</code>.</p>
+
+          <p>만약 캐시 코드를 서비스 로직에 직접 작성하면, 나중에 Caffeine에서 Redis로 바꿀 때 <mark>캐시를 사용하는 모든 코드</mark>를 수정해야 한다.</p>
+
+          <p>Spring Cache 추상화는 이 문제를 해결한다. <code>@Cacheable</code>, <code>@CacheEvict</code> 같은 <mark>어노테이션만 쓰면</mark>, 밑에서 어떤 캐시 구현체가 동작하는지 서비스 코드는 몰라도 된다. Caffeine에서 Redis로 바꿀 때 설정만 변경하면 서비스 코드는 그대로 유지된다.</p>
+
+          <p>JDBC가 DB 종류를 추상화하는 것, SLF4J가 로깅 라이브러리를 추상화하는 것과 같은 패턴이다.</p>
+
+          <h2>@EnableCaching</h2>
+
+          <p>Spring Cache를 활성화하려면 <code>@EnableCaching</code>을 붙여야 한다.</p>
+
+<pre><code class="language-java">@Configuration
+@EnableCaching
+public class CacheConfig {
+}</code></pre>
+          <p>이게 없으면 <code>@Cacheable</code>, <code>@CacheEvict</code> 등의 어노테이션이 <mark>무시된다.</mark> <code>@EnableAsync</code> 없이 <code>@Async</code>가 안 되는 것과 같은 패턴이다.</p>
+
+          <h2>@Cacheable — 조회 결과 캐싱</h2>
+
+          <p>가장 핵심적인 어노테이션이다. 메서드의 반환 값을 캐시에 저장하고, 같은 파라미터로 다시 호출되면 <mark>메서드를 실행하지 않고 캐시에서 반환</mark>한다.</p>
+
+<pre><code class="language-java">@Cacheable("users")
+public List&lt;UserDto&gt; getAllUsers() {
+    log.info("DB에서 사용자 목록 조회");
+    return userRepository.findAll().stream()
+            .map(UserDto::from)
+            .toList();
+}</code></pre>
+          <ul>
+            <li><code>"users"</code> : 캐시 이름. 논리적인 저장 영역이다.</li>
+            <li>첫 호출 시 : 메서드 실행 → 결과를 <code>"users"</code> 캐시에 저장 → 결과 반환</li>
+            <li>두 번째 호출 시 : <mark>메서드 실행 안 함</mark> → 캐시에서 바로 반환</li>
+          </ul>
+
+          <p>로그에 <code>"DB에서 사용자 목록 조회"</code>가 한 번만 찍히면 캐시가 동작하는 것이다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    actor Client as 호출자
+    participant Proxy as @Cacheable 프록시
+    participant Service as 실제 메서드
+
+    Client->>Proxy: getAllUsers()
+
+    alt 캐시 히트 (Hit)
+        rect rgb(232, 248, 232)
+            Proxy-->>Client: 캐시된 결과 즉시 반환
+            Note right of Proxy: 메서드 실행 안 함
+        end
+    else 캐시 미스 (Miss)
+        rect rgb(255, 243, 224)
+            Proxy->>Service: 메서드 실행
+            Service-->>Proxy: 결과 반환
+            Proxy->>Proxy: 결과를 캐시에 저장
+            Proxy-->>Client: 결과 반환
+        end
+    end
+</div>
+          <h3>캐시 키</h3>
+
+          <p>파라미터가 있으면 파라미터 값이 캐시 키가 된다.</p>
+
+<pre><code class="language-java">@Cacheable("channels")
+public List&lt;ChannelDto&gt; getChannelsByUserId(UUID userId) {
+    return channelRepository.findByUserId(userId);
+}</code></pre>
+          <ul>
+            <li><code>getChannelsByUserId("abc-123")</code> → 키 : <code>"abc-123"</code>, 값 : abc-123의 채널 목록</li>
+            <li><code>getChannelsByUserId("def-456")</code> → 키 : <code>"def-456"</code>, 값 : def-456의 채널 목록</li>
+          </ul>
+
+          <p>파라미터가 여러 개면 모든 파라미터를 조합해서 키를 만든다. 특정 파라미터만 키로 쓰고 싶으면 <code>key</code>를 지정한다.</p>
+
+<pre><code class="language-java">@Cacheable(value = "channels", key = "#userId")
+public List&lt;ChannelDto&gt; getChannels(UUID userId, boolean includeArchived) {
+    // userId만 캐시 키로 사용. includeArchived는 키에 포함되지 않음.
+}</code></pre>
+          <div class="callout callout-warning">
+            <div class="callout-title">key를 잘못 지정하면</div>
+            <p>위 예시에서 <code>includeArchived</code>가 <code>true</code>일 때와 <code>false</code>일 때 다른 결과를 반환하는데 키에 포함하지 않으면, <code>includeArchived=true</code>로 조회한 결과가 캐시되어 <code>false</code>로 요청해도 같은 결과가 나온다. <mark>결과에 영향을 주는 파라미터는 반드시 키에 포함</mark>해야 한다.</p>
+          </div>
+
+          <h3>조건부 캐싱</h3>
+
+          <p>특정 조건에서만 캐시하고 싶을 때 <code>condition</code>과 <code>unless</code>를 사용한다.</p>
+
+<pre><code class="language-java">@Cacheable(value = "users", condition = "#userId != null")
+public UserDto getUser(UUID userId) { ... }
+
+@Cacheable(value = "posts", unless = "#result == null")
+public PostDto getPost(Long postId) { ... }</code></pre>
+          <ul>
+            <li><code>condition</code> : <mark>메서드 실행 전</mark> 평가. <code>false</code>면 캐시를 아예 안 쓴다 (조회도, 저장도 안 함).</li>
+            <li><code>unless</code> : <mark>메서드 실행 후</mark> 평가. <code>true</code>면 결과를 캐시에 저장하지 않는다. 이미 캐시된 값이 있으면 반환은 한다.</li>
+          </ul>
+
+          <p><code>unless = "#result == null"</code>은 "null 결과는 캐시하지 않는다"는 의미다. DB에서 못 찾은 결과를 캐시하면, 나중에 데이터가 추가돼도 계속 null을 반환하는 문제를 방지한다.</p>
+
+          <h2>@CacheEvict — 캐시 무효화</h2>
+
+          <p>데이터가 변경되면 캐시를 삭제해야 한다. 안 그러면 <mark>오래된 데이터</mark>를 계속 반환한다.</p>
+
+<pre><code class="language-java">@CacheEvict(value = "users", allEntries = true)
+public UserDto createUser(UserCreateRequest request) {
+    User user = userRepository.save(new User(request));
+    return UserDto.from(user);
+}</code></pre>
+          <ul>
+            <li><code>allEntries = true</code> : 해당 캐시(<code>"users"</code>)의 <mark>모든 항목을 삭제</mark>한다. 목록 캐시처럼 어떤 키가 영향 받는지 모를 때 사용한다.</li>
+            <li><code>allEntries = false</code> (기본값) : 메서드 파라미터를 키로 해당 항목만 삭제한다.</li>
+          </ul>
+
+          <p>특정 키만 삭제하려면 <code>key</code>를 지정한다.</p>
+
+<pre><code class="language-java">@CacheEvict(value = "channels", key = "#userId")
+public void leaveChannel(UUID userId, UUID channelId) {
+    // userId의 채널 목록 캐시만 삭제
+}</code></pre>
+          <h3>여러 캐시를 동시에 무효화</h3>
+
+          <p>하나의 메서드에서 여러 캐시를 무효화해야 할 때 <code>@Caching</code>을 사용한다.</p>
+
+<pre><code class="language-java">@Caching(evict = {
+    @CacheEvict(value = "users", allEntries = true),
+    @CacheEvict(value = "channels", allEntries = true)
+})
+public void deleteUser(UUID userId) {
+    userRepository.deleteById(userId);
+}</code></pre>
+          <p>사용자가 삭제되면 사용자 목록 캐시와 채널 목록 캐시 모두 영향을 받으므로 둘 다 무효화한다.</p>
+
+          <h2>@CachePut — 캐시 갱신</h2>
+
+          <p><code>@CachePut</code>은 메서드를 <mark>항상 실행</mark>하고, 결과를 캐시에 저장한다. <code>@Cacheable</code>과의 차이는, <code>@Cacheable</code>은 캐시에 있으면 메서드를 실행하지 않지만, <code>@CachePut</code>은 항상 실행한다.</p>
+
+<pre><code class="language-java">@CachePut(value = "users", key = "#userId")
+public UserDto updateUser(UUID userId, UserUpdateRequest request) {
+    User user = userRepository.findById(userId).orElseThrow();
+    user.update(request);
+    return UserDto.from(user);
+}</code></pre>
+          <p>"데이터를 수정하면서 동시에 캐시도 최신 값으로 갱신한다"는 시나리오에 적합하다.</p>
+
+          <p>다만 실무에서 <code>@CachePut</code>보다 <code>@CacheEvict</code>를 더 많이 쓴다. 이유는 다음과 같다.</p>
+
+          <ul>
+            <li><code>@CacheEvict</code> : 캐시를 삭제. 다음 조회 시 DB에서 최신 값을 가져와서 다시 캐싱.</li>
+            <li><code>@CachePut</code> : 캐시를 갱신. 그런데 업데이트 메서드의 반환 값과 조회 메서드의 반환 값이 정확히 같은 형태인지 보장하기 어렵다.</li>
+          </ul>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">@CacheEvict vs @CachePut 선택</div>
+            <p>- 단건 엔티티 업데이트 → <code>@CachePut</code> 가능 (반환 타입이 같을 때)</p>
+            <p>- 목록 캐시에 영향 → <code>@CacheEvict(allEntries = true)</code> (목록 전체를 재캐싱해야 하므로)</p>
+            <p>- <mark>확실하지 않으면 <code>@CacheEvict</code>가 안전하다.</mark> 성능이 약간 떨어지더라도 데이터 일관성은 보장된다.</p>
+          </div>
+
+          <h2>어노테이션 선택 가이드</h2>
+
+          <p>"이 메서드가 데이터를 어떻게 다루는가"부터 생각하면 어노테이션이 자연스럽게 정해진다.</p>
+
+<div class="mermaid">
+flowchart TD
+    Action{어떤 작업을<br>수행하나요?}
+
+    Action -->|데이터 조회| Read["캐시에 데이터가 없으면 실행하고 저장,<br>있으면 메서드 실행 없이 반환"]
+    Read --> Cacheable["@Cacheable"]
+
+    Action -->|데이터 변경 또는 생성| Update{캐시를 어떻게<br>처리할까요?}
+    Update -->|기존 캐시 삭제, 안전함| Evict1["@CacheEvict"]
+    Update -->|새로운 값으로<br>캐시 덮어쓰기| Put["@CachePut"]
+
+    Action -->|데이터 삭제| Delete["관련된 캐시 데이터 제거"]
+    Delete --> Evict2["@CacheEvict"]
+
+    style Cacheable fill:#e8f4f8,stroke:#2196F3,stroke-width:2px,color:#000
+    style Put fill:#e8f8e8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style Evict1 fill:#fff3e0,stroke:#FF9800,stroke-width:2px,color:#000
+    style Evict2 fill:#fff3e0,stroke:#FF9800,stroke-width:2px,color:#000
+</div>
+          <ul>
+            <li><strong>조회</strong> → <code>@Cacheable</code> : 캐시에 있으면 메서드를 실행하지 않고 바로 반환한다. 조회 API의 기본 선택.</li>
+            <li><strong>변경/생성</strong> → 두 가지 선택지가 있다.
+          <ul>
+            <li><code>@CacheEvict</code> : 캐시를 삭제한다. 다음 조회 시 DB에서 최신 값을 가져온다. <mark>확실하지 않으면 이쪽이 안전하다.</mark></li>
+            <li><code>@CachePut</code> : 메서드를 항상 실행하고 결과로 캐시를 덮어쓴다. 반환 타입이 조회 메서드와 같을 때만 쓸 수 있다.</li>
+          </ul>
+          </li>
+            <li><strong>삭제</strong> → <code>@CacheEvict</code> : 데이터가 사라졌으니 관련 캐시도 제거해야 한다.</li>
+          </ul>
+
+          <h2>캐시 이름 설계</h2>
+
+          <p>캐시 이름은 <mark>논리적 저장 영역</mark>을 나타낸다. 잘 설계하면 무효화 범위를 정밀하게 제어할 수 있다.</p>
+
+          <table>
+          <thead>
+          <tr><th>캐시 이름</th><th>저장 내용</th><th>무효화 시점</th></tr>
+          </thead>
+          <tbody>
+          <tr><td><code>users</code></td><td>전체 사용자 목록</td><td>사용자 추가/수정/삭제</td></tr>
+          <tr><td><code>channels</code></td><td>사용자별 채널 목록</td><td>채널 추가/수정/삭제, 멤버 변경</td></tr>
+          <tr><td><code>notifications</code></td><td>사용자별 알림 목록</td><td>알림 추가/읽음 처리</td></tr>
+          <tr><td><code>posts:popular</code></td><td>인기 게시글 목록</td><td>게시글 추가/삭제, 조회수 변경</td></tr>
+          </tbody>
+          </table>
+
+          <p>캐시 이름을 너무 넓게 잡으면 (예: <code>"data"</code> 하나에 모든 것) 작은 변경에도 전체 캐시가 날아간다. 너무 좁게 잡으면 (예: <code>"user:abc-123:channels:active"</code>) 관리가 복잡해진다.</p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">캐시 무효화 누락</div>
+            <p><code>@CacheEvict</code>를 빠뜨리면 데이터는 바뀌었는데 캐시는 옛날 값을 반환한다. 캐시를 적용할 때 <mark>이 데이터를 변경하는 모든 곳</mark>에 <code>@CacheEvict</code>가 있는지 반드시 확인하자. 이게 캐시에서 가장 흔한 버그다.</p>
+          </div>
+
+          <h2>프록시 기반 동작</h2>
+
+          <p>Spring Cache는 <code>@Async</code>와 마찬가지로 <mark>프록시 기반</mark>이다. Spring이 <code>@Cacheable</code>이 붙은 빈을 감싸는 프록시 객체를 만들고, 메서드 호출을 가로채서 캐시 처리를 한다. 같은 클래스 내에서 <code>this.getCachedData()</code>를 직접 호출하면 프록시를 거치지 않아서 캐시가 동작하지 않는다.</p>
+
+          <p>외부에서 호출하면 컨트롤러 → 프록시 → 실제 서비스 순서로 흐른다. 프록시가 중간에서 캐시 확인과 저장을 담당하고(초록 영역), 히트면 서비스를 아예 실행하지 않는다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    actor Client as 컨트롤러
+
+    box Spring Container
+        participant Proxy as Spring AOP 프록시
+        participant Service as PostService
+    end
+
+    Note over Client,Service: 정상 동작 — 외부 호출
+    Client->>Proxy: getPostCached(id) 호출
+
+    rect rgb(232, 248, 232)
+        Proxy->>Proxy: 캐시 저장소 확인
+    end
+
+    alt 캐시 히트 (Hit)
+        Proxy-->>Client: 캐시된 데이터 즉시 반환
+    else 캐시 미스 (Miss)
+        Proxy->>Service: 실제 비즈니스 로직 실행
+        Service-->>Proxy: 결과 데이터 반환
+
+        rect rgb(232, 248, 232)
+            Proxy->>Proxy: 결과를 캐시 저장소에 저장
+        end
+
+        Proxy-->>Client: 결과 데이터 반환
+    end
+</div>
+          <p>그런데 같은 클래스 내에서 <code>this.메서드()</code>로 직접 호출하면 이야기가 달라진다. 호출이 프록시를 거치지 않고 서비스 내부에서 직접 일어나기 때문에(분홍 영역), 캐시 로직이 <mark>전혀 개입하지 못한다.</mark></p>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    actor Client as 컨트롤러
+
+    box Spring Container (Self-Invocation 문제)
+        participant Proxy as Spring AOP 프록시
+        participant Service as PostService
+    end
+
+    Note over Client,Service: 내부 호출 (Self-Invocation) — 캐시 무시됨
+    Client->>Proxy: 일반 메서드 호출 getPost(id)
+    Proxy->>Service: 실제 일반 메서드 진입
+
+    rect rgb(255, 230, 230)
+        Service->>Service: 내부에서 this.getPostCached(id) 호출
+        Note over Service: 프록시 객체를 거치지 않음!<br/>캐시 로직이 전혀 개입하지 못함
+    end
+
+    Service-->>Proxy: 결과 반환 (항상 새롭게 실행)
+    Proxy-->>Client: 결과 반환
+</div>
+
+<pre><code class="language-java">@Service
+public class PostService {
+
+    public PostDto getPost(Long id) {
+        return getPostCached(id);  // ❌ 캐시 안 됨. self-invocation.
+    }
+
+    @Cacheable("posts")
+    public PostDto getPostCached(Long id) { ... }
+}</code></pre>
+          <p>해결 방법은 <code>@Cacheable</code> 메서드를 <mark>외부에서 호출</mark>하도록 설계하거나, 캐시 로직을 별도 서비스로 분리하는 것이다. 컨트롤러 → 서비스 호출 구조에서는 자연스럽게 외부 호출이 되므로 대부분 문제없다.</p>
+
+          <h2>Q&A</h2>
+
+          <div class="callout callout-question">
+            <div class="callout-title">@EnableCaching을 빠뜨리면 어떻게 되나요?</div>
+            <p><code>@Cacheable</code>, <code>@CacheEvict</code> 어노테이션이 완전히 무시된다. 어노테이션이 붙어 있어도 캐시 로직이 전혀 실행되지 않고, 메서드가 항상 실행된다. 에러도 발생하지 않아서 캐시가 동작하지 않는지 모른 채로 지나칠 수 있다. 로그에 "DB에서 조회"가 매번 찍히면 제일 먼저 <code>@EnableCaching</code>을 확인하자.</p>
+            <p>[!QUESTION] @Cacheable과 @CachePut의 차이는?</p>
+            <p><code>@Cacheable</code>은 캐시에 값이 있으면 메서드를 실행하지 않는다. <mark>캐시 조회가 목적</mark>이다. <code>@CachePut</code>은 캐시 여부와 상관없이 항상 메서드를 실행하고 결과를 캐시에 저장한다. <mark>캐시 갱신이 목적</mark>이다. 조회 API에는 <code>@Cacheable</code>, 수정 API에는 <code>@CachePut</code> 또는 <code>@CacheEvict</code>를 쓴다.</p>
+            <p>[!QUESTION] self-invocation 문제를 어떻게 해결하나요?</p>
+            <p>Spring Cache는 AOP 프록시 기반이라, 외부에서 호출해야 프록시가 개입한다. 같은 클래스 내 <code>this.method()</code> 호출은 프록시를 거치지 않아 캐시가 동작하지 않는다.</p>
+            <p>해결책 두 가지:</p>
+            <p>1. <strong>설계 변경</strong> : 캐시 적용 메서드를 별도 서비스 빈으로 분리. 컨트롤러 → 서비스A → 서비스B(캐시 적용) 구조.</p>
+            <p>2. <strong>자기 주입</strong> : <code>@Autowired</code>로 자기 자신을 주입받아 <code>self.getPostCached(id)</code>로 호출. 동작은 하지만 코드가 어색해서 설계 변경이 더 권장된다.</p>
+            <p>[!QUESTION] condition과 unless의 차이는?</p>
+            <p>실행 시점이 다르다. <code>condition</code>은 메서드 실행 전에 평가해서 <code>false</code>면 캐시를 아예 사용하지 않는다. <code>unless</code>는 메서드 실행 후에 평가해서 <code>true</code>면 결과를 캐시에 저장하지 않는다 (이미 캐시된 값이 있으면 반환은 한다). <code>unless = "#result == null"</code>이 자주 쓰이는 패턴이다. null 결과를 캐시해두면 데이터가 나중에 생겨도 계속 null을 반환하는 버그가 생긴다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Spring</span>
+          <span>#Cache</span>
+          <span>#Cacheable</span>
+          <span>#CacheEvict</span>
+          <span>#CachePut</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="spring-cache-1-what-is-cache.html">&larr; 이전 글</a>
+          <a href="spring-cache-3-caffeine.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

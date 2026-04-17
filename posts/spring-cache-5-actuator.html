@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Spring Cache] Actuator로 캐시 모니터링 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Spring Cache] Actuator로 캐시 모니터링</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.03.12
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Spring Cache (5/5)</div>
+            <p>이전 편: <a href="spring-cache-4-loading-cache.html">[Spring Cache] LoadingCache와 캐시 스탬피드</a></p>
+            <p>이 문서가 시리즈의 마지막 편입니다.</p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">시리즈 안내</div>
+            <p>1. <a href="스프링spring-cache1-캐시란-무엇인가.html">캐시란 무엇인가</a></p>
+            <p>2. <a href="spring-cache-2-abstraction.html">Spring Cache 추상화</a></p>
+            <p>3. <a href="spring-cache-3-caffeine.html">Caffeine 설정과 활용</a></p>
+            <p>4. <a href="spring-cache-4-loading-cache.html">LoadingCache와 캐시 스탬피드</a></p>
+            <p>5. <strong>Actuator로 캐시 모니터링</strong> ← 현재 문서</p>
+          </div>
+
+          <h2>왜 모니터링이 필요한가</h2>
+
+          <p>캐시를 적용했다고 끝이 아니다. "정말 잘 동작하고 있는가?"를 확인해야 한다.</p>
+
+          <ul>
+            <li>적중률이 10%면? 캐시가 거의 안 되고 있다. TTL이 너무 짧거나, 키 설계가 잘못됐을 수 있다.</li>
+            <li>제거 횟수가 지나치게 많으면? <code>maximumSize</code>가 너무 작아서 데이터가 들어오자마자 밀려나고 있다.</li>
+            <li>특정 캐시만 미스가 많으면? 그 캐시의 설정을 개별 튜닝해야 한다.</li>
+          </ul>
+
+          <p>이런 판단을 하려면 <mark>숫자로 된 통계</mark>가 있어야 한다. Caffeine의 <code>recordStats</code>와 Spring Actuator를 연동하면, 캐시의 적중/미스/제거 횟수를 API로 조회할 수 있다.</p>
+
+          <p>Actuator가 노출하는 캐시 관련 엔드포인트와 메트릭을 한눈에 정리하면 이렇다.</p>
+
+<div class="mermaid">
+mindmap
+    root(캐시 메트릭)
+        캐시 목록
+            /actuator/caches
+            등록된 캐시 이름 확인
+        조회 통계
+            cache.gets
+                result:hit
+                result:miss
+            적중률 계산
+        제거 통계
+            cache.evictions
+            TTL 만료
+            maximumSize 초과
+        크기
+            cache.size
+            현재 항목 수
+</div>
+          <h2>설정</h2>
+
+          <h3>recordStats 활성화</h3>
+
+          <p>Caffeine이 통계를 수집하려면 <code>recordStats</code>를 켜야 한다. 꺼져 있으면 Actuator에서 캐시 메트릭이 안 나온다.</p>
+
+          <p><code>application.yml</code>로 설정하는 경우:</p>
+
+<pre><code class="language-yaml">spring:
+  cache:
+    type: caffeine
+    cache-names:
+      - users
+      - channels
+      - notifications
+    caffeine:
+      spec: &gt;
+        maximumSize=100,
+        expireAfterWrite=600s,
+        recordStats</code></pre>
+          <p>Java Config로 설정하는 경우:</p>
+
+<pre><code class="language-java">Caffeine.newBuilder()
+    .maximumSize(100)
+    .expireAfterWrite(600, TimeUnit.SECONDS)
+    .recordStats()   // 이 한 줄 추가
+    .build();</code></pre>
+          <div class="callout callout-warning">
+            <div class="callout-title">recordStats의 성능 비용</div>
+            <p>통계 수집은 약간의 오버헤드를 추가한다. 극도의 성능이 필요한 환경에서는 운영 서버에서 끄고 모니터링 서버에서만 켜는 경우도 있다. 하지만 대부분의 애플리케이션에서 체감할 수 있는 차이는 없다.</p>
+          </div>
+
+          <h3>Actuator 엔드포인트 노출</h3>
+
+          <p>Actuator의 캐시 관련 엔드포인트를 노출해야 한다.</p>
+
+<pre><code class="language-yaml">management:
+  endpoints:
+    web:
+      exposure:
+        include: health,caches,metrics</code></pre>
+          <ul>
+            <li><code>/actuator/caches</code> : 등록된 캐시 목록</li>
+            <li><code>/actuator/metrics/cache.gets</code> : 캐시 조회 통계 (히트/미스)</li>
+            <li><code>/actuator/metrics/cache.evictions</code> : 캐시 제거 통계</li>
+            <li><code>/actuator/metrics/cache.size</code> : 현재 캐시 항목 수</li>
+          </ul>
+
+          <h2>캐시 목록 조회</h2>
+
+<pre><code class="language-bash">curl http://localhost:8080/actuator/caches</code></pre>
+
+<pre><code class="language-json">{
+  "cacheManagers": {
+    "cacheManager": {
+      "caches": {
+        "users": { "target": "com.github.benmanes.caffeine.cache.BoundedLocalCache" },
+        "channels": { "target": "com.github.benmanes.caffeine.cache.BoundedLocalCache" },
+        "notifications": { "target": "com.github.benmanes.caffeine.cache.BoundedLocalCache" }
+      }
+    }
+  }
+}</code></pre>
+          <p>등록된 캐시 이름과 구현체를 확인할 수 있다. <code>@Cacheable("users")</code>로 사용한 캐시가 실제로 등록되어 있는지 확인하는 용도다.</p>
+
+          <h2>적중률 분석</h2>
+
+          <p>가장 중요한 메트릭이다. 캐시 히트와 미스 횟수를 조회한다.</p>
+
+<pre><code class="language-bash">curl http://localhost:8080/actuator/metrics/cache.gets?tag=cache:users</code></pre>
+
+<pre><code class="language-json">{
+  "name": "cache.gets",
+  "measurements": [
+    { "statistic": "COUNT", "value": 150.0 }
+  ],
+  "availableTags": [
+    { "tag": "result", "values": ["hit", "miss"] },
+    { "tag": "cache", "values": ["users", "channels", "notifications"] }
+  ]
+}</code></pre>
+          <p>히트와 미스를 각각 조회하려면 <code>result</code> 태그를 추가한다.</p>
+
+<pre><code class="language-bash"># 캐시 히트 횟수
+curl "http://localhost:8080/actuator/metrics/cache.gets?tag=cache:users&amp;tag=result:hit"
+
+# 캐시 미스 횟수
+curl "http://localhost:8080/actuator/metrics/cache.gets?tag=cache:users&amp;tag=result:miss"</code></pre>
+          <p>적중률은 이렇게 계산한다.</p>
+
+<pre><code>적중률 = hit / (hit + miss)</code></pre>
+          <table>
+          <thead>
+          <tr><th>적중률</th><th>의미</th><th>조치</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>90% 이상</td><td>우수</td><td>유지</td></tr>
+          <tr><td>70~90%</td><td>양호</td><td>TTL 또는 maximumSize 조정 검토</td></tr>
+          <tr><td>50% 이하</td><td>문제</td><td>키 설계, TTL, 무효화 로직 전면 점검</td></tr>
+          </tbody>
+          </table>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">앱 시작 직후는 적중률이 낮다</div>
+            <p>서버가 막 시작되면 캐시가 비어있어서 모든 요청이 미스다. 시간이 지나면서 캐시가 채워지면 적중률이 올라간다. <mark>워밍업 후의 적중률</mark>로 판단해야 한다.</p>
+          </div>
+
+          <h2>제거 통계</h2>
+
+          <p>캐시에서 항목이 제거된 횟수를 확인한다.</p>
+
+<pre><code class="language-bash">curl http://localhost:8080/actuator/metrics/cache.evictions?tag=cache:users</code></pre>
+
+<pre><code class="language-json">{
+  "name": "cache.evictions",
+  "measurements": [
+    { "statistic": "COUNT", "value": 25.0 }
+  ]
+}</code></pre>
+          <p>제거가 빈번하면 <code>maximumSize</code>가 너무 작은 것이다. 데이터가 들어오자마자 밀려나고, 밀려난 데이터가 다시 요청되면 DB를 조회해야 한다. <code>maximumSize</code>를 늘리면 적중률이 올라간다.</p>
+
+          <h2>캐시 크기</h2>
+
+          <p>현재 캐시에 저장된 항목 수를 확인한다.</p>
+
+<pre><code class="language-bash">curl http://localhost:8080/actuator/metrics/cache.size?tag=cache:users</code></pre>
+
+<pre><code class="language-json">{
+  "name": "cache.size",
+  "measurements": [
+    { "statistic": "VALUE", "value": 42.0 }
+  ]
+}</code></pre>
+          <p><code>maximumSize=100</code>으로 설정했는데 실제 크기가 항상 100 근처면, 캐시가 가득 차서 제거가 빈번하다는 뜻이다. 크기를 늘려야 한다.</p>
+
+          <h2>모니터링 흐름 요약</h2>
+
+          <p>캐시를 적용하고 모니터링하는 전체 흐름을 정리하면 이렇다.</p>
+
+<div class="mermaid">
+flowchart TD
+    subgraph 초기설정["초기 설정"]
+        A(["캐시 적용"]) --> B["recordStats 활성화"] --> C["Actuator 노출"]
+    end
+
+    subgraph 확인["모니터링"]
+        D["적중률/제거 통계 확인"] --> E{"지표 양호?"}
+        E -->|Yes| F(["현재 설정 유지"])
+    end
+
+    subgraph 튜닝["튜닝"]
+        G["원인 파악"] --> H["TTL 조정"]
+        G --> I["크기 조정"]
+        G --> J["키/무효화 재설계"]
+    end
+
+    C --> D
+    E -->|No| G
+    H & I & J --> D
+
+    style A fill:#E3F2FD,stroke:#2196F3,stroke-width:2px
+    style E fill:#FFF3E0,stroke:#FF9800,stroke-width:2px
+    style F fill:#E8F5E9,stroke:#4CAF50,stroke-width:2px
+    style G fill:#FFEBEE,stroke:#f44336,stroke-width:2px
+    style 초기설정 fill:#f0f8f0,stroke:#4CAF50
+    style 확인 fill:#f0f4f8,stroke:#2196F3
+    style 튜닝 fill:#fff8f0,stroke:#FF9800
+</div>
+          <p>초기 설정 후 Actuator 지표를 주기적으로 확인하고, 지표가 저조하면 원인을 파악해서 튜닝한다. 튜닝 후 다시 지표를 확인하는 <mark>반복 사이클</mark>이 핵심이다. 원인에 따라 조치가 달라진다.</p>
+
+          <ul>
+            <li><code>TTL 조정</code> : 적중률이 낮고 캐시 미스가 많으면 TTL이 너무 짧은 것이다.</li>
+            <li><code>크기 조정</code> : <code>cache.evictions</code>가 많으면 <code>maximumSize</code>를 늘려야 한다.</li>
+            <li><code>키/무효화 재설계</code> : 히트 수가 극히 낮으면 키가 너무 세분화되었거나, <code>@CacheEvict</code>가 너무 잦아서 저장하자마자 삭제되고 있다.</li>
+          </ul>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">메트릭이 안 나온다면 — recordStats 확인</div>
+            <p>Actuator에서 캐시 메트릭이 0으로 나오거나 아예 안 보이는 가장 흔한 원인이다. <code>caffeine.spec</code>에 <code>recordStats</code>를 빠뜨렸거나, Java Config에서 <code>.recordStats()</code>를 호출하지 않은 경우다. 설정을 넣었는데도 안 되면, <mark>캐시 매니저가 두 개 등록</mark>되어 Actuator가 다른 쪽을 바라보고 있는 건 아닌지 확인하자.</p>
+            <p>[!BUG] 엔드포인트가 404라면 — exposure 설정 확인</p>
+            <p><code>management.endpoints.web.exposure.include</code>에 <code>caches</code>와 <code>metrics</code>가 포함되어야 한다. Spring Boot 기본값은 <code>health</code>만 노출하므로 직접 추가해야 한다. 빠뜨리면 <code>/actuator/metrics/cache.gets</code> 자체가 404를 반환한다.</p>
+            <p>[!WARNING] 적중률은 워밍업 이후에 판단</p>
+            <p>서버가 막 뜨면 캐시가 비어있어서 모든 요청이 미스다. 이때 측정한 적중률은 의미가 없다. 충분한 트래픽이 흐른 뒤 (최소 TTL × 2 이상 경과) 측정해야 실제 운영 적중률에 가깝다.</p>
+          </div>
+
+          <h2>면접 Q&A</h2>
+
+          <div class="callout callout-question">
+            <div class="callout-title">캐시를 적용했는데 DB 부하가 안 줄었다면?</div>
+            <p>1. <code>recordStats</code> + Actuator로 적중률을 확인한다. 적중률이 낮으면 캐시가 제 역할을 못하고 있다.</p>
+            <p>2. TTL이 너무 짧지 않은지 확인. TTL 1초면 사실상 매번 DB를 조회하는 것과 같다.</p>
+            <p>3. <code>@CacheEvict</code>가 너무 빈번하게 호출되는지 확인. 쓰기가 읽기보다 많으면 캐시를 적용하기 부적합한 데이터다.</p>
+            <p>4. 캐시 키가 너무 세밀해서 같은 키 히트가 거의 없는 건 아닌지 확인.</p>
+            <p>[!QUESTION] 캐시 스탬피드가 뭐고, 어떻게 해결하나요?</p>
+            <p>TTL이 만료되는 순간 다수의 요청이 동시에 캐시 미스를 만나서 DB에 동일 쿼리가 쏟아지는 현상이다. 해결 방법:</p>
+            <p>1. <strong>LoadingCache</strong> : 같은 키에 대해 하나의 스레드만 DB를 조회하고 나머지는 대기</p>
+            <p>2. <strong>refreshAfterWrite</strong> : TTL 후에도 기존 값을 반환하면서 백그라운드로 갱신</p>
+            <p>3. <strong>확률적 조기 갱신</strong> : TTL 만료 전에 일정 확률로 미리 갱신 (고급 기법)</p>
+            <p>함정 : "TTL을 아주 길게 잡으면 되지 않나요?" → 데이터 신선도가 떨어진다. 스탬피드를 방지하면서도 적절한 TTL을 유지해야 한다.</p>
+            <p>[!QUESTION] 로컬 캐시(Caffeine)의 한계는?</p>
+            <p>서버가 여러 대일 때, 서버 A에서 데이터를 수정해도 서버 B의 로컬 캐시에는 반영되지 않는다. 사용자가 로드밸런서를 통해 다른 서버에 요청하면 오래된 데이터를 볼 수 있다. 이 문제를 해결하려면 Redis 같은 <mark>분산 캐시</mark>를 사용하거나, 캐시 무효화 이벤트를 서버 간에 전파해야 한다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Spring</span>
+          <span>#Cache</span>
+          <span>#Actuator</span>
+          <span>#모니터링</span>
+          <span>#적중률</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="spring-cache-4-loading-cache.html">&larr; 이전 글</a>
+          <a href="../pages/nbuntu.html">목록으로 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

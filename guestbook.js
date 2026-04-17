@@ -154,8 +154,8 @@ function loadGuestbook() {
         var accentColor = nameToAccent(data.name);
 
         entry.innerHTML =
-          '<div class="gb-entry-side" style="background:' + bgColor + '">' +
-            '<div class="gb-entry-icon">' + icon + '</div>' +
+          '<div class="gb-entry-side">' +
+            '<div class="gb-entry-icon" style="background:' + bgColor + '">' + icon + '</div>' +
           '</div>' +
           '<div class="gb-entry-body">' +
             '<div class="gb-entry-header">' +

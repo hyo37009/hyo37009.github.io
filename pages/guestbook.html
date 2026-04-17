@@ -4,6 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>방명록 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@500;700&display=swap">
   <link rel="stylesheet" href="../style.css">
 </head>
 <body>
@@ -14,8 +18,13 @@
       <div class="banner-subtitle">B급 개발자의 아지트</div>
     </div>
 
-    <div class="ticker">
-      <span>방명록에 글을 남겨주세요! 악플은... 마음이 아파요.</span>
+    <div class="typing-bar">
+      <span class="tb-prompt">&gt;_&nbsp;</span>
+      <span class="tb-host">nbh</span>
+      <span class="tb-dollar">$&nbsp;</span>
+      <span class="tb-cmd" id="tb-cmd"></span>
+      <span class="tb-output" id="tb-output"></span>
+      <span class="tb-cursor blink" id="tb-cursor"></span>
     </div>
 
     <nav class="nav">
@@ -28,9 +37,7 @@
     <div class="content">
 
       <aside class="sidebar">
-        <div class="profile-img">
-          사진 준비중
-        </div>
+        <img class="profile-img" src="../profile.jpg" alt="nbh">
         <div class="profile-name">nbh</div>
         <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
       </aside>
@@ -107,5 +114,65 @@
 
   <script src="../guestbook.js"></script>
   <script src="../script.js"></script>
+
+  <script>
+    /* ── 타이핑 바 애니메이션 ── */
+    (function () {
+      var TYPE_SPEED   = 75;
+      var ENTER_DELAY  = 280;
+      var RESULT_DELAY = 2200;
+      var CLEAR_DELAY  = 350;
+
+      var SEQ = [
+        { cmd: 'touch guestbook.txt',   result: '발자취를 남겨주세요' },
+        { cmd: 'echo "hello"',          result: '반갑습니다 :)' },
+        { cmd: 'cat rules.txt',         result: '악플은… 마음이 아파요' },
+        { cmd: 'chmod +w guest.log',    result: '누구나 쓸 수 있음' },
+        { cmd: 'tail -1 mailbox/',      result: '편지를 기다리는 중' },
+        { cmd: 'whoami',                result: '익명 방문자 환영' },
+        { cmd: 'date',                  result: '방문 기록 남기기 좋은 날' },
+      ];
+
+      var elCmd    = document.getElementById('tb-cmd');
+      var elOutput = document.getElementById('tb-output');
+      var elCursor = document.getElementById('tb-cursor');
+      if (!elCmd || !elOutput || !elCursor) return;
+      var seqIdx = 0;
+
+      function clearAll() {
+        elCmd.textContent    = '';
+        elOutput.textContent = '';
+      }
+
+      function startSequence() {
+        var item = SEQ[seqIdx % SEQ.length];
+        seqIdx++;
+        clearAll();
+
+        typeCommand(item.cmd, 0, function () {
+          elCursor.classList.remove('blink');
+          setTimeout(function () {
+            elOutput.textContent = ' → ' + item.result;
+            elCursor.classList.add('blink');
+            setTimeout(function () {
+              elCursor.classList.remove('blink');
+              setTimeout(function () {
+                elCursor.classList.add('blink');
+                startSequence();
+              }, CLEAR_DELAY);
+            }, RESULT_DELAY);
+          }, ENTER_DELAY);
+        });
+      }
+
+      function typeCommand(text, charIdx, onDone) {
+        if (charIdx > text.length) { onDone(); return; }
+        elCmd.textContent = text.slice(0, charIdx);
+        setTimeout(function () { typeCommand(text, charIdx + 1, onDone); }, TYPE_SPEED);
+      }
+
+      setTimeout(startSequence, 500);
+    })();
+  </script>
 </body>
 </html>

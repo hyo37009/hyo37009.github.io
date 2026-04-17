@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Spring Event] 1. 이벤트 기반 설계란 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Spring Event] 1. 이벤트 기반 설계란</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.03.12
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Spring Event (1/2)</div>
+            <p>다음 편: <a href="spring-event-2-transactional.html">[Spring Event] 2. @TransactionalEventListener</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">시리즈 안내</div>
+            <p>1. <strong>이벤트 기반 설계란</strong> ← 현재 문서</p>
+            <p>2. <a href="spring-event-2-transactional.html">@TransactionalEventListener</a></p>
+          </div>
+
+          <h2>왜 이벤트가 필요한가</h2>
+
+          <p>주문이 완료되면 재고를 차감하고, 이메일을 보내고, 포인트를 적립한다고 하자. 가장 직관적인 방법은 <code>OrderService</code>에서 세 가지를 모두 직접 호출하는 것이다.</p>
+
+<pre><code class="language-java">@Transactional
+public void placeOrder(OrderRequest request) {
+    Order order = orderRepository.save(new Order(request));
+    inventoryService.decrease(order.getProductId(), order.getQuantity());
+    emailService.sendOrderConfirmation(order);
+    pointService.addPoints(order.getUserId(), order.getAmount());
+}</code></pre>
+          <ul>
+            <li><code>OrderService</code>가 재고, 이메일, 포인트 서비스를 <strong>전부 알고 있어야</strong> 한다</li>
+            <li>쿠폰 발급이 추가되면? <code>OrderService</code>를 또 수정해야 한다</li>
+            <li>이메일 발송이 5초 걸리면? 주문 응답도 5초 뒤에 돌아온다</li>
+            <li>이메일 서버가 죽으면? 주문 자체가 실패한다</li>
+          </ul>
+
+          <p><mark>핵심 로직(주문)과 부가 로직(이메일, 포인트)이 강하게 결합</mark>된 구조다. 부가 로직이 늘어날수록 핵심 로직의 코드가 비대해지고, 부가 로직의 장애가 핵심 로직까지 전파된다.</p>
+
+          <p>이벤트는 이 결합을 끊는 도구다. "주문이 완료됐다"는 <mark>사실만 알리고</mark>, 그 사실에 관심 있는 쪽이 알아서 반응하게 한다. 우체국에 편지를 맡기면, 우체국이 받는 사람에게 전달하는 것과 같다. 보내는 사람은 받는 사람이 누군지 몰라도 되고, 받는 사람이 늘어나도 보내는 쪽 코드는 바뀌지 않는다.</p>
+
+          <h2>Spring의 이벤트 시스템 구조</h2>
+
+          <p>Spring은 애플리케이션 내부에서 이벤트를 주고받을 수 있는 구조를 기본 제공한다. 세 가지 역할로 구성된다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    participant Publisher as Publisher<br/>(이벤트 발행자)
+    participant Spring as ApplicationEventPublisher<br/>(Spring 내부)
+    participant L1 as Listener A<br/>(이메일 발송)
+    participant L2 as Listener B<br/>(포인트 적립)
+
+    Publisher->>Spring: publishEvent(OrderCompletedEvent)
+    Note over Spring: 등록된 리스너를<br/>순회하며 호출
+    Spring->>L1: onOrderCompleted(event)
+    Spring->>L2: onOrderCompleted(event)
+    Note over Publisher: Publisher는 Listener의<br/>존재를 모른다
+</div>
+          <ul>
+            <li><strong>Publisher</strong> : 이벤트를 발행하는 쪽. <code>ApplicationEventPublisher.publishEvent()</code>를 호출한다</li>
+            <li><strong>Event</strong> : "무슨 일이 일어났다"를 담은 객체. 평범한 Java 클래스다</li>
+            <li><strong>Listener</strong> : 이벤트를 수신해서 반응하는 쪽. <code>@EventListener</code> 메서드를 정의한다</li>
+          </ul>
+
+          <p>Publisher는 Listener의 존재를 모르고, Listener도 Publisher를 직접 참조하지 않는다. <mark>Spring이 중간에서 이벤트를 전달하는 중개자 역할</mark>을 한다.</p>
+
+          <h2>커스텀 이벤트 정의하기</h2>
+
+          <p>이벤트는 "과거에 일어난 사실"을 나타내는 객체다. 이름은 <strong>과거형 또는 완료형</strong>으로 짓는 게 관례다.</p>
+
+<pre><code class="language-java">public class OrderCompletedEvent {
+
+    private final Long orderId;
+    private final Long userId;
+    private final int amount;
+
+    public OrderCompletedEvent(Long orderId, Long userId, int amount) {
+        this.orderId = orderId;
+        this.userId = userId;
+        this.amount = amount;
+    }
+
+    // getter 생략
+}</code></pre>
+          <ul>
+            <li>리스너가 필요로 하는 정보를 필드로 담는다</li>
+            <li>불변 객체로 만드는 것이 좋다 (여러 리스너가 같은 객체를 받으므로)</li>
+            <li>Spring 4.2 이전에는 <code>ApplicationEvent</code>를 상속해야 했지만, <mark>지금은 아무 클래스나 이벤트로 사용</mark>할 수 있다</li>
+          </ul>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">이벤트 네이밍 관례</div>
+            <p>- <code>OrderCompletedEvent</code> — 주문이 완료됨</p>
+            <p>- <code>MessageCreatedEvent</code> — 메시지가 생성됨</p>
+            <p>- <code>RoleUpdatedEvent</code> — 권한이 변경됨</p>
+            <p>"무엇이 어떻게 됐다"를 과거분사로 표현한다.</p>
+          </div>
+
+          <h2>ApplicationEventPublisher 사용법</h2>
+
+          <p>이벤트를 발행하려면 <code>ApplicationEventPublisher</code>를 주입받아서 <code>publishEvent()</code>를 호출한다.</p>
+
+<pre><code class="language-java">@Service
+@RequiredArgsConstructor
+public class OrderService {
+
+    private final OrderRepository orderRepository;
+    private final ApplicationEventPublisher eventPublisher;
+
+    @Transactional
+    public void placeOrder(OrderRequest request) {
+        Order order = orderRepository.save(new Order(request));
+        eventPublisher.publishEvent(
+            new OrderCompletedEvent(order.getId(), order.getUserId(), order.getAmount())
+        );
+    }
+}</code></pre>
+          <ul>
+            <li><code>OrderService</code>는 이제 <code>emailService</code>, <code>pointService</code>를 모른다</li>
+            <li>부가 로직이 추가되어도 <code>OrderService</code>는 수정할 필요가 없다</li>
+            <li><code>publishEvent()</code>는 이벤트 객체 하나만 받는다. 어떤 클래스든 가능하다</li>
+          </ul>
+
+          <p>앞서 본 직접 호출 코드와 비교하면, <code>placeOrder()</code>가 <mark>자신의 핵심 책임(주문 저장)에만 집중</mark>하게 된 것을 알 수 있다.</p>
+
+          <h2>@EventListener 기본 사용법</h2>
+
+          <p>이벤트를 수신하려면 <code>@EventListener</code>를 메서드에 붙이면 된다.</p>
+
+<pre><code class="language-java">@Component
+@RequiredArgsConstructor
+public class OrderEventListener {
+
+    private final EmailService emailService;
+    private final PointService pointService;
+
+    @EventListener
+    public void sendEmail(OrderCompletedEvent event) {
+        emailService.sendOrderConfirmation(event.getOrderId());
+    }
+
+    @EventListener
+    public void addPoints(OrderCompletedEvent event) {
+        pointService.add(event.getUserId(), event.getAmount());
+    }
+}</code></pre>
+          <ul>
+            <li>메서드의 파라미터 타입으로 어떤 이벤트를 받을지 결정된다</li>
+            <li>하나의 이벤트에 여러 리스너를 등록할 수 있다</li>
+            <li>리스너는 Spring Bean이어야 한다 (<code>@Component</code> 필요)</li>
+          </ul>
+
+          <p>기본적으로 <code>@EventListener</code>는 <mark>동기적으로 실행</mark>된다. 즉, <code>publishEvent()</code>를 호출한 스레드에서 모든 리스너가 순서대로 실행된다. 비동기로 실행하려면 <code>@Async</code>를 함께 사용해야 하는데, 이는 <a href="async와-비동기-처리.html">[@Async와 비동기 처리</a>에서 다룬다.</p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">동기 실행의 함정</div>
+            <p><code>@EventListener</code>만 사용하면 직접 호출과 마찬가지로 리스너의 실행 시간이 전체 응답 시간에 포함된다. 의존성 분리 효과는 있지만, 성능상의 이점은 <code>@Async</code>를 적용해야 얻을 수 있다.</p>
+          </div>
+
+          <h2>이벤트 리스너와 트랜잭션</h2>
+
+          <p><code>@EventListener</code>는 한 가지 중요한 특성이 있다. <mark>발행자의 트랜잭션 안에서 실행</mark>된다는 것이다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    participant Service as OrderService
+    participant Spring as Spring
+    participant Listener as EmailListener
+    participant TX as 트랜잭션
+
+    TX->>Service: 트랜잭션 시작
+    Service->>Service: order 저장
+    Service->>Spring: publishEvent(OrderCompletedEvent)
+    Spring->>Listener: sendEmail(event)
+    Note over Listener: 아직 트랜잭션 안!
+    Listener-->>Spring: 완료
+    Spring-->>Service: 리턴
+    Service-->>TX: 트랜잭션 커밋
+</div>
+          <ul>
+            <li>리스너에서 예외가 발생하면 발행자의 트랜잭션도 롤백된다</li>
+            <li>리스너에서 DB를 조회하면, 아직 커밋되지 않은 데이터도 보인다</li>
+          </ul>
+
+          <p>이메일 발송 실패 때문에 주문 자체가 롤백되는 건 원하는 동작이 아닐 수 있다. "트랜잭션이 커밋된 후에 리스너를 실행하고 싶다"면 <a href="spring-event-2-transactional.html">@TransactionalEventListener</a>를 사용해야 한다.</p>
+
+          <h2>언제 이벤트를 쓰고 언제 직접 호출을 쓰는가</h2>
+
+          <p>모든 메서드 호출을 이벤트로 바꿀 필요는 없다. 판단 기준은 명확하다.</p>
+
+          <table>
+          <thead>
+          <tr><th>기준</th><th>직접 호출</th><th>이벤트</th></tr>
+          </thead>
+          <tbody>
+          <tr><td><strong>관계</strong></td><td>A가 B 없이는 동작 불가</td><td>A는 B 없이도 핵심 로직 완료 가능</td></tr>
+          <tr><td><strong>실패 전파</strong></td><td>B 실패 시 A도 실패해야 함</td><td>B 실패가 A에 영향 주면 안 됨</td></tr>
+          <tr><td><strong>확장성</strong></td><td>B는 항상 하나</td><td>반응해야 할 대상이 늘어날 수 있음</td></tr>
+          <tr><td><strong>예시</strong></td><td>주문 → 재고 차감</td><td>주문 → 이메일 알림, 포인트 적립</td></tr>
+          </tbody>
+          </table>
+
+          <p>재고 차감은 주문의 핵심이다. 재고가 부족하면 주문이 실패해야 한다. 이건 직접 호출이 맞다. 반면 이메일 알림은 부가 기능이다. 이메일 서버가 죽어도 주문은 성공해야 한다. 이건 이벤트가 맞다.</p>
+
+          <p><mark>핵심 로직은 직접 호출, 부가 로직은 이벤트</mark>로 분리하는 것이 일반적인 가이드라인이다.</p>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Spring</span>
+          <span>#Event</span>
+          <span>#이벤트</span>
+          <span>#ApplicationEventPublisher</span>
+          <span>#EventListener</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+          <a href="spring-event-2-transactional.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

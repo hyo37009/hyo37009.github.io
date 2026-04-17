@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Spring Security] 2. AuthenticationSuccessHandler 구현 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Spring Security] 2. AuthenticationSuccessHandler 구현</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.03.12
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">UserDetails (2/4)</div>
+            <p>이전 편: <a href="spring-userdetails-1-basics.html">[Spring Security] 1. UserDetails와 GrantedAuthority</a></p>
+            <p>다음 편: <a href="spring-userdetails-3-login-handler.html">[Spring Security] 3. 로그인 성공·실패 핸들러</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">시리즈 안내</div>
+            <p>이 문서는 <a href="spring-userdetails-1-basics.html">UserDetails와 GrantedAuthority</a> 이후의 내용입니다.</p>
+            <p>로그인 성공 후 어떤 동작을 할지 커스터마이징하는 방법을 다룹니다.</p>
+          </div>
+
+          <hr>
+
+          <h2>1. AuthenticationSuccessHandler란?</h2>
+
+          <p>Spring Security는 로그인 성공 후 기본적으로 특정 페이지로 리다이렉트합니다. 하지만 REST API에서는 리다이렉트 대신 JSON 응답을 내려줘야 합니다.</p>
+
+          <p><mark><code>AuthenticationSuccessHandler</code></mark> 는 로그인 성공 시 어떤 동작을 할지 정의하는 인터페이스입니다. 직접 구현해서 원하는 응답을 만들 수 있습니다.</p>
+
+          <p>구현해야 하는 메서드는 단 하나입니다:</p>
+
+<pre><code class="language-java">void onAuthenticationSuccess(
+    HttpServletRequest request,
+    HttpServletResponse response,
+    Authentication authentication
+) throws IOException, ServletException;</code></pre>
+          <ul>
+            <li><code>request</code> : 클라이언트의 HTTP 요청 정보 (IP, 헤더 등)</li>
+            <li><code>response</code> : 서버가 클라이언트에게 보낼 응답 객체</li>
+            <li><code>authentication</code> : 인증된 사용자 정보 (username, authorities 등)</li>
+          </ul>
+
+          <hr>
+
+          <h2>2. super를 호출하면 안 되는 이유</h2>
+
+          <p><code>AuthenticationSuccessHandler</code>는 <strong>인터페이스</strong>입니다. 인터페이스를 구현(<code>implements</code>)한 클래스에서는 <code>super</code>를 호출할 수 없습니다.</p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">[실수] super.onAuthenticationSuccess() 호출 불가</div>
+            <p>```java</p>
+            <p>// 컴파일 에러</p>
+            <p>super.onAuthenticationSuccess(request, response, authentication);</p>
+            <p>```</p>
+            <p>인터페이스에는 구현체가 없으므로 <code>super</code>로 올라갈 부모가 없습니다.</p>
+            <p><code>SimpleUrlAuthenticationSuccessHandler</code>를 상속(<code>extends</code>)했다면 <code>super</code> 호출이 가능하지만, 인터페이스 구현 시에는 직접 응답을 작성해야 합니다.</p>
+          </div>
+
+          <hr>
+
+          <h2>3. REST API에서의 구현 방법</h2>
+
+          <p>로그인 성공 시 JSON을 응답으로 내려주면 됩니다.</p>
+
+<pre><code class="language-java">@Override
+public void onAuthenticationSuccess(
+        HttpServletRequest request,
+        HttpServletResponse response,
+        Authentication authentication) throws IOException, ServletException {
+
+    HttpSession session = request.getSession();
+    String username = authentication.getName();
+    String ipAddress = getClientIP(request);
+    String userAgent = request.getHeader("User-Agent");
+    Instant now = Instant.now();
+
+    session.setAttribute("LOGIN_TIME", now);
+    session.setAttribute("LOGIN_IP", ipAddress);
+    session.setAttribute("USER_AGENT", userAgent);
+
+    response.setStatus(HttpServletResponse.SC_OK);
+    response.setContentType("application/json");
+    response.setCharacterEncoding("UTF-8");
+    response.getWriter().write("{\"username\":\"" + username + "\"}");
+}</code></pre>
+          <ul>
+            <li><code>response.setStatus(HttpServletResponse.SC_OK)</code> : HTTP 200 상태 코드 설정</li>
+            <li><code>response.setContentType("application/json")</code> : 응답 타입을 JSON으로 지정</li>
+            <li><code>response.setCharacterEncoding("UTF-8")</code> : 한글 깨짐 방지</li>
+            <li><code>response.getWriter().write(...)</code> : 응답 본문에 JSON 문자열 직접 작성</li>
+            <li><code>authentication.getName()</code> : 인증된 사용자의 username 반환</li>
+          </ul>
+
+          <hr>
+
+          <h2>4. HTTP 헤더 이름은 표준 규약</h2>
+
+          <p><code>request.getHeader()</code>에 넣는 문자열은 HTTP 표준(RFC 7231)에서 정의된 헤더 이름입니다. 정확한 이름을 모르면 <code>null</code>이 반환됩니다.</p>
+
+          <p>자주 쓰는 헤더 이름:</p>
+
+          <table>
+          <thead>
+          <tr><th>헤더 이름</th><th>용도</th></tr>
+          </thead>
+          <tbody>
+          <tr><td><code>User-Agent</code></td><td>클라이언트 브라우저/앱 정보</td></tr>
+          <tr><td><code>X-Forwarded-For</code></td><td>프록시를 거친 실제 클라이언트 IP</td></tr>
+          <tr><td><code>Authorization</code></td><td>인증 토큰</td></tr>
+          <tr><td><code>Content-Type</code></td><td>요청 본문 타입</td></tr>
+          </tbody>
+          </table>
+
+          <hr>
+
+          <h2>5. SecurityConfig에 등록하는 방법</h2>
+
+          <p>구현한 핸들러를 Spring Security 설정에 연결해야 적용됩니다.</p>
+
+<pre><code class="language-java">@Bean
+public SecurityFilterChain securityFilterChain(
+        HttpSecurity http,
+        LoginSuccessHandler loginSuccessHandler) throws Exception {
+
+    http
+        .formLogin(form -&gt; form
+            .successHandler(loginSuccessHandler)
+        );
+
+    return http.build();
+}</code></pre>
+          <ul>
+            <li><code>successHandler(loginSuccessHandler)</code> : 로그인 성공 시 실행할 핸들러 등록</li>
+            <li><code>@Component</code>로 등록된 <code>LoginSuccessHandler</code>를 파라미터로 주입받아 사용</li>
+          </ul>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#spring-security</span>
+          <span>#authentication</span>
+          <span>#success-handler</span>
+          <span>#로그인</span>
+          <span>#REST-API</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="spring-userdetails-1-basics.html">&larr; 이전 글</a>
+          <a href="spring-userdetails-3-login-handler.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

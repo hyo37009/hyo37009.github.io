@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[JWT] 2. Stateless 인증이란 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[JWT] 2. Stateless 인증이란</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.03.12
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">JWT deep dive (2/5)</div>
+            <p>이전 편: <a href="jwt-deep-dive-1-session-limits.html">[JWT] 1. 세션의 한계와 토큰의 등장</a></p>
+            <p>다음 편: <a href="jwt-deep-dive-3-structure.html">[JWT] 3. JWT의 구조 해부</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">JWT deep dive 시리즈</div>
+            <p>1. <a href="jwt-deep-dive-1-session-limits.html">1 세션의 한계와 토큰의 등장</a></p>
+            <p>2. <strong>Stateless 인증이란</strong> (현재 글)</p>
+            <p>3. <a href="jwt-deep-dive-3-structure.html">3 JWT의 구조 해부</a></p>
+            <p>4. <a href="jwt-deep-dive-4-signature.html">4 서명과 검증의 원리</a></p>
+            <p>5. <a href="jwt-deep-dive-5-tips.html">5 JWT 실전 팁과 면접 대비</a></p>
+          </div>
+
+          <p><a href="jwt-deep-dive-1-session-limits.html">이전 편</a>에서 세션 기반 인증이 다중 서버 환경에서 부딪히는 문제를 살펴봤다. 핵심은 "서버가 상태를 보관한다"는 구조 자체였다. 이번 편에서는 그 전제를 뒤집는 Stateless 인증이 무엇인지, 어떤 원리로 확장성 문제를 풀어내는지 알아본다.</p>
+
+          <h2>Stateless의 의미</h2>
+
+          <p><mark>Stateless</mark>란 "서버가 클라이언트의 상태를 저장하지 않는다"는 뜻이다. 각 요청이 완전히 독립적이어서, 서버는 이전 요청에서 무슨 일이 있었는지를 전혀 기억하지 않는다.</p>
+
+          <p>이게 인증과 무슨 관계가 있을까? 세션 방식에서 서버가 보관하던 "이 사용자는 로그인했다"는 상태를, 서버가 아닌 <mark>클라이언트가 직접 들고 다니게</mark> 하는 것이다.</p>
+
+          <p>비유하자면 이렇다. 세션 방식은 도서관에서 회원증 번호만 보여주면, 직원이 회원 명부를 뒤져서 대출 가능 여부를 확인하는 것과 같다. 명부가 한 권뿐이니, 직원이 여러 명이면 그 명부를 공유하느라 복잡해진다.</p>
+
+          <p>토큰 방식은 대출 가능 여부, 회원 등급, 만료일이 다 적힌 카드를 회원이 직접 들고 다니는 것이다. 직원은 카드를 보고 진짜인지만 확인하면 된다. 명부를 뒤질 필요가 없으니, 직원을 몇 명이든 늘릴 수 있다.</p>
+
+          <h2>세션과 토큰의 인증 흐름 비교</h2>
+
+          <p>두 방식의 차이를 흐름으로 비교해보자.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    participant Browser as 브라우저
+    participant Server as 서버
+    participant Store as 세션 저장소
+
+    rect rgb(255, 235, 235)
+    Note over Browser, Store: 세션 방식
+    Browser->>Server: GET /profile<br/>Cookie: SESSION=abc123
+    Server->>Store: abc123 조회
+    Store-->>Server: {user_id: 1, role: USER}
+    Note over Server: 저장소에서 받은<br/>정보로 사용자 식별
+    Server-->>Browser: 200 OK
+    end
+</div>
+
+<div class="mermaid">
+sequenceDiagram
+    participant Browser as 브라우저
+    participant Server as 서버
+
+    rect rgb(235, 255, 235)
+    Note over Browser, Server: 토큰 방식
+    Browser->>Server: GET /profile<br/>Authorization: Bearer eyJhbG...
+    Note over Server: 토큰을 열어보면<br/>user_id: 1, role: USER<br/>→ 서버 메모리에서 바로 처리
+    Server-->>Browser: 200 OK
+    end
+</div>
+          <p>세션 방식에서는 서버가 매번 외부 저장소를 조회해야 한다. 토큰 방식에서는 서버가 토큰 자체에서 정보를 꺼내기 때문에 <mark>외부 I/O가 없다</mark>. 이 차이가 확장성에서 결정적인 역할을 한다.</p>
+
+          <h2>Self-contained 토큰</h2>
+
+          <p>토큰 기반 인증의 핵심 개념이 <mark>Self-contained</mark>다. "토큰 안에 필요한 정보가 모두 들어있다"는 뜻이다.</p>
+
+          <p>세션 ID는 <code>abc123</code> 같은 의미 없는 문자열이다. 이 문자열만 봐서는 누구의 세션인지, 권한이 뭔지 전혀 알 수 없다. 반드시 저장소를 조회해야 한다.</p>
+
+          <p>반면 토큰에는 이런 내용이 담겨 있다.</p>
+
+<pre><code class="language-json">{
+  "user_id": 1,
+  "email": "user@example.com",
+  "role": "USER",
+  "exp": 1670000000,
+  "iat": 1669996400
+}</code></pre>
+          <p>사용자 ID, 이메일, 권한, 만료 시간까지 토큰 안에 전부 있으니, 서버는 이것만 열어보면 바로 사용자를 식별하고 권한을 확인할 수 있다. DB나 Redis를 조회할 필요가 없다.</p>
+
+          <div class="callout callout-info">
+            <div class="callout-title">"열어본다"는 게 무슨 뜻?</div>
+            <p>토큰은 JSON을 Base64URL로 인코딩한 문자열이다. 디코딩하면 원래 JSON이 나온다. 여기에 서명을 검증하면 변조 여부까지 확인할 수 있다. 구체적인 구조는 <a href="jwt-deep-dive-3-structure.html">3 JWT의 구조 해부</a>에서 자세히 다룬다.</p>
+          </div>
+
+          <p>이 특성이 왜 중요한지, 코드로 비교하면 더 명확하다.</p>
+
+<pre><code class="language-java">// 세션 방식 — 매 요청마다 Redis 조회 (네트워크 I/O 발생)
+@GetMapping("/profile")
+public UserProfile getProfile(@CookieValue("SESSION") String sessionId) {
+    Session session = sessionRepository.findById(sessionId);
+    Long userId = session.getUserId();
+    return userRepository.findById(userId);
+}</code></pre>
+
+<pre><code class="language-java">// 토큰 방식 — 서버 메모리에서 바로 파싱 (네트워크 I/O 없음)
+@GetMapping("/profile")
+public UserProfile getProfile(@RequestHeader("Authorization") String authHeader) {
+    String token = authHeader.substring(7);
+    Claims claims = jwtUtil.parseToken(token);
+    Long userId = claims.get("user_id", Long.class);
+    return userRepository.findById(userId);
+}</code></pre>
+          <ul>
+            <li><code>sessionRepository.findById()</code> — Redis 같은 외부 저장소를 네트워크로 조회한다</li>
+            <li><code>jwtUtil.parseToken()</code> — 토큰을 CPU 연산으로 파싱한다. 외부 호출이 전혀 없다</li>
+          </ul>
+
+          <p>둘 다 마지막에는 <code>userRepository.findById()</code>로 DB를 조회하지만, 그건 프로필 데이터를 가져오기 위한 것이다. <mark>인증 자체에 외부 I/O가 필요한가</mark>가 핵심 차이다.</p>
+
+          <h2>확장성이 달라지는 이유</h2>
+
+          <p>이 차이가 서버 확장에서 어떤 의미를 갖는지 보자.</p>
+
+<div class="mermaid">
+graph TD
+    subgraph "세션 방식"
+        LB1[로드 밸런서]
+        A1[서버 1]
+        A2[서버 2]
+        A3[서버 3]
+        R[(Redis 클러스터)]
+
+        LB1 --> A1
+        LB1 --> A2
+        LB1 --> A3
+        A1 -->|"매 요청마다 조회"| R
+        A2 -->|"매 요청마다 조회"| R
+        A3 -->|"매 요청마다 조회"| R
+
+        style R fill:#f44336,stroke:#333,stroke-width:2px,color:#fff
+    end
+
+    subgraph "토큰 방식"
+        LB2[로드 밸런서]
+        B1[서버 1]
+        B2[서버 2]
+        B3[서버 3]
+
+        LB2 --> B1
+        LB2 --> B2
+        LB2 --> B3
+
+        style B1 fill:#4CAF50,stroke:#333,stroke-width:2px,color:#fff
+        style B2 fill:#4CAF50,stroke:#333,stroke-width:2px,color:#fff
+        style B3 fill:#4CAF50,stroke:#333,stroke-width:2px,color:#fff
+    end
+</div>
+          <p>세션 방식은 서버를 아무리 늘려도 Redis라는 <mark>공유 의존성</mark>이 남아 있다. 서버 100대가 되면 Redis 조회도 100배가 되니까, Redis도 함께 확장해야 한다.</p>
+
+          <p>토큰 방식은 각 서버가 독립적으로 토큰을 검증한다. 서명 검증에 필요한 건 Secret Key 하나뿐이고, 이건 서버 시작 시 환경 변수로 한 번만 로드하면 된다. 서버를 추가할 때 <mark>공유 인프라를 신경 쓸 필요가 없다</mark>.</p>
+
+          <table>
+          <thead>
+          <tr><th>항목</th><th>세션 방식</th><th>토큰 방식</th></tr>
+          </thead>
+          <tbody>
+          <tr><td><strong>서버 추가 시</strong></td><td>Redis 연결 설정 필요</td><td>Secret Key만 있으면 끝</td></tr>
+          <tr><td><strong>인증 처리</strong></td><td>네트워크 I/O (Redis 조회)</td><td>로컬 CPU 연산</td></tr>
+          <tr><td><strong>공유 인프라</strong></td><td>Redis 클러스터 필수</td><td>불필요</td></tr>
+          <tr><td><strong>장애 영향</strong></td><td>Redis 장애 → 전체 인증 마비</td><td>서버 개별 장애만 영향</td></tr>
+          </tbody>
+          </table>
+
+          <h2>토큰이 적합한 환경</h2>
+
+          <p>모든 상황에 토큰이 답은 아니다. 토큰이 특히 빛을 발하는 환경이 있다.</p>
+
+          <h3>RESTful API</h3>
+
+          <p>REST의 핵심 원칙 중 하나가 Stateless다. 각 요청이 독립적이어야 한다는 원칙인데, 세션은 이 원칙을 위반한다. 서버가 세션이라는 상태를 보관하고 있으니까. 토큰 방식은 REST의 Stateless 철학과 자연스럽게 맞아떨어진다.</p>
+
+          <h3>마이크로서비스 아키텍처</h3>
+
+          <p>마이크로서비스에서 토큰의 장점이 가장 극적으로 드러난다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    participant User as 사용자
+    participant Auth as 인증 서비스
+    participant GW as API Gateway
+    participant Order as 주문 서비스
+    participant Pay as 결제 서비스
+
+    User->>Auth: 로그인 요청
+    Auth-->>User: 토큰 발급
+
+    User->>GW: 주문 요청 + 토큰
+    Note over GW: 토큰 검증 (독립적)
+    GW->>Order: 요청 + 토큰 전달
+    Note over Order: 토큰 검증 (독립적)
+    Order->>Pay: 결제 요청 + 토큰 전달
+    Note over Pay: 토큰 검증 (독립적)
+    Pay-->>Order: 결제 완료
+    Order-->>GW: 주문 완료
+    GW-->>User: 응답
+</div>
+          <p>인증 서비스가 토큰을 한 번 발급하면, API Gateway, 주문 서비스, 결제 서비스가 각각 <mark>독립적으로</mark> 토큰을 검증한다. 서비스들끼리 세션 저장소를 공유하거나, 인증 서비스에 매번 확인을 요청할 필요가 없다.</p>
+
+          <p>세션 방식이었다면? 모든 서비스가 동일한 Redis를 바라봐야 하고, Redis에 접근할 수 없는 서비스는 인증 자체가 불가능해진다.</p>
+
+          <h3>SPA와 모바일 애플리케이션</h3>
+
+          <p>SPA(React, Vue 등)는 JavaScript로 API를 직접 호출하는데, <code>Authorization</code> 헤더에 토큰을 실어 보내는 방식이 자연스럽다. 모바일 앱도 브라우저 쿠키에 의존할 수 없는 환경이라 토큰이 더 적합하다.</p>
+
+          <p>특히 프론트엔드와 API 서버의 도메인이 다를 때 차이가 크다. 쿠키는 도메인 제약이 있어서 <code>www.example.com</code>에서 받은 쿠키를 <code>api.example.com</code>으로 보내려면 별도 설정이 필요하다. 반면 <code>Authorization</code> 헤더는 CORS 설정만 되면 도메인에 상관없이 자유롭게 전송할 수 있다.</p>
+
+          <h2>세션이 더 나은 경우</h2>
+
+          <p>토큰의 한계도 분명하다. 다음 상황에서는 세션이 더 적합하다.</p>
+
+          <ul>
+            <li><strong>서버 사이드 렌더링</strong> — Spring MVC + Thymeleaf 같은 전통적인 구성에서는 브라우저 쿠키가 자동으로 관리되므로 세션이 편하다</li>
+            <li><strong>단일 서버, 소규모 서비스</strong> — 확장 계획이 없다면 토큰의 관리 복잡도가 오히려 부담이다</li>
+            <li><strong>즉시 로그아웃 필수</strong> — 금융 서비스나 관리자 시스템처럼 권한 변경 시 즉시 세션을 무효화해야 하는 경우. 토큰은 발급 후 만료 전까지 서버에서 강제로 무효화하기 어렵다</li>
+          </ul>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">하이브리드 전략</div>
+            <p>실무에서는 두 방식을 섞어 쓰기도 한다. 웹 브라우저에는 세션을, 모바일 API에는 토큰을 사용하는 식이다. 정답은 하나가 아니라 상황에 맞는 선택이다.</p>
+          </div>
+
+          <h2>토큰의 트레이드오프</h2>
+
+          <p>토큰 방식이 얻는 것과 잃는 것을 정리하면 이렇다.</p>
+
+          <h4>얻는 것</h4>
+
+          <ul>
+            <li><strong>수평 확장 용이</strong> — 서버 추가 시 공유 인프라 불필요</li>
+            <li><strong>서비스 간 독립성</strong> — 마이크로서비스에서 각 서비스가 독립적으로 인증 처리</li>
+            <li><strong>인프라 단순화</strong> — Redis 같은 세션 저장소 운영 부담 없음</li>
+            <li><strong>크로스 플랫폼</strong> — 웹, 모바일, IoT 등 다양한 클라이언트에서 동일하게 사용</li>
+          </ul>
+
+          <h4>잃는 것</h4>
+
+          <ul>
+            <li><strong>토큰 크기</strong> — 매 요청 헤더에 토큰이 포함되어 트래픽이 증가한다. 세션 ID는 수십 바이트지만, 토큰은 수백 바이트~수 킬로바이트가 될 수 있다</li>
+            <li><strong>즉시 무효화 어려움</strong> — 토큰은 만료 전까지 유효하므로, 강제 로그아웃이 까다롭다</li>
+            <li><strong>정보 노출 가능성</strong> — 토큰은 인코딩일 뿐 암호화가 아니라서, 디코딩하면 내용을 볼 수 있다</li>
+            <li><strong>상태 동기화 불가</strong> — 토큰 발급 후 사용자 권한이 변경돼도, 이미 발급된 토큰에는 반영되지 않는다</li>
+          </ul>
+
+          <p>이런 트레이드오프를 이해한 상태에서, 다음 편에서는 이 토큰의 실체인 JWT가 구체적으로 어떻게 생겼는지 구조를 해부해본다.</p>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#JWT</span>
+          <span>#인증</span>
+          <span>#토큰</span>
+          <span>#세션</span>
+          <span>#Stateless</span>
+          <span>#REST</span>
+          <span>#마이크로서비스</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="jwt-deep-dive-1-session-limits.html">&larr; 이전 글</a>
+          <a href="jwt-deep-dive-3-structure.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

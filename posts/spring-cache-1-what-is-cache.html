@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Spring Cache] 캐시란 무엇인가 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Spring Cache] 캐시란 무엇인가</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.03.12
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Spring Cache (1/5)</div>
+            <p>다음 편: <a href="spring-cache-2-abstraction.html">[Spring Cache] Spring Cache 추상화</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">시리즈 안내</div>
+            <p>1. <strong>캐시란 무엇인가</strong> ← 현재 문서</p>
+            <p>2. <a href="spring-cache-2-abstraction.html">Spring Cache 추상화</a></p>
+            <p>3. <a href="spring-cache-3-caffeine.html">Caffeine 설정과 활용</a></p>
+            <p>4. <a href="spring-cache-4-loading-cache.html">LoadingCache와 캐시 스탬피드</a></p>
+            <p>5. <a href="spring-cache-5-actuator.html">Actuator로 캐시 모니터링</a></p>
+          </div>
+
+          <h2>왜 캐시를 쓰는가</h2>
+
+          <p>사용자 목록을 조회하는 API가 있다고 하자. 매번 DB에서 <code>SELECT * FROM users</code>를 실행한다. 사용자 100명이 1초에 한 번씩 이 API를 호출하면, 초당 100번의 동일한 쿼리가 DB로 날아간다.</p>
+
+          <p>문제는 <mark>사용자 목록이 거의 안 바뀐다</mark>는 것이다. 새 가입이 하루에 10건이면, 나머지 86,390번의 쿼리는 같은 결과를 반환하면서 DB의 CPU, 메모리, 커넥션 풀을 소비한다.</p>
+
+          <p>캐시는 이 반복을 없앤다. 처음 조회한 결과를 메모리에 저장해두고, 같은 요청이 오면 <mark>DB를 거치지 않고 메모리에서 바로 반환</mark>한다. DB 왕복 시간(보통 수~수십 ms)을 완전히 없앨 수 있다.</p>
+
+          <p>일상에서 비유하면, 책꽂이에서 책을 찾는 것(DB 조회)과 책상 위에 펴둔 책을 읽는 것(캐시 조회)의 차이다. 자주 보는 책은 책상 위에 올려두면 매번 책꽂이까지 가지 않아도 된다.</p>
+
+          <h2>캐시의 핵심 개념</h2>
+
+          <h3>캐시 히트와 캐시 미스</h3>
+
+          <p>캐시의 동작은 두 가지 결과로 나뉜다.</p>
+
+          <ul>
+            <li><strong>캐시 히트 (Cache Hit)</strong> : 요청한 데이터가 캐시에 있다. 캐시에서 바로 반환한다.</li>
+            <li><strong>캐시 미스 (Cache Miss)</strong> : 요청한 데이터가 캐시에 없다. DB에서 조회한 후 캐시에 저장하고 반환한다.</li>
+          </ul>
+
+          <p>캐시 히트와 미스가 실제로 어떤 흐름으로 동작하는지 보면 차이가 명확하다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    actor Client as 클라이언트
+    participant Cache as 캐시 (메모리)
+    participant DB as 데이터베이스
+
+    Client->>Cache: 데이터 요청 (예: 사용자 목록)
+
+    alt 캐시 히트 (Hit)
+        rect rgb(232, 248, 232)
+            Cache-->>Client: 캐시된 데이터 즉시 반환
+            Note right of Cache: DB를 거치지 않아 매우 빠름
+        end
+    else 캐시 미스 (Miss)
+        rect rgb(255, 243, 224)
+            Cache->>DB: DB에서 실제 데이터 조회
+            DB-->>Cache: 쿼리 결과 반환
+            Cache->>Cache: 결과를 캐시에 저장
+            Cache-->>Client: 클라이언트에게 결과 반환
+        end
+    end
+</div>
+          <ul>
+            <li><strong>캐시 히트</strong> (초록 영역) : 캐시에 데이터가 있으면 DB를 거치지 않고 바로 반환한다.</li>
+            <li><strong>캐시 미스</strong> (주황 영역) : 캐시에 없으면 DB를 조회하고, 결과를 캐시에 저장한 뒤 반환한다.</li>
+          </ul>
+
+          <p><mark>적중률(Hit Rate)</mark>이 캐시의 핵심 지표다. 적중률이 높을수록 DB 부하가 줄어든다.</p>
+
+<pre><code>적중률 = 캐시 히트 수 / 전체 요청 수</code></pre>
+          <p>적중률 90%면, 10번 중 9번은 DB를 안 거친다. 1,000 RPS(초당 요청)인 서비스에서 적중률 90%면 DB에는 100 RPS만 도달한다.</p>
+
+          <h3>캐시 키와 캐시 값</h3>
+
+          <p>캐시는 본질적으로 <mark>key-value 저장소</mark>다.</p>
+
+          <ul>
+            <li><strong>캐시 키</strong> : 어떤 데이터를 가리키는 식별자. 메서드의 파라미터가 주로 키가 된다.</li>
+            <li><strong>캐시 값</strong> : 실제 저장되는 데이터. 메서드의 반환 값이 저장된다.</li>
+          </ul>
+
+          <table>
+          <thead>
+          <tr><th>키</th><th>값</th></tr>
+          </thead>
+          <tbody>
+          <tr><td><code>users:all</code></td><td>전체 사용자 목록</td></tr>
+          <tr><td><code>channels:user:abc-123</code></td><td>사용자별 채널 목록</td></tr>
+          <tr><td><code>post:42</code></td><td>42번 게시글</td></tr>
+          </tbody>
+          </table>
+
+          <p>키를 잘 설계해야 한다. 키가 너무 넓으면 (예: 전체 사용자 목록을 하나의 키로) 한 명만 추가되어도 전체 캐시를 무효화해야 한다. 키가 너무 좁으면 (예: 사용자 1명 단위) 캐시 항목이 너무 많아져서 메모리를 낭비한다.</p>
+
+          <h2>캐시 전략</h2>
+
+          <h3>TTL (Time To Live)</h3>
+
+          <p>캐시에 저장된 데이터의 <mark>유효 기간</mark>이다. TTL이 지나면 자동으로 삭제되고, 다음 요청에서 DB를 다시 조회한다.</p>
+
+          <ul>
+            <li>TTL 짧게 (예: 30초) : 데이터 신선도 높음, 적중률 낮음</li>
+            <li>TTL 길게 (예: 1시간) : 적중률 높음, 오래된 데이터를 볼 가능성</li>
+          </ul>
+
+          <p>TTL 설정은 <mark>데이터의 변경 빈도</mark>에 따라 결정한다. "이 데이터가 30초 동안 변하지 않아도 괜찮은가?"를 기준으로 판단하면 된다.</p>
+
+          <table>
+          <thead>
+          <tr><th>데이터</th><th>변경 빈도</th><th>적절한 TTL</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>시스템 설정</td><td>거의 안 바뀜</td><td>30분~1시간</td></tr>
+          <tr><td>사용자 목록</td><td>가끔 바뀜</td><td>5~10분</td></tr>
+          <tr><td>인기 게시글</td><td>자주 바뀜 (조회수)</td><td>1~5분</td></tr>
+          <tr><td>실시간 알림</td><td>매우 자주</td><td>30초 이하 또는 캐시 X</td></tr>
+          </tbody>
+          </table>
+
+          <h3>제거 정책</h3>
+
+          <p>캐시 메모리가 가득 차면, 어떤 항목을 제거할지 결정해야 한다. 대표적인 정책은 세 가지다.</p>
+
+          <ul>
+            <li><strong>LRU (Least Recently Used)</strong> : <mark>가장 오래 안 쓴</mark> 항목을 제거. 가장 널리 사용되는 전략이다. "최근에 안 쓴 건 앞으로도 안 쓸 확률이 높다"는 가정.</li>
+            <li><strong>LFU (Least Frequently Used)</strong> : <mark>사용 횟수가 가장 적은</mark> 항목을 제거. 자주 쓰는 데이터를 오래 유지하지만, 한때 인기 있다가 식은 데이터가 빠지지 않는 문제가 있다.</li>
+            <li><strong>FIFO (First In First Out)</strong> : <mark>가장 먼저 들어온</mark> 항목을 제거. 단순하지만, 자주 쓰는 데이터도 오래되면 밀려난다.</li>
+          </ul>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">Caffeine의 기본 전략</div>
+            <p>Caffeine은 W-TinyLFU라는 고급 전략을 사용한다. LRU와 LFU의 장점을 결합한 알고리즘으로, 대부분의 워크로드에서 최고 수준의 적중률을 보인다. 별도 설정 없이도 좋은 성능을 낸다.</p>
+          </div>
+
+          <p>네 가지 전략을 단순성과 적중률 두 축으로 비교하면 위치가 뚜렷하게 갈린다. FIFO는 가장 구현이 단순하지만 적중률이 가장 낮고, W-TinyLFU는 가장 복잡하지만 실제 워크로드에서 압도적으로 높은 적중률을 보인다.</p>
+
+<div class="mermaid">
+quadrantChart
+    title 제거 정책 비교
+    x-axis "단순" --> "복잡"
+    y-axis "저적중" --> "고적중"
+    FIFO: [0.1, 0.2]
+    LRU: [0.35, 0.6]
+    LFU: [0.6, 0.68]
+    W-TinyLFU: [0.78, 0.88]
+</div>
+          <ul>
+            <li><code>FIFO</code> : 선입선출. 단순하지만 자주 쓰는 데이터도 오래되면 제거된다.</li>
+            <li><code>LRU</code> : 최근 안 쓴 것 제거. 대부분의 캐시 라이브러리 기본값이었다.</li>
+            <li><code>LFU</code> : 적게 쓴 것 제거. 과거 인기 있었다가 식은 데이터가 오래 남는 단점이 있다.</li>
+            <li><code>W-TinyLFU</code> : 최근성과 빈도를 함께 고려. Caffeine이 사용하는 전략.</li>
+          </ul>
+
+          <h3>캐시 무효화</h3>
+
+          <p>데이터가 변경되면 캐시도 갱신해야 한다. 안 그러면 사용자가 <mark>오래된 데이터</mark>를 계속 보게 된다.</p>
+
+          <p>캐시 무효화 전략은 두 가지다.</p>
+
+          <ul>
+            <li><strong>TTL 기반 자동 만료</strong> : 일정 시간이 지나면 캐시가 자동으로 삭제된다. 구현이 간단하지만, TTL 내에 데이터가 바뀌면 그 기간 동안 오래된 값을 반환한다.</li>
+            <li><strong>명시적 무효화</strong> : 데이터가 변경되는 시점에 직접 캐시를 삭제/갱신한다. 데이터 일관성은 높지만, "어디서 캐시를 무효화해야 하는지" 빠짐없이 관리해야 한다.</li>
+          </ul>
+
+          <p>실무에서는 <mark>두 가지를 함께</mark> 쓴다. 명시적 무효화로 대부분의 변경을 즉시 반영하고, TTL로 혹시 놓친 경우를 커버한다.</p>
+
+          <h2>로컬 캐시 vs 분산 캐시</h2>
+
+          <p>캐시를 어디에 저장하느냐에 따라 두 가지로 나뉜다.</p>
+
+<div class="mermaid">
+flowchart LR
+    subgraph Local ["로컬 캐시"]
+        direction TB
+        A["서버 A"] <--> CA[("Caffeine")]
+        B["서버 B"] <--> CB[("Caffeine")]
+    end
+
+    Local ~~~ Dist
+
+    subgraph Dist ["분산 캐시"]
+        direction TB
+        DA["서버 A"] <-->|네트워크| Redis[("Redis")]
+        DB_node["서버 B"] <-->|네트워크| Redis
+    end
+
+    style CA fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px
+    style CB fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px
+    style Redis fill:#FFF3E0,stroke:#FF9800,stroke-width:2px
+    style Local fill:#f0f8f0,stroke:#4CAF50
+    style Dist fill:#fff8f0,stroke:#FF9800
+</div>
+          <p>로컬 캐시는 각 서버의 JVM 메모리 안에 독립적으로 존재한다. 서버 A의 Caffeine 캐시를 서버 B는 알 수 없다. 반면 분산 캐시는 외부 Redis 서버 하나를 모든 서버가 공유하기 때문에 <mark>데이터 일관성</mark>이 보장된다. 대신 네트워크 왕복이 필요해서 로컬 캐시보다 느리다.</p>
+
+          <table>
+          <thead>
+          <tr><th>구분</th><th>로컬 캐시 (Caffeine)</th><th>분산 캐시 (Redis)</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>저장 위치</td><td>각 서버의 JVM 메모리</td><td>외부 Redis 서버</td></tr>
+          <tr><td>속도</td><td><mark>매우 빠름</mark> (나노초)</td><td>빠름 (네트워크 왕복 1~2ms)</td></tr>
+          <tr><td>서버 간 공유</td><td>불가능</td><td>가능</td></tr>
+          <tr><td>서버 재시작 시</td><td>캐시 소멸</td><td>유지</td></tr>
+          <tr><td>적합한 상황</td><td>단일 서버, 읽기 위주</td><td>다중 서버, 데이터 일관성 중요</td></tr>
+          </tbody>
+          </table>
+
+          <p>서버가 한 대면 로컬 캐시로 충분하다. 서버가 여러 대로 늘어나면, 서버 A에서 데이터를 수정했는데 서버 B의 로컬 캐시에는 반영이 안 되는 문제가 생긴다. 이때 Redis 같은 분산 캐시가 필요하다.</p>
+
+          <h2>캐시를 쓰면 안 되는 경우</h2>
+
+          <p>모든 데이터에 캐시를 걸면 좋을 것 같지만, 오히려 문제를 일으키는 경우가 있다.</p>
+
+          <ul>
+            <li><strong>실시간성이 중요한 데이터</strong> : 결제 잔액, 재고 수량 등. 캐시된 오래된 값으로 이중 결제나 초과 판매가 발생할 수 있다.</li>
+            <li><strong>쓰기가 읽기보다 많은 데이터</strong> : 캐시를 저장하자마자 무효화해야 하므로 오히려 오버헤드만 늘어난다.</li>
+            <li><strong>매번 다른 결과를 반환하는 데이터</strong> : 랜덤 추천, 검색 결과 등. 캐시 키가 너무 다양해서 적중률이 극히 낮다.</li>
+          </ul>
+
+          <p><mark>읽기가 많고, 변경이 적고, 약간의 지연이 허용되는 데이터</mark>가 캐시에 가장 적합하다.</p>
+
+          <p>어떤 데이터가 캐시에 맞고, 어떤 데이터가 맞지 않는지를 한눈에 정리하면 이렇다.</p>
+
+<div class="mermaid">
+mindmap
+    root(캐시 적합성)
+        적합
+            읽기 중심 데이터
+                사용자 목록
+                상품 목록
+                시스템 설정
+            변경 빈도 낮음
+                카테고리 분류
+                국가/지역 코드
+            약간의 지연 허용
+                인기 게시글 목록
+                통계성 데이터
+        부적합
+            실시간성 필수
+                결제 잔액
+                재고 수량
+            쓰기가 읽기보다 많음
+                채팅 메시지
+                실시간 로그
+            매번 다른 결과
+                랜덤 추천
+                개인화 피드
+</div>
+          <h2>Q&A</h2>
+
+          <div class="callout callout-question">
+            <div class="callout-title">캐시 무효화(Cache Invalidation)가 어렵다고 하는 이유가 뭔가요?</div>
+            <p>캐시는 원본 데이터의 복사본이다. 원본이 바뀌면 복사본도 갱신해야 하는데, <mark>언제, 어디서, 어떤 키를</mark> 무효화해야 하는지 추적하기가 어렵다. 특히 연관 데이터가 복잡할 때 문제가 된다. 채널 멤버가 변경되면 채널 목록, 멤버 목록, 알림 등 여러 캐시를 연쇄 무효화해야 한다. 하나라도 빠지면 오래된 데이터가 노출된다.</p>
+            <p>"컴퓨터 과학에는 두 가지 어려운 문제가 있다 — 캐시 무효화, 이름 짓기, 그리고 off-by-one 오류." (Phil Karlton)</p>
+            <p>[!QUESTION] 로컬 캐시와 분산 캐시 중 어떤 걸 써야 하나요?</p>
+            <p>서버 대수로 판단한다. 서버가 1대면 로컬 캐시(Caffeine)로 충분하고, 속도도 훨씬 빠르다. 서버가 여러 대면 서버 간 캐시 불일치 문제가 생긴다. 서버 A에서 수정한 내용이 서버 B의 캐시에는 반영되지 않기 때문이다. 이 경우 Redis 같은 <mark>분산 캐시</mark>가 필요하다.</p>
+            <p>함정 : "그럼 처음부터 Redis를 쓰면 되지 않나요?" → Redis는 네트워크 왕복이 있어서 Caffeine(나노초)보다 훨씬 느리다(1~2ms). 로컬 캐시로 해결 가능한 상황에서 Redis를 쓰면 불필요한 복잡성이 생긴다.</p>
+            <p>[!QUESTION] 모든 API에 캐시를 걸면 더 빠르지 않나요?</p>
+            <p>오히려 문제가 생긴다. 쓰기가 읽기보다 많은 API에 캐시를 걸면, 저장하자마자 무효화해야 하므로 오버헤드만 늘어난다. 매번 다른 파라미터 조합으로 호출되는 API는 캐시 키가 너무 다양해서 적중률이 0에 가깝다. <mark>캐시가 효과적인 데이터의 특성을 먼저 파악하고 선별적으로 적용</mark>하는 것이 핵심이다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Spring</span>
+          <span>#Cache</span>
+          <span>#캐시</span>
+          <span>#TTL</span>
+          <span>#LRU</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+          <a href="spring-cache-2-abstraction.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

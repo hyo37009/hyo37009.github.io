@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>블로그 업로드 체크리스트</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Pretendard', -apple-system, sans-serif;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    padding: 2rem;
+    line-height: 1.6;
+  }
+  h1 {
+    text-align: center;
+    color: #e94560;
+    margin-bottom: 0.5rem;
+    font-size: 1.8rem;
+  }
+  .subtitle {
+    text-align: center;
+    color: #888;
+    margin-bottom: 2rem;
+    font-size: 0.9rem;
+  }
+  .controls {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+  }
+  .controls button {
+    padding: 0.5rem 1.2rem;
+    border: 1px solid #e94560;
+    background: transparent;
+    color: #e94560;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+  }
+  .controls button:hover {
+    background: #e94560;
+    color: #fff;
+  }
+  .controls button.active {
+    background: #e94560;
+    color: #fff;
+  }
+  .stats {
+    text-align: center;
+    margin-bottom: 1.5rem;
+    color: #aaa;
+    font-size: 0.9rem;
+  }
+  .stats span { color: #e94560; font-weight: bold; }
+
+  .category {
+    background: #16213e;
+    border-radius: 12px;
+    margin-bottom: 1.5rem;
+    overflow: hidden;
+    border: 1px solid #0f3460;
+  }
+  .category-header {
+    background: #0f3460;
+    padding: 0.8rem 1.2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+  }
+  .category-header h2 {
+    font-size: 1.1rem;
+    color: #e94560;
+  }
+  .category-header .badge {
+    background: #e94560;
+    color: #fff;
+    padding: 2px 10px;
+    border-radius: 10px;
+    font-size: 0.8rem;
+  }
+  .category-body { padding: 0.5rem 0; }
+
+  .series {
+    margin: 0.3rem 1rem;
+    background: #1a1a3e;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .series-header {
+    padding: 0.6rem 1rem;
+    font-weight: 600;
+    color: #53a8b6;
+    font-size: 0.95rem;
+    border-bottom: 1px solid #0f3460;
+  }
+
+  .item {
+    display: flex;
+    align-items: center;
+    padding: 0.5rem 1rem;
+    gap: 0.8rem;
+    border-bottom: 1px solid #0f346033;
+    transition: background 0.15s;
+  }
+  .item:last-child { border-bottom: none; }
+  .item:hover { background: #0f346044; }
+
+  .item input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: #e94560;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .item .title {
+    flex: 1;
+    font-size: 0.9rem;
+  }
+  .item .status {
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+  .status.uploaded {
+    background: #2d6a4f;
+    color: #95d5b2;
+  }
+  .status.not-uploaded {
+    background: #6a2d2d;
+    color: #d5959e;
+  }
+  .item.uploaded-item { opacity: 0.5; }
+  .item.uploaded-item .title { text-decoration: line-through; }
+
+  .decision {
+    display: flex;
+    gap: 0.3rem;
+    flex-shrink: 0;
+  }
+  .decision button {
+    padding: 3px 10px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.75rem;
+    transition: all 0.15s;
+  }
+  .btn-yes {
+    background: #264653;
+    color: #2a9d8f;
+  }
+  .btn-yes.selected {
+    background: #2a9d8f;
+    color: #fff;
+  }
+  .btn-no {
+    background: #462626;
+    color: #e76f51;
+  }
+  .btn-no.selected {
+    background: #e76f51;
+    color: #fff;
+  }
+  .btn-later {
+    background: #463e26;
+    color: #e9c46a;
+  }
+  .btn-later.selected {
+    background: #e9c46a;
+    color: #333;
+  }
+
+  .export-area {
+    margin-top: 2rem;
+    text-align: center;
+  }
+  .export-area button {
+    padding: 0.7rem 2rem;
+    background: #e94560;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    cursor: pointer;
+  }
+  .export-area button:hover { background: #c73e54; }
+  #export-result {
+    margin-top: 1rem;
+    background: #0f3460;
+    padding: 1rem;
+    border-radius: 8px;
+    white-space: pre-wrap;
+    font-family: monospace;
+    font-size: 0.85rem;
+    display: none;
+    text-align: left;
+    max-height: 400px;
+    overflow-y: auto;
+  }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<h1>블로그 업로드 체크리스트</h1>
+<p class="subtitle">옵시디언 가이드 중 블로그에 미게시된 문서 목록</p>
+<div class="stats">
+  전체 <span id="total-count">0</span>개 |
+  올릴 글 <span id="yes-count">0</span>개 |
+  안 올림 <span id="no-count">0</span>개 |
+  나중에 <span id="later-count">0</span>개 |
+  미결정 <span id="undecided-count">0</span>개
+</div>
+
+<div class="controls">
+  <button onclick="filterItems('all')" class="active" data-filter="all">전체 보기</button>
+  <button onclick="filterItems('undecided')" data-filter="undecided">미결정만</button>
+  <button onclick="filterItems('yes')" data-filter="yes">올릴 글만</button>
+  <button onclick="filterItems('no')" data-filter="no">안 올림만</button>
+  <button onclick="filterItems('later')" data-filter="later">나중에만</button>
+</div>
+
+<div id="checklist"></div>
+
+<div class="export-area">
+  <button onclick="exportResult()">결과 내보내기</button>
+  <div id="export-result"></div>
+</div>
+
+<script>
+const data = [
+  {
+    category: "Spring",
+    items: [
+      // 이미 올라간 것
+      { title: "리팩토링 1: 설정 관리와 @ConfigurationProperties", uploaded: true, series: "리팩토링 패턴" },
+      { title: "리팩토링 2: 트랜잭션과 데이터 일관성", uploaded: true, series: "리팩토링 패턴" },
+      { title: "리팩토링 3: 예외 처리 전략 설계", uploaded: true, series: "리팩토링 패턴" },
+      { title: "리팩토링 4: REST API 설계 원칙", uploaded: true, series: "리팩토링 패턴" },
+      { title: "리팩토링 5: 코드 일관성과 쿼리 최적화", uploaded: true, series: "리팩토링 패턴" },
+      { title: "CSRF 1: 개념과 방어 전략", uploaded: true, series: "CSRF" },
+      { title: "CSRF 2: 토큰 저장소 설정", uploaded: true, series: "CSRF" },
+      { title: "CSRF 3: 핸들러 커스터마이징", uploaded: true, series: "CSRF" },
+      { title: "CSRF 4: API 엔드포인트 구현", uploaded: true, series: "CSRF" },
+      { title: "세션 관리 1: 동시 로그인 방지와 SessionRegistry", uploaded: true, series: "세션 관리 고도화" },
+      { title: "세션 관리 2: 권한 변경 시 세션 무효화", uploaded: true, series: "세션 관리 고도화" },
+      { title: "세션 관리 3: SessionRegistry로 온라인 상태 관리", uploaded: true, series: "세션 관리 고도화" },
+      { title: "세션 관리 4: RememberMe 자동 로그인", uploaded: true, series: "세션 관리 고도화" },
+      { title: "비동기 1: 비동기 처리의 이해와 @Async 기초", uploaded: true, series: "스프링 비동기" },
+      { title: "비동기 2: ThreadPoolTaskExecutor와 스레드 풀 관리", uploaded: true, series: "스프링 비동기" },
+      { title: "비동기 3: 비동기 반환 타입과 CompletableFuture", uploaded: true, series: "스프링 비동기" },
+      { title: "비동기 4: 비동기 예외 처리", uploaded: true, series: "스프링 비동기" },
+      { title: "비동기 5: TaskDecorator와 컨텍스트 전파", uploaded: true, series: "스프링 비동기" },
+      { title: "비동기 6: 비동기 이벤트와 트랜잭션 연동", uploaded: true, series: "스프링 비동기" },
+      { title: "S3 예외 처리", uploaded: true, series: null },
+      // 미게시
+      { title: "비동기 7: 실전 패턴과 면접 대비", uploaded: false, series: "스프링 비동기", path: "스프링/스프링 비동기/07. 실전 패턴과 면접 대비.md" },
+      { title: "MapStruct 1: 기본, 직접 만든 Mapper와 비교", uploaded: false, series: "MapStruct", path: "스프링/MapStruct/1편.md" },
+      { title: "MapStruct 2: 심화, 의존성 주입과 커스텀 변환", uploaded: false, series: "MapStruct", path: "스프링/MapStruct/2편.md" },
+      { title: "AOP 1: 개념과 용어 정리", uploaded: false, series: "Spring AOP", path: "스프링/Spring AOP/01.md" },
+      { title: "AOP 2: Advice와 Pointcut 활용", uploaded: false, series: "Spring AOP", path: "스프링/Spring AOP/02.md" },
+      { title: "AOP 3: 동작 원리와 주의사항", uploaded: false, series: "Spring AOP", path: "스프링/Spring AOP/03.md" },
+      { title: "Cache 1: 캐시란 무엇인가", uploaded: false, series: "Spring Cache", path: "스프링/Spring Cache/1.md" },
+      { title: "Cache 2: Spring Cache 추상화", uploaded: false, series: "Spring Cache", path: "스프링/Spring Cache/2.md" },
+      { title: "Cache 3: Caffeine 설정과 활용", uploaded: false, series: "Spring Cache", path: "스프링/Spring Cache/3.md" },
+      { title: "Cache 4: LoadingCache와 캐시 스탬피드", uploaded: false, series: "Spring Cache", path: "스프링/Spring Cache/4.md" },
+      { title: "Cache 5: Actuator로 캐시 모니터링", uploaded: false, series: "Spring Cache", path: "스프링/Spring Cache/5.md" },
+      { title: "Spring Event: 이벤트 기반 설계란", uploaded: false, series: "Spring Event", path: "스프링/Spring Event/이벤트 기반 설계란.md" },
+      { title: "Spring Event: @TransactionalEventListener", uploaded: false, series: "Spring Event", path: "스프링/Spring Event/@TransactionalEventListener.md" },
+      { title: "Spring Kafka 입문", uploaded: false, series: null, path: "스프링/Spring Kafka/Spring Kafka 입문.md" },
+      { title: "@Retryable 자동 재시도", uploaded: false, series: null, path: "스프링/Spring Retry/@Retryable 자동 재시도.md" },
+      { title: "Spring 검증 전략 가이드", uploaded: false, series: null, path: "스프링/Spring 검증 전략 가이드.md" },
+      { title: "비밀번호 해시 저장 가이드", uploaded: false, series: null, path: "스프링/시큐리티/비밀번호 해시 저장 가이드.md" },
+      { title: "UserDetails 1: UserDetails와 GrantedAuthority", uploaded: false, series: "UserDetails/시큐리티", path: "스프링/시큐리티/UserDetails/1.md" },
+      { title: "UserDetails 2: AuthenticationSuccessHandler 구현", uploaded: false, series: "UserDetails/시큐리티", path: "스프링/시큐리티/UserDetails/2.md" },
+      { title: "UserDetails 3: 로그인 성공 실패 핸들러", uploaded: false, series: "UserDetails/시큐리티", path: "스프링/시큐리티/UserDetails/3.md" },
+      { title: "UserDetails 4: 세션 기반 인증과 AuthenticationPrincipal", uploaded: false, series: "UserDetails/시큐리티", path: "스프링/시큐리티/UserDetails/4.md" },
+    ]
+  },
+  {
+    category: "Java/예외처리",
+    items: [
+      { title: "catch 축 구분법", uploaded: true, series: null },
+      { title: "커스텀 예외에서 cause 전달 시점과 이유", uploaded: true, series: null },
+      { title: "SDK 예외 계층 확인법", uploaded: true, series: null },
+    ]
+  },
+  {
+    category: "JWT/인증",
+    items: [
+      { title: "JWT 1: 토큰 기반 인증의 개념과 필요성", uploaded: true, series: "JWT" },
+      { title: "JWT 2: JWT의 구조와 원리", uploaded: true, series: "JWT" },
+      { title: "JWT deep dive 1: 세션의 한계와 토큰의 등장", uploaded: false, series: "JWT deep dive", path: "수업 노트/JWT deep dive/1.md" },
+      { title: "JWT deep dive 2: Stateless 인증이란", uploaded: false, series: "JWT deep dive", path: "수업 노트/JWT deep dive/2.md" },
+      { title: "JWT deep dive 3: JWT의 구조 해부", uploaded: false, series: "JWT deep dive", path: "수업 노트/JWT deep dive/3.md" },
+      { title: "JWT deep dive 4: 서명과 검증의 원리", uploaded: false, series: "JWT deep dive", path: "수업 노트/JWT deep dive/4.md" },
+      { title: "JWT deep dive 5: JWT 실전 팁과 면접 대비", uploaded: false, series: "JWT deep dive", path: "수업 노트/JWT deep dive/5.md" },
+    ]
+  },
+  {
+    category: "JPA",
+    items: [
+      { title: "N+1 문제와 해결 전략", uploaded: false, series: null, path: "JPA/N+1 문제와 해결 전략.md" },
+    ]
+  },
+  {
+    category: "코딩테스트",
+    items: [
+      { title: "시간복잡도 1: 기본 개념", uploaded: true, series: "시간복잡도" },
+      { title: "시간복잡도 2: 입력 크기로 허용 복잡도 판단하기", uploaded: true, series: "시간복잡도" },
+      { title: "시간복잡도 3: 실전 사례 분석", uploaded: true, series: "시간복잡도" },
+      { title: "백트래킹 1: 기본 개념", uploaded: true, series: "백트래킹" },
+      { title: "백트래킹 2: 가지치기와 최적화", uploaded: true, series: "백트래킹" },
+      { title: "백트래킹 3: 실전 패턴과 면접 대비", uploaded: true, series: "백트래킹" },
+      { title: "DP 기본 1: 재귀의 한계", uploaded: false, series: "DP 가이드", path: "코딩테스트/DP 가이드/DP 기본 개념/1.md" },
+      { title: "DP 기본 2: 메모이제이션", uploaded: false, series: "DP 가이드", path: "코딩테스트/DP 가이드/DP 기본 개념/2.md" },
+      { title: "DP 기본 3: 타뷸레이션", uploaded: false, series: "DP 가이드", path: "코딩테스트/DP 가이드/DP 기본 개념/3.md" },
+      { title: "DP 설계 1: 상태 정의", uploaded: false, series: "DP 가이드", path: "코딩테스트/DP 가이드/DP 설계 전략/1.md" },
+      { title: "DP 설계 2: 점화식 도출", uploaded: false, series: "DP 가이드", path: "코딩테스트/DP 가이드/DP 설계 전략/2.md" },
+      { title: "DP 설계 3: 초기값과 탐색 순서", uploaded: false, series: "DP 가이드", path: "코딩테스트/DP 가이드/DP 설계 전략/3.md" },
+      { title: "DP 유형 1: 선형 DP", uploaded: false, series: "DP 가이드", path: "코딩테스트/DP 가이드/DP 유형별 패턴/1.md" },
+      { title: "DP 유형 2: 격자 DP", uploaded: false, series: "DP 가이드", path: "코딩테스트/DP 가이드/DP 유형별 패턴/2.md" },
+      { title: "DP 유형 3: LIS", uploaded: false, series: "DP 가이드", path: "코딩테스트/DP 가이드/DP 유형별 패턴/3.md" },
+      { title: "DP 유형 4: 배낭 문제", uploaded: false, series: "DP 가이드", path: "코딩테스트/DP 가이드/DP 유형별 패턴/4.md" },
+      { title: "DP 유형 5: 실전 패턴과 면접 대비", uploaded: false, series: "DP 가이드", path: "코딩테스트/DP 가이드/DP 유형별 패턴/5.md" },
+    ]
+  },
+  {
+    category: "Kotlin",
+    items: [
+      { title: "Java->Kotlin 1: 핵심 문법 전환", uploaded: false, series: "Java 개발자를 위한 Kotlin", path: "Kotlin/Java 개발자를 위한 Kotlin/1.md" },
+      { title: "Java->Kotlin 2: Kotlin 고급 기능", uploaded: false, series: "Java 개발자를 위한 Kotlin", path: "Kotlin/Java 개발자를 위한 Kotlin/2.md" },
+      { title: "Java->Kotlin 3: Spring Boot에서의 Kotlin", uploaded: false, series: "Java 개발자를 위한 Kotlin", path: "Kotlin/Java 개발자를 위한 Kotlin/3.md" },
+      { title: "Java->Kotlin 4: 코프링 테스트 가이드", uploaded: false, series: "Java 개발자를 위한 Kotlin", path: "Kotlin/Java 개발자를 위한 Kotlin/4.md" },
+      { title: "Kotlin 문법 복습 1: 변수, 타입, 함수", uploaded: false, series: "Kotlin 문법 복습", path: "Kotlin/Kotlin 문법 복습/1.md" },
+      { title: "Kotlin 문법 복습 2: 클래스와 객체", uploaded: false, series: "Kotlin 문법 복습", path: "Kotlin/Kotlin 문법 복습/2.md" },
+      { title: "Kotlin 문법 복습 3: Null Safety와 컬렉션", uploaded: false, series: "Kotlin 문법 복습", path: "Kotlin/Kotlin 문법 복습/3.md" },
+      { title: "Kotlin 문법 복습 4: 확장 함수, 스코프 함수, 람다", uploaded: false, series: "Kotlin 문법 복습", path: "Kotlin/Kotlin 문법 복습/4.md" },
+      { title: "Kotlin 사고방식 1: 이디엄", uploaded: false, series: "Kotlin 사고방식", path: "Kotlin/Kotlin 사고방식/1.md" },
+      { title: "Kotlin 사고방식 2: 타입 시스템 마스터", uploaded: false, series: "Kotlin 사고방식", path: "Kotlin/Kotlin 사고방식/2.md" },
+      { title: "Kotlin 사고방식 3: 함수는 일급 시민이다", uploaded: false, series: "Kotlin 사고방식", path: "Kotlin/Kotlin 사고방식/3.md" },
+      { title: "Kotlin 사고방식 4: 컬렉션의 모든 것", uploaded: false, series: "Kotlin 사고방식", path: "Kotlin/Kotlin 사고방식/4.md" },
+      { title: "Kotlin 사고방식 5: Null Safety 완전 정복", uploaded: false, series: "Kotlin 사고방식", path: "Kotlin/Kotlin 사고방식/5.md" },
+      { title: "Kotlin 사고방식 6: DSL 설계", uploaded: false, series: "Kotlin 사고방식", path: "Kotlin/Kotlin 사고방식/6.md" },
+      { title: "Kotlin 사고방식 7: Java 상호운용 완전 가이드", uploaded: false, series: "Kotlin 사고방식", path: "Kotlin/Kotlin 사고방식/7.md" },
+      { title: "Kotlin 코루틴 1: suspend 함수의 동작 원리", uploaded: false, series: "Kotlin 코루틴", path: "Kotlin/Kotlin 코루틴/1.md" },
+      { title: "Kotlin 코루틴 2: CoroutineScope, Context, Dispatcher", uploaded: false, series: "Kotlin 코루틴", path: "Kotlin/Kotlin 코루틴/2.md" },
+      { title: "Kotlin 코루틴 3: 구조화된 동시성과 예외 처리", uploaded: false, series: "Kotlin 코루틴", path: "Kotlin/Kotlin 코루틴/3.md" },
+      { title: "Kotlin 코루틴 4: Flow", uploaded: false, series: "Kotlin 코루틴", path: "Kotlin/Kotlin 코루틴/4.md" },
+      { title: "Kotlin 코루틴 5: 코루틴 테스트", uploaded: false, series: "Kotlin 코루틴", path: "Kotlin/Kotlin 코루틴/5.md" },
+      { title: "코프링 실전 1: JPA + Kotlin 엔티티 설계", uploaded: false, series: "코프링 실전", path: "Kotlin/코프링 실전/1.md" },
+      { title: "코프링 실전 2: 예외 처리 & Validation 전략", uploaded: false, series: "코프링 실전", path: "Kotlin/코프링 실전/2.md" },
+      { title: "코프링 실전 3: QueryDSL + Kotlin", uploaded: false, series: "코프링 실전", path: "Kotlin/코프링 실전/3.md" },
+      { title: "코프링 실전 4: 설정 관리와 프로파일 전략", uploaded: false, series: "코프링 실전", path: "Kotlin/코프링 실전/4.md" },
+      { title: "코프링 실전 5: Spring Security + Kotlin 심화", uploaded: false, series: "코프링 실전", path: "Kotlin/코프링 실전/5.md" },
+    ]
+  },
+  {
+    category: "도구/기타",
+    items: [
+      { title: "Firebase 개요", uploaded: true, series: null },
+      { title: "인텔리제이 MCP 가이드", uploaded: true, series: null },
+    ]
+  },
+];
+
+// State: { itemKey: 'yes' | 'no' | 'later' | null }
+let decisions = {};
+const STORAGE_KEY = 'blog-upload-checklist';
+
+function loadState() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) decisions = JSON.parse(saved);
+  } catch(e) {}
+}
+function saveState() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(decisions));
+}
+
+function itemKey(catIdx, itemIdx) {
+  return `${catIdx}-${itemIdx}`;
+}
+
+function render() {
+  const container = document.getElementById('checklist');
+  container.innerHTML = '';
+
+  data.forEach((cat, catIdx) => {
+    const notUploadedCount = cat.items.filter(i => !i.uploaded).length;
+    if (notUploadedCount === 0 && currentFilter !== 'all') return;
+
+    const catDiv = document.createElement('div');
+    catDiv.className = 'category';
+
+    const header = document.createElement('div');
+    header.className = 'category-header';
+    header.innerHTML = `<h2>${cat.category}</h2><span class="badge">${notUploadedCount}개 미게시</span>`;
+    catDiv.appendChild(header);
+
+    const body = document.createElement('div');
+    body.className = 'category-body';
+
+    // Group by series
+    const seriesMap = new Map();
+    cat.items.forEach((item, itemIdx) => {
+      const key = item.series || '__none__';
+      if (!seriesMap.has(key)) seriesMap.set(key, []);
+      seriesMap.get(key).push({ ...item, itemIdx });
+    });
+
+    seriesMap.forEach((items, seriesName) => {
+      let wrapper = body;
+      if (seriesName !== '__none__' && items.length > 1) {
+        const seriesDiv = document.createElement('div');
+        seriesDiv.className = 'series';
+        const sh = document.createElement('div');
+        sh.className = 'series-header';
+        sh.textContent = seriesName + ` (${items.length}편)`;
+        seriesDiv.appendChild(sh);
+        body.appendChild(seriesDiv);
+        wrapper = seriesDiv;
+      }
+
+      items.forEach(item => {
+        const key = itemKey(catIdx, item.itemIdx);
+        const decision = decisions[key] || null;
+
+        // Filter
+        if (currentFilter === 'undecided' && (item.uploaded || decision)) return;
+        if (currentFilter === 'yes' && decision !== 'yes') return;
+        if (currentFilter === 'no' && decision !== 'no') return;
+        if (currentFilter === 'later' && decision !== 'later') return;
+
+        const div = document.createElement('div');
+        div.className = 'item' + (item.uploaded ? ' uploaded-item' : '');
+
+        if (item.uploaded) {
+          div.innerHTML = `
+            <input type="checkbox" checked disabled>
+            <span class="title">${item.title}</span>
+            <span class="status uploaded">게시됨</span>
+          `;
+        } else {
+          div.innerHTML = `
+            <span class="title">${item.title}</span>
+            <span class="status not-uploaded">미게시</span>
+            <div class="decision">
+              <button class="btn-yes ${decision === 'yes' ? 'selected' : ''}" onclick="decide('${key}','yes')">올림</button>
+              <button class="btn-later ${decision === 'later' ? 'selected' : ''}" onclick="decide('${key}','later')">나중에</button>
+              <button class="btn-no ${decision === 'no' ? 'selected' : ''}" onclick="decide('${key}','no')">안 올림</button>
+            </div>
+          `;
+        }
+
+        wrapper.appendChild(div);
+      });
+    });
+
+    catDiv.appendChild(body);
+    container.appendChild(catDiv);
+  });
+
+  updateStats();
+}
+
+let currentFilter = 'all';
+function filterItems(filter) {
+  currentFilter = filter;
+  document.querySelectorAll('.controls button').forEach(b => {
+    b.classList.toggle('active', b.dataset.filter === filter);
+  });
+  render();
+}
+
+function decide(key, value) {
+  if (decisions[key] === value) {
+    delete decisions[key];
+  } else {
+    decisions[key] = value;
+  }
+  saveState();
+  render();
+}
+
+function updateStats() {
+  let total = 0, yes = 0, no = 0, later = 0, undecided = 0;
+  data.forEach((cat, catIdx) => {
+    cat.items.forEach((item, itemIdx) => {
+      if (item.uploaded) return;
+      total++;
+      const d = decisions[itemKey(catIdx, itemIdx)];
+      if (d === 'yes') yes++;
+      else if (d === 'no') no++;
+      else if (d === 'later') later++;
+      else undecided++;
+    });
+  });
+  document.getElementById('total-count').textContent = total;
+  document.getElementById('yes-count').textContent = yes;
+  document.getElementById('no-count').textContent = no;
+  document.getElementById('later-count').textContent = later;
+  document.getElementById('undecided-count').textContent = undecided;
+}
+
+function exportResult() {
+  let result = '=== 블로그 업로드 결정 결과 ===\n\n';
+
+  const groups = { yes: '## 올릴 글\n', later: '## 나중에\n', no: '## 안 올림\n' };
+
+  Object.keys(groups).forEach(type => {
+    let lines = [];
+    data.forEach((cat, catIdx) => {
+      cat.items.forEach((item, itemIdx) => {
+        if (item.uploaded) return;
+        if (decisions[itemKey(catIdx, itemIdx)] === type) {
+          lines.push(`- [${cat.category}] ${item.title}`);
+        }
+      });
+    });
+    if (lines.length > 0) {
+      result += groups[type] + lines.join('\n') + '\n\n';
+    }
+  });
+
+  // undecided
+  let undecided = [];
+  data.forEach((cat, catIdx) => {
+    cat.items.forEach((item, itemIdx) => {
+      if (item.uploaded) return;
+      if (!decisions[itemKey(catIdx, itemIdx)]) {
+        undecided.push(`- [${cat.category}] ${item.title}`);
+      }
+    });
+  });
+  if (undecided.length > 0) {
+    result += '## 미결정\n' + undecided.join('\n') + '\n';
+  }
+
+  const el = document.getElementById('export-result');
+  el.textContent = result;
+  el.style.display = 'block';
+}
+
+loadState();
+render();
+</script>
+</body>
+</html>

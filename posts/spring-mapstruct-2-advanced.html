@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[스프링] 2. MapStruct — 의존성 주입과 커스텀 변환 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[스프링] 2. MapStruct — 의존성 주입과 커스텀 변환</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.03.12
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">MapStruct (2/2)</div>
+            <p>이전 편: <a href="spring-mapstruct-1-basics.html">[스프링] 1. MapStruct — 직접 만든 Mapper와 비교하며 시작하기</a></p>
+            <p>이 문서가 시리즈의 마지막 편입니다.</p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">시리즈 안내</div>
+            <p>이 문서는 MapStruct 시리즈 2편이다.</p>
+            <p>- <a href="spring-mapstruct-1-basics.html">1편</a> — 직접 만든 Mapper와 비교하며 시작하기</p>
+            <p>- <strong>2편</strong> — 의존성 주입, 커스텀 변환, 자주 하는 실수 (현재)</p>
+          </div>
+
+          <p>1편에서 필드명이 같은 단순 매핑은 끝냈다. 실제 프로젝트의 Mapper는 이보다 복잡하다. 다른 Mapper를 참조하거나, Entity에 없는 값을 외부에서 가져오거나, 컬렉션을 변환해야 하는 경우가 반드시 생긴다.</p>
+
+          <h2>다른 Mapper 참조하기</h2>
+
+          <p>discodeit의 <code>UserMapper</code>는 <code>BinaryContentMapper</code>를 주입받아 썼다.</p>
+
+<pre><code class="language-java">@Component
+@RequiredArgsConstructor
+public class UserMapper {
+    private final BinaryContentMapper binaryContentMapper;
+
+    public UserDto toDto(User user) {
+        return new UserDto(
+                ...
+                user.getProfile() == null ? null : binaryContentMapper.toDto(user.getProfile()),
+                ...
+        );
+    }
+}</code></pre>
+          <p>MapStruct에서는 <code>uses</code> 속성으로 다른 Mapper를 선언하면 자동으로 위임한다.</p>
+
+<pre><code class="language-java">@Mapper(componentModel = "spring", uses = BinaryContentMapper.class)
+public interface UserMapper {
+    UserDto toDto(User user);
+}</code></pre>
+          <p><code>User.profile</code>이 <code>BinaryContent</code> 타입이고, <code>UserDto.profile</code>이 <code>BinaryContentDto</code> 타입이면, <mark>MapStruct가 자동으로 <code>BinaryContentMapper.toDto()</code>를 찾아 호출</mark>한다. null 체크도 생성된 코드에 포함된다.</p>
+
+          <p><code>ChannelMapper</code>처럼 컬렉션 안의 요소를 변환해야 할 때도 마찬가지다.</p>
+
+<pre><code class="language-java">// 기존 직접 작성 코드
+channel.getParticipants().stream().map(userMapper::toDto).toList()</code></pre>
+
+<pre><code class="language-java">// MapStruct
+@Mapper(componentModel = "spring", uses = UserMapper.class)
+public interface ChannelMapper {
+    ChannelDto toDto(Channel channel, Instant lastMessageAt);
+}</code></pre>
+          <p><code>Channel.participants</code>가 <code>List&lt;User&gt;</code>이고 <code>ChannelDto.participants</code>가 <code>List&lt;UserDto&gt;</code>면, <code>uses</code>에 선언된 <code>UserMapper</code>를 통해 자동으로 각 요소를 변환한다.</p>
+
+          <h2>Entity에 없는 필드 처리하기</h2>
+
+          <p><code>UserDto</code>의 <code>online</code> 필드는 <code>User</code> Entity에 없다. <code>SessionManager</code>를 통해 실시간으로 계산해야 한다. 이런 경우 MapStruct 인터페이스만으로는 처리할 수 없다.</p>
+
+          <p>두 가지 방법이 있다.</p>
+
+          <h4>방법 A — abstract class + @AfterMapping</h4>
+
+          <p>인터페이스 대신 abstract class로 선언하고, 변환 후 후처리 메서드를 직접 작성한다.</p>
+
+<pre><code class="language-java">@Mapper(componentModel = "spring")
+public abstract class UserMapper {
+    @Autowired
+    private SessionManager sessionManager;
+
+    public abstract UserDto toDto(User user);
+
+    @AfterMapping
+    protected void fillOnlineStatus(User user, @MappingTarget UserDto.UserDtoBuilder dto) {
+        dto.online(sessionManager.isOnline(user.getUsername()));
+    }
+}</code></pre>
+          <ul>
+            <li>MapStruct가 <code>toDto()</code> 구현체를 생성하면서, 마지막에 <code>@AfterMapping</code> 메서드를 자동으로 호출한다.</li>
+            <li><code>@MappingTarget</code>은 현재 조립 중인 타겟 객체를 가리킨다.</li>
+            <li><code>UserDto</code>가 Builder 패턴을 지원해야 한다.</li>
+          </ul>
+
+          <h4>방법 B — @Mapping(expression)</h4>
+
+          <p>간단한 표현식은 <code>expression</code> 속성으로 직접 넣을 수 있다.</p>
+
+<pre><code class="language-java">@Mapper(componentModel = "spring")
+public interface UserMapper {
+    @Mapping(target = "online", expression = "java(sessionManager.isOnline(user.getUsername()))")
+    UserDto toDto(User user);
+}</code></pre>
+          <p>표현식이 복잡해지면 읽기 어려워진다. 단순한 경우에만 쓰는 게 낫다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">어떤 방법을 선택할까</div>
+            <p>외부 의존성(Service, Repository 등)이 필요하면 <strong>abstract class + @AfterMapping</strong>.</p>
+            <p>단순 계산이나 타입 변환은 <strong>expression</strong>.</p>
+            <p>복잡도가 높아질수록 abstract class가 유지보수하기 쉽다.</p>
+          </div>
+
+          <h2>컬렉션 매핑</h2>
+
+          <p>단일 객체 변환 메서드가 있으면, 리스트 변환 메서드는 선언만 해도 된다.</p>
+
+<pre><code class="language-java">@Mapper(componentModel = "spring")
+public interface BinaryContentMapper {
+    BinaryContentDto toDto(BinaryContent binaryContent);
+
+    List&lt;BinaryContentDto&gt; toDtoList(List&lt;BinaryContent&gt; binaryContents);
+}</code></pre>
+          <p><code>toDtoList()</code>는 내부적으로 <code>toDto()</code>를 각 요소에 적용한다. null 리스트가 들어오면 null을 반환하고, 빈 리스트는 빈 리스트를 반환한다.</p>
+
+          <h2>역방향 매핑</h2>
+
+          <p>DTO → Entity 변환도 선언할 수 있다.</p>
+
+<pre><code class="language-java">@Mapper(componentModel = "spring")
+public interface BinaryContentMapper {
+    BinaryContentDto toDto(BinaryContent binaryContent);
+
+    @InheritInverseConfiguration
+    BinaryContent toEntity(BinaryContentDto dto);
+}</code></pre>
+          <p><code>@InheritInverseConfiguration</code>은 <code>toDto()</code>의 <code>@Mapping</code> 설정을 source/target을 뒤집어서 재사용한다. 필드명이 달라서 <code>@Mapping</code>을 여러 개 달았다면, 역방향에 똑같이 반복할 필요가 없다.</p>
+
+          <h2>자주 하는 실수</h2>
+
+          <h4>Lombok getter를 못 찾는 문제</h4>
+
+          <p>빌드 시 아래 경고가 나오면 Lombok 순서 문제다.</p>
+
+<pre><code>warning: Unmapped target property: "fieldName"</code></pre>
+          <p><code>annotationProcessor</code> 순서를 확인한다.</p>
+
+<pre><code class="language-groovy">annotationProcessor 'org.projectlombok:lombok'
+annotationProcessor 'org.projectlombok:lombok-mapstruct-binding:0.2.0'
+annotationProcessor 'org.mapstruct:mapstruct-processor:1.5.5.Final'</code></pre>
+          <h4>필드 누락 경고를 무시하는 문제</h4>
+
+          <p>MapStruct는 기본적으로 타겟 필드가 매핑되지 않으면 <mark>경고(warning)</mark>만 낸다. 오류가 아니다. 그래서 빠뜨린 필드가 있어도 빌드는 통과한다. 이를 오류로 바꾸려면 <code>unmappedTargetPolicy</code>를 설정한다.</p>
+
+<pre><code class="language-java">@Mapper(componentModel = "spring", unmappedTargetPolicy = ReportingPolicy.ERROR)
+public interface BinaryContentMapper {
+    BinaryContentDto toDto(BinaryContent binaryContent);
+}</code></pre>
+          <p>팀 프로젝트에서 실수를 막으려면 전역 설정으로 두는 게 낫다. <code>MapperConfig</code>로 공통 설정을 만들 수 있다.</p>
+
+<pre><code class="language-java">@MapperConfig(
+    componentModel = "spring",
+    unmappedTargetPolicy = ReportingPolicy.ERROR
+)
+public interface BaseMapperConfig {}</code></pre>
+
+<pre><code class="language-java">@Mapper(config = BaseMapperConfig.class)
+public interface BinaryContentMapper {
+    BinaryContentDto toDto(BinaryContent binaryContent);
+}</code></pre>
+          <h4>uses에 선언하지 않은 Mapper를 기대하는 문제</h4>
+
+          <p><code>uses</code>에 없는 Mapper의 변환을 기대하면 MapStruct가 직접 변환을 시도한다. 타입이 맞지 않으면 컴파일 오류가 나고, 우연히 타입이 맞아 매핑되면 의도치 않은 동작이 생긴다. 중첩 객체가 있으면 항상 <code>uses</code>를 명시하는 습관을 들여야 한다.</p>
+
+          <div class="callout callout-info">
+            <div class="callout-title">순환 참조 주의</div>
+            <p>A Mapper가 B Mapper를 <code>uses</code>하고, B Mapper가 A Mapper를 <code>uses</code>하면 순환 참조로 컴파일이 실패한다. 중간 Mapper를 분리하거나, 한쪽에서 직접 변환 로직을 가져야 한다.</p>
+          </div>
+
+          <hr>
+
+          <div class="callout callout-question">
+            <div class="callout-title">면접 질문</div>
+            <p><strong>Q. MapStruct와 ModelMapper의 차이는?</strong></p>
+            <p>MapStruct는 컴파일 타임 코드 생성, ModelMapper는 런타임 리플렉션이다. MapStruct는 성능이 뛰어나고 타입 안전하지만 빌드 설정이 필요하다. ModelMapper는 설정이 간단하지만 런타임 오버헤드와 타입 불안전 위험이 있다.</p>
+            <p><strong>Q. MapStruct가 생성한 코드는 어디서 확인하나?</strong></p>
+            <p><code>build/generated/sources/annotationProcessor</code> (Gradle) 또는 <code>target/generated-sources/annotations</code> (Maven)에 생성된다. IDE에서도 직접 열어볼 수 있다.</p>
+            <p><strong>Q. (함정) <code>@Mapper</code>를 인터페이스가 아닌 추상 클래스에 붙여도 되나?</strong></p>
+            <p>된다. abstract class에 붙이면 직접 구현한 메서드는 그대로 유지되고, abstract 메서드만 MapStruct가 생성한다. 외부 의존성이 필요한 경우 abstract class 방식이 더 유연하다.</p>
+            <p><strong>Q. (함정) <code>unmappedTargetPolicy</code>를 설정하지 않으면 어떻게 되나?</strong></p>
+            <p>기본값이 <code>WARN</code>이라 빌드는 성공한다. 매핑되지 않은 필드는 null이나 기본값이 들어간다. 운영 중에 데이터 누락으로 이어질 수 있어, 프로젝트 초기에 <code>ERROR</code>로 설정하는 게 안전하다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#스프링</span>
+          <span>#MapStruct</span>
+          <span>#매퍼</span>
+          <span>#DTO</span>
+          <span>#어노테이션프로세서</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="spring-mapstruct-1-basics.html">&larr; 이전 글</a>
+          <a href="../pages/nbuntu.html">목록으로 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[JWT] 4. 서명과 검증의 원리 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[JWT] 4. 서명과 검증의 원리</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.03.12
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">JWT deep dive (4/5)</div>
+            <p>이전 편: <a href="jwt-deep-dive-3-structure.html">[JWT] 3. JWT의 구조 해부</a></p>
+            <p>다음 편: <a href="jwt-deep-dive-5-tips.html">[JWT] 5. JWT 실전 팁과 면접 대비</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">JWT deep dive 시리즈</div>
+            <p>1. <a href="jwt-deep-dive-1-session-limits.html">1 세션의 한계와 토큰의 등장</a></p>
+            <p>2. <a href="jwt-deep-dive-2-stateless.html">2 Stateless 인증이란</a></p>
+            <p>3. <a href="jwt-deep-dive-3-structure.html">3 JWT의 구조 해부</a></p>
+            <p>4. <strong>서명과 검증의 원리</strong> (현재 글)</p>
+            <p>5. <a href="jwt-deep-dive-5-tips.html">5 JWT 실전 팁과 면접 대비</a></p>
+          </div>
+
+          <p><a href="jwt-deep-dive-3-structure.html">이전 편</a>에서 JWT의 세 번째 구성 요소인 Signature를 간략히 소개했다. 이번 편에서는 서명이 왜 필요하고, 어떤 원리로 위변조를 감지하며, 대칭키와 비대칭키 방식이 각각 어떻게 다른지를 깊이 파고든다.</p>
+
+          <h2>서명이 왜 필요한가</h2>
+
+          <p><a href="jwt-deep-dive-3-structure.html">이전 편</a>에서 봤듯이, JWT의 Header와 Payload는 Base64URL로 인코딩되어 있을 뿐 암호화되어 있지 않다. 누구나 디코딩해서 내용을 볼 수 있고, 수정해서 다시 인코딩하는 것도 가능하다.</p>
+
+          <p>서명이 없다면 이런 공격이 가능하다. 일반 사용자가 받은 토큰의 Payload에서 <code>"role": "USER"</code>를 <code>"role": "ADMIN"</code>으로 바꾸고, 다시 Base64URL로 인코딩해서 서버에 보내는 것이다. 서버는 이걸 구분할 방법이 없다.</p>
+
+          <p><mark>Signature는 이 문제를 해결하기 위해 존재한다.</mark> 토큰이 발급된 이후 단 한 글자라도 변경되면 서명이 맞지 않게 되므로, 서버는 변조를 즉시 감지할 수 있다.</p>
+
+          <h2>위변조 감지 원리</h2>
+
+          <p>공격자가 Payload를 변조하는 시나리오를 따라가 보자.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    participant Attacker as 공격자
+    participant Server as 서버
+    participant Verify as 검증 로직
+
+    Note over Attacker: 1. 토큰을 탈취<br/>role: USER
+    Note over Attacker: 2. Payload 변조<br/>role: ADMIN
+    Note over Attacker: 3. 서명은 그대로 두고 전송<br/>(Secret Key를 모르니<br/>새 서명을 못 만듦)
+
+    Attacker->>Server: 변조된 JWT 전송
+
+    Server->>Verify: Header + 변조된 Payload로<br/>서명을 재계산
+
+    Note over Verify: 재계산한 서명:<br/>x7Kj2mN9pQ...<br/><br/>토큰에 있는 서명:<br/>SflKxwRJSM...<br/><br/>→ 불일치!
+
+    Verify-->>Server: 서명 불일치 감지
+
+    Server-->>Attacker: 401 Unauthorized
+</div>
+          <p>서버가 토큰을 검증하는 핵심 로직은 이렇다.</p>
+
+          <ol>
+            <li>토큰에서 Header와 Payload를 꺼낸다</li>
+            <li>Header와 Payload를 가지고, 서버가 보관하고 있는 Secret Key로 서명을 <strong>재계산</strong>한다</li>
+            <li>재계산한 서명과 토큰에 포함된 서명을 <strong>비교</strong>한다</li>
+            <li>일치하면 변조되지 않은 것, 불일치하면 변조된 것</li>
+          </ol>
+
+          <p>공격자가 Payload를 바꾸면 2번에서 재계산되는 서명이 달라진다. 그런데 공격자는 Secret Key를 모르니까, 변조된 Payload에 맞는 올바른 서명을 만들 수 없다. 그래서 3번에서 항상 불일치가 발생한다.</p>
+
+          <div class="callout callout-info">
+            <div class="callout-title">서명의 본질</div>
+            <p>서명은 "이 내용(Header + Payload)이 이 키(Secret Key)로 발급되었다"는 증거다. 내용이 바뀌면 증거도 달라져야 하는데, 그 증거를 만들려면 키가 필요하다. <mark>키를 모르는 사람은 유효한 증거를 만들 수 없다</mark>는 것이 서명의 핵심 원리다.</p>
+          </div>
+
+          <h2>대칭키 서명 — HMAC (HS256)</h2>
+
+          <p>서명 알고리즘은 크게 두 갈래로 나뉜다. 먼저 대칭키 방식인 HMAC부터 살펴보자.</p>
+
+          <p>HS256(HMAC-SHA256)은 <mark>하나의 키로 서명하고, 같은 키로 검증</mark>하는 방식이다. "대칭키"라는 이름 그대로, 서명과 검증에 동일한 키를 사용한다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    participant Auth as 인증 서버
+    participant Key as Secret Key
+    participant API as API 서버
+
+    Note over Auth, API: 같은 Secret Key를 공유
+
+    Auth->>Key: header.payload + Secret Key
+    Note over Key: HMAC-SHA256 연산
+    Key-->>Auth: 서명 생성 완료
+
+    Note over Auth: JWT = header.payload.서명
+
+    Auth-->>API: JWT 전달
+
+    API->>Key: header.payload + Secret Key
+    Note over Key: HMAC-SHA256 연산
+    Key-->>API: 서명 재계산
+
+    Note over API: 재계산 서명 == 토큰 서명<br/>→ 검증 성공
+</div>
+          <p>코드로 보면 이렇다.</p>
+
+<pre><code class="language-java">// 토큰 생성
+public String generateToken(User user) {
+    return Jwts.builder()
+        .setSubject(user.getEmail())
+        .claim("user_id", user.getId())
+        .claim("role", user.getRole())
+        .setIssuedAt(new Date())
+        .setExpiration(new Date(System.currentTimeMillis() + 3600000))
+        .signWith(SignatureAlgorithm.HS256, SECRET_KEY)
+        .compact();
+}</code></pre>
+          <ul>
+            <li><code>.signWith(SignatureAlgorithm.HS256, SECRET_KEY)</code> — SECRET_KEY 하나로 서명을 만든다</li>
+          </ul>
+
+<pre><code class="language-java">// 토큰 검증
+public Claims validateToken(String token) {
+    return Jwts.parser()
+        .setSigningKey(SECRET_KEY)
+        .parseClaimsJws(token)
+        .getBody();
+}</code></pre>
+          <ul>
+            <li><code>.setSigningKey(SECRET_KEY)</code> — 생성할 때와 동일한 키로 검증한다</li>
+          </ul>
+
+          <p>구현이 단순하고 서명/검증 속도가 빠르다는 장점이 있다. 하지만 치명적인 한계가 하나 있다.</p>
+
+          <h3>HMAC의 한계</h3>
+
+          <p>서명하는 쪽과 검증하는 쪽이 <mark>같은 키</mark>를 가져야 한다. 서버가 한 대라면 문제없지만, 여러 서비스가 토큰을 검증해야 하는 마이크로서비스 환경에서는 모든 서비스에 Secret Key를 배포해야 한다.</p>
+
+<div class="mermaid">
+graph TD
+    subgraph "HMAC 방식의 키 분배 문제"
+        Auth[인증 서비스]
+        SK["Secret Key 🔑"]
+        O[주문 서비스]
+        P[결제 서비스]
+        D[배송 서비스]
+
+        Auth --- SK
+        O --- SK
+        P --- SK
+        D --- SK
+    end
+
+    style SK fill:#f44336,stroke:#333,stroke-width:2px,color:#fff
+</div>
+          <p>Secret Key를 가진 서비스가 많아질수록, 키가 노출될 가능성도 높아진다. 그리고 Secret Key를 가진 서비스는 <mark>토큰을 검증할 수 있을 뿐 아니라 위조도 할 수 있다</mark>. 결제 서비스가 해킹당하면, 그 키로 가짜 관리자 토큰을 만들어서 다른 서비스를 공격할 수 있다는 뜻이다.</p>
+
+          <h2>비대칭키 서명 — RSA (RS256)</h2>
+
+          <p>이 문제를 해결하는 게 비대칭키 방식이다. RS256(RSA-SHA256)은 <mark>개인키로 서명하고, 공개키로 검증</mark>한다. 서명하는 키와 검증하는 키가 다르다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    participant Auth as 인증 서비스
+    participant PK as 개인키<br/>(서명용)
+    participant Order as 주문 서비스
+    participant PUB as 공개키<br/>(검증용)
+
+    Note over Auth, PK: 인증 서비스만 개인키 보유
+
+    Auth->>PK: header.payload + 개인키
+    Note over PK: RSA-SHA256 연산
+    PK-->>Auth: 서명 생성
+
+    Auth-->>Order: JWT 전달
+
+    Note over Order, PUB: API 서비스들은 공개키만 보유
+
+    Order->>PUB: header.payload + 공개키
+    Note over PUB: 서명 검증
+    PUB-->>Order: 검증 성공
+</div>
+          <p>핵심 차이는 이렇다. 인증 서비스만 개인키를 갖고 있고, 나머지 서비스들은 공개키만 갖고 있다.</p>
+
+          <p>공개키로는 서명을 <mark>검증만</mark> 할 수 있고, <mark>새로운 서명을 만들 수는 없다</mark>. 그래서 API 서버가 해킹당해도 공격자가 가짜 토큰을 위조할 수 없다. HMAC과는 근본적으로 다른 보안 구조다.</p>
+
+<div class="mermaid">
+graph TD
+    subgraph "RSA 방식의 키 분배"
+        Auth[인증 서비스]
+        PK["개인키 🔐<br/>(서명 생성)"]
+        PUB["공개키 🔓<br/>(서명 검증만)"]
+        O[주문 서비스]
+        P[결제 서비스]
+        D[배송 서비스]
+
+        Auth --- PK
+        O --- PUB
+        P --- PUB
+        D --- PUB
+    end
+
+    style PK fill:#f44336,stroke:#333,stroke-width:2px,color:#fff
+    style PUB fill:#4CAF50,stroke:#333,stroke-width:2px,color:#fff
+</div>
+          <p>코드로 보면 이렇다.</p>
+
+<pre><code class="language-java">// 인증 서버 — 개인키로 서명
+public String generateToken(User user) {
+    return Jwts.builder()
+        .setSubject(user.getEmail())
+        .claim("user_id", user.getId())
+        .signWith(SignatureAlgorithm.RS256, privateKey)
+        .compact();
+}</code></pre>
+
+<pre><code class="language-java">// API 서버 — 공개키로 검증
+public Claims validateToken(String token) {
+    return Jwts.parser()
+        .setSigningKey(publicKey)
+        .parseClaimsJws(token)
+        .getBody();
+}</code></pre>
+          <ul>
+            <li>서명에는 <code>privateKey</code>, 검증에는 <code>publicKey</code>를 사용한다. 이것이 HMAC과의 핵심 차이다.</li>
+          </ul>
+
+          <h3>RSA의 트레이드오프</h3>
+
+          <p>RSA가 보안적으로 우수하지만, 공짜는 아니다.</p>
+
+          <ul>
+            <li><strong>성능</strong> — RSA 서명은 HMAC보다 느리다. 서명 생성은 약 10~100배, 검증은 약 2~5배 정도 차이가 난다</li>
+            <li><strong>키 관리</strong> — 개인키/공개키 쌍을 생성하고 관리해야 한다. 키 로테이션도 복잡하다</li>
+            <li><strong>키 크기</strong> — RSA 키는 최소 2048비트를 권장한다. HMAC 키(256비트)에 비해 훨씬 크다</li>
+          </ul>
+
+          <p>단일 서버에서 RSA를 쓰면 성능 손해만 보고 보안 이점은 미미하다. 서비스 규모와 환경에 따라 적절한 선택이 달라진다.</p>
+
+          <h2>알고리즘 선택 기준</h2>
+
+          <p>세 가지 대표 알고리즘의 특성을 정리하면 이렇다.</p>
+
+          <table>
+          <thead>
+          <tr><th></th><th>HS256 (HMAC)</th><th>RS256 (RSA)</th><th>ES256 (ECDSA)</th></tr>
+          </thead>
+          <tbody>
+          <tr><td><strong>키 방식</strong></td><td>대칭키</td><td>비대칭키</td><td>비대칭키</td></tr>
+          <tr><td><strong>서명 속도</strong></td><td>빠름</td><td>느림</td><td>중간</td></tr>
+          <tr><td><strong>키 크기</strong></td><td>256비트</td><td>2048비트+</td><td>256비트</td></tr>
+          <tr><td><strong>키 공유</strong></td><td>모든 서버에 동일 키</td><td>인증 서버만 개인키</td><td>인증 서버만 개인키</td></tr>
+          <tr><td><strong>보안 특성</strong></td><td>검증 = 위조 가능</td><td>검증 ≠ 위조</td><td>검증 ≠ 위조</td></tr>
+          </tbody>
+          </table>
+
+          <p>선택 기준은 명확하다.</p>
+
+          <ul>
+            <li><strong>단일 서버, 내부 API</strong> → <code>HS256</code> — 구현이 간단하고, Secret Key를 공유할 대상이 자기 자신뿐이니 보안 리스크도 낮다</li>
+            <li><strong>마이크로서비스, 외부 API</strong> → <code>RS256</code> — 공개키만 배포하면 되니까 키 유출 리스크가 적고, 서비스 간 독립성이 보장된다</li>
+            <li><strong>모바일, IoT</strong> → <code>ES256</code> — RSA 수준의 보안을 훨씬 작은 키로 달성한다. 리소스가 제한된 환경에 적합하다</li>
+          </ul>
+
+          <h2>검증 전체 흐름</h2>
+
+          <p>서버가 JWT를 받아서 검증하는 전체 과정을 정리하면 이렇다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    participant Client as 클라이언트
+    participant Server as 서버
+    participant Parser as JWT 파서
+
+    Client->>Server: Authorization: Bearer eyJhbG...
+
+    Server->>Parser: 토큰 전달
+
+    Note over Parser: 1단계 — 형식 검증<br/>점(.)으로 나눠서<br/>3개 파트가 나오는가?
+
+    Note over Parser: 2단계 — 서명 검증<br/>Header + Payload로<br/>서명을 재계산해서<br/>토큰의 서명과 비교
+
+    Note over Parser: 3단계 — 클레임 검증<br/>exp: 만료되지 않았는가?<br/>iss: 신뢰할 수 있는 발급자인가?<br/>aud: 내 서비스를 위한 토큰인가?
+
+    alt 모든 검증 통과
+        Parser-->>Server: Claims 객체 반환
+        Note over Server: user_id, role 등<br/>클레임 활용
+        Server-->>Client: 200 OK
+    else 검증 실패
+        Parser-->>Server: 예외 발생
+        Server-->>Client: 401 Unauthorized
+    end
+</div>
+          <p>jjwt 라이브러리는 <code>parseClaimsJws()</code>를 호출하면 1단계(형식)와 2단계(서명), 그리고 <code>exp</code> 만료 검증까지 자동으로 처리한다. <code>iss</code>, <code>aud</code> 같은 추가 검증은 직접 코드를 작성해야 한다.</p>
+
+<pre><code class="language-java">public Claims validateToken(String token) {
+    try {
+        Claims claims = Jwts.parser()
+            .setSigningKey(secretKey)
+            .parseClaimsJws(token)
+            .getBody();
+
+        // 추가 검증: 발급자 확인
+        if (!"https://auth.example.com".equals(claims.getIssuer())) {
+            throw new InvalidTokenException("신뢰할 수 없는 발급자");
+        }
+
+        return claims;
+
+    } catch (ExpiredJwtException e) {
+        throw new TokenExpiredException("토큰이 만료되었다");
+    } catch (MalformedJwtException e) {
+        throw new InvalidTokenException("잘못된 토큰 형식이다");
+    } catch (SignatureException e) {
+        throw new InvalidTokenException("서명 검증에 실패했다");
+    }
+}</code></pre>
+          <ul>
+            <li><code>parseClaimsJws()</code> — 형식, 서명, <code>exp</code>를 한 번에 검증한다. 실패 시 상황별로 다른 예외를 던진다</li>
+            <li><code>ExpiredJwtException</code> — 만료된 토큰</li>
+            <li><code>MalformedJwtException</code> — 점 세 개로 나뉘지 않는 등 형식이 잘못된 토큰</li>
+            <li><code>SignatureException</code> — 서명이 일치하지 않는 변조된 토큰</li>
+          </ul>
+
+          <p>이렇게 예외를 분리하면, 클라이언트에게 "만료된 토큰이니 재발급 받아라" vs "잘못된 토큰이니 다시 로그인해라" 같은 정확한 안내를 줄 수 있다.</p>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#JWT</span>
+          <span>#인증</span>
+          <span>#서명</span>
+          <span>#HMAC</span>
+          <span>#RSA</span>
+          <span>#ECDSA</span>
+          <span>#HS256</span>
+          <span>#RS256</span>
+          <span>#검증</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="jwt-deep-dive-3-structure.html">&larr; 이전 글</a>
+          <a href="jwt-deep-dive-5-tips.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

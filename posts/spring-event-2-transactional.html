@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Spring Event] 2. @TransactionalEventListener - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Spring Event] 2. @TransactionalEventListener</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.03.12
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Spring Event (2/2)</div>
+            <p>이전 편: <a href="spring-event-1-design.html">[Spring Event] 1. 이벤트 기반 설계란</a></p>
+            <p>이 문서가 시리즈의 마지막 편입니다.</p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">시리즈 안내</div>
+            <p>1. <a href="spring-event-1-design.html">이벤트 기반 설계란</a></p>
+            <p>2. <strong>@TransactionalEventListener</strong> ← 현재 문서</p>
+          </div>
+
+          <h2>@EventListener의 문제</h2>
+
+          <p><a href="spring-event-1-design.html">이벤트 기반 설계란</a>에서 봤듯이, <code>@EventListener</code>는 <mark>발행자의 트랜잭션 안에서 실행</mark>된다. 이게 왜 문제일까? 구체적인 시나리오를 보자.</p>
+
+          <p>주문이 저장되면 이메일을 보내는 리스너가 있다고 하자.</p>
+
+<pre><code class="language-java">@EventListener
+public void sendEmail(OrderCompletedEvent event) {
+    Order order = orderRepository.findById(event.getOrderId());
+    emailService.send(order.getUserEmail(), "주문 완료");
+}</code></pre>
+          <p>이 리스너는 <code>publishEvent()</code> 시점에 즉시 실행된다. 그런데 이 시점에서는 트랜잭션이 아직 커밋되지 않았다. 두 가지 문제가 생긴다.</p>
+
+          <ul>
+            <li><strong>문제 1</strong> : 리스너가 이메일을 보낸 뒤에 트랜잭션이 롤백되면? 주문은 취소됐는데 "주문 완료" 이메일이 나간다</li>
+            <li><strong>문제 2</strong> : 리스너에서 예외가 터지면? 이메일 서버 장애 때문에 주문 트랜잭션 전체가 롤백된다</li>
+          </ul>
+
+<div class="mermaid">
+sequenceDiagram
+    participant Service as OrderService
+    participant Spring as Spring
+    participant Listener as EmailListener
+    participant Email as 이메일 서버
+
+    Note over Service: 트랜잭션 시작
+    Service->>Service: order 저장 (DB)
+    Service->>Spring: publishEvent(OrderCompletedEvent)
+    Spring->>Listener: sendEmail(event)
+    Listener->>Email: 이메일 발송
+    Email-->>Listener: 성공
+    Listener-->>Spring: 완료
+    Spring-->>Service: 리턴
+    Note over Service: 트랜잭션 커밋 시도
+    Note over Service: ❌ 다른 이유로 롤백!
+    Note over Email: 이미 이메일은<br/>발송된 상태...
+</div>
+          <p>부가 로직을 분리하려고 이벤트를 도입했는데, 트랜잭션 타이밍 때문에 오히려 꼬이는 상황이다. <mark>트랜잭션이 확실히 커밋된 후에 리스너를 실행</mark>하고 싶다면 <code>@TransactionalEventListener</code>를 써야 한다.</p>
+
+          <h2>@TransactionalEventListener 기본 사용법</h2>
+
+          <p>사용법은 간단하다. <code>@EventListener</code>를 <code>@TransactionalEventListener</code>로 바꾸면 된다.</p>
+
+<pre><code class="language-java">@TransactionalEventListener
+public void sendEmail(OrderCompletedEvent event) {
+    emailService.send(event.getUserEmail(), "주문 완료");
+}</code></pre>
+          <ul>
+            <li>이 리스너는 <code>publishEvent()</code> 시점에 실행되지 않는다</li>
+            <li>발행자의 <mark>트랜잭션이 커밋된 후</mark>에 실행된다</li>
+            <li>트랜잭션이 롤백되면 리스너는 아예 실행되지 않는다</li>
+          </ul>
+
+<div class="mermaid">
+sequenceDiagram
+    participant Service as OrderService
+    participant TX as 트랜잭션
+    participant Spring as Spring
+    participant Listener as EmailListener
+
+    TX->>Service: 트랜잭션 시작
+    Service->>Service: order 저장 (DB)
+    Service->>Spring: publishEvent(OrderCompletedEvent)
+    Note over Spring: 이벤트를 등록만 해둠<br/>(아직 실행하지 않음)
+    Service-->>TX: 리턴
+    TX->>TX: 커밋 완료 ✅
+    TX->>Spring: 커밋 완료 알림
+    Spring->>Listener: sendEmail(event)
+    Note over Listener: 커밋 후 실행!<br/>안전하다
+</div>
+          <p>트랜잭션이 성공적으로 커밋된 후에야 리스너가 실행되므로, "주문은 취소됐는데 이메일이 나가는" 상황이 원천적으로 방지된다.</p>
+
+          <h2>phase 옵션</h2>
+
+          <p>기본값은 <code>AFTER_COMMIT</code>이지만, 다른 시점에 리스너를 실행할 수도 있다.</p>
+
+<pre><code class="language-java">@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+public void afterCommit(OrderCompletedEvent event) { ... }
+
+@TransactionalEventListener(phase = TransactionPhase.AFTER_ROLLBACK)
+public void afterRollback(OrderCompletedEvent event) { ... }
+
+@TransactionalEventListener(phase = TransactionPhase.AFTER_COMPLETION)
+public void afterCompletion(OrderCompletedEvent event) { ... }
+
+@TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
+public void beforeCommit(OrderCompletedEvent event) { ... }</code></pre>
+          <table>
+          <thead>
+          <tr><th>phase</th><th>실행 시점</th><th>대표적 용도</th></tr>
+          </thead>
+          <tbody>
+          <tr><td><code>AFTER_COMMIT</code></td><td>커밋 성공 후 (기본값)</td><td>알림 발송, 외부 API 호출, 로그 기록</td></tr>
+          <tr><td><code>AFTER_ROLLBACK</code></td><td>롤백 후</td><td>실패 알림, 보상 트랜잭션 트리거</td></tr>
+          <tr><td><code>AFTER_COMPLETION</code></td><td>커밋이든 롤백이든 완료 후</td><td>리소스 정리, 임시 파일 삭제</td></tr>
+          <tr><td><code>BEFORE_COMMIT</code></td><td>커밋 직전</td><td>커밋 전 유효성 검증, 감사 로그</td></tr>
+          </tbody>
+          </table>
+
+          <p><mark>실무에서 90% 이상은 <code>AFTER_COMMIT</code></mark>을 사용한다. "트랜잭션이 성공한 후에 부가 작업을 수행한다"는 패턴이 압도적으로 많기 때문이다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">AFTER_ROLLBACK 활용 예</div>
+            <p>결제 연동 시, 외부 PG사에 결제 요청을 보낸 후 내부 DB 저장이 실패하면 PG사에 결제 취소를 요청해야 한다. 이런 보상 로직에 <code>AFTER_ROLLBACK</code>이 유용하다.</p>
+          </div>
+
+          <h2>리스너에서 DB를 수정해야 할 때</h2>
+
+          <p><code>@TransactionalEventListener(phase = AFTER_COMMIT)</code> 리스너는 한 가지 함정이 있다. <mark>리스너가 실행되는 시점에는 발행자의 트랜잭션이 이미 끝난 상태</mark>다.</p>
+
+<pre><code class="language-java">@TransactionalEventListener
+public void onBinaryContentCreated(BinaryContentCreatedEvent event) {
+    binaryContentStorage.put(event.getId(), event.getBytes());
+    // DB에 상태를 업데이트하고 싶다면?
+    binaryContentService.updateStatus(event.getId(), Status.SUCCESS);
+}</code></pre>
+          <p><code>updateStatus()</code>가 DB를 수정하려면 트랜잭션이 필요하다. 하지만 발행자의 트랜잭션은 이미 커밋되어 닫혀 있다. 이 상태에서 DB 수정을 시도하면 조용히 무시되거나 예외가 발생한다.</p>
+
+          <p>해결책은 <code>updateStatus()</code> 메서드에 <mark>새로운 트랜잭션을 열어주는 것</mark>이다.</p>
+
+<pre><code class="language-java">@Transactional(propagation = Propagation.REQUIRES_NEW)
+public void updateStatus(UUID id, Status status) {
+    BinaryContent content = binaryContentRepository.findById(id)
+        .orElseThrow();
+    content.updateStatus(status);
+}</code></pre>
+          <ul>
+            <li><code>REQUIRES_NEW</code>는 기존 트랜잭션과 무관하게 새 트랜잭션을 시작한다</li>
+            <li>리스너 시점에 기존 트랜잭션이 없으므로, 어차피 새 트랜잭션이 열리긴 하지만 명시적으로 선언하는 것이 의도가 명확하다</li>
+          </ul>
+
+<div class="mermaid">
+sequenceDiagram
+    participant Service as OrderService
+    participant TX1 as 트랜잭션 #1
+    participant Listener as Listener
+    participant TX2 as 트랜잭션 #2
+
+    TX1->>Service: 트랜잭션 시작
+    Service->>Service: 데이터 저장
+    Service-->>TX1: 리턴
+    TX1->>TX1: 커밋 완료 ✅
+    TX1->>Listener: 이벤트 전달
+    Note over Listener: 트랜잭션 #1은<br/>이미 끝남
+    Listener->>TX2: REQUIRES_NEW<br/>새 트랜잭션 시작
+    TX2->>TX2: DB 업데이트
+    TX2->>TX2: 커밋 완료 ✅
+</div>
+          <div class="callout callout-info">
+            <div class="callout-title">REQUIRES_NEW 없이 DB 수정 시</div>
+            <p><code>@TransactionalEventListener(AFTER_COMMIT)</code> 리스너 안에서 <code>@Transactional</code>(기본 전파)을 가진 메서드를 호출하면, 이미 완료된 트랜잭션에 참여하려다 <mark>변경 사항이 반영되지 않는다</mark>. 에러도 나지 않아서 디버깅이 어렵다.</p>
+          </div>
+
+          <h2>fallbackExecution 옵션</h2>
+
+          <p><code>@TransactionalEventListener</code>는 트랜잭션이 없는 컨텍스트에서 이벤트가 발행되면 <mark>리스너가 실행되지 않는다</mark>. 트랜잭션의 커밋/롤백을 기준으로 동작하기 때문이다.</p>
+
+<pre><code class="language-java">// 트랜잭션 없이 이벤트 발행
+public void someNonTransactionalMethod() {
+    eventPublisher.publishEvent(new SomeEvent());
+    // @TransactionalEventListener는 실행되지 않는다!
+}</code></pre>
+          <p>만약 트랜잭션이 없어도 리스너가 실행되기를 원한다면, <code>fallbackExecution</code>을 <code>true</code>로 설정한다.</p>
+
+<pre><code class="language-java">@TransactionalEventListener(fallbackExecution = true)
+public void onEvent(SomeEvent event) {
+    // 트랜잭션이 있으면 커밋 후 실행
+    // 트랜잭션이 없으면 즉시 실행
+}</code></pre>
+          <table>
+          <thead>
+          <tr><th>상황</th><th><code>fallbackExecution = false</code> (기본값)</th><th><code>fallbackExecution = true</code></th></tr>
+          </thead>
+          <tbody>
+          <tr><td>트랜잭션 있음</td><td>커밋 후 실행</td><td>커밋 후 실행</td></tr>
+          <tr><td>트랜잭션 없음</td><td><mark>실행 안 됨</mark></td><td>즉시 실행</td></tr>
+          </tbody>
+          </table>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">기본값의 함정</div>
+            <p>테스트 코드에서 트랜잭션을 명시하지 않고 이벤트를 발행하면, 리스너가 호출되지 않아서 "왜 안 되지?" 하고 헤맬 수 있다. 의도적으로 트랜잭션 없이도 실행되어야 한다면 <code>fallbackExecution = true</code>를 명시하자.</p>
+          </div>
+
+          <h2>정리</h2>
+
+          <p><code>@EventListener</code>와 <code>@TransactionalEventListener</code>는 용도가 다르다.</p>
+
+          <table>
+          <thead>
+          <tr><th>구분</th><th>@EventListener</th><th>@TransactionalEventListener</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>실행 시점</td><td><code>publishEvent()</code> 즉시</td><td>트랜잭션 커밋/롤백 후</td></tr>
+          <tr><td>트랜잭션 관계</td><td>발행자와 같은 트랜잭션</td><td>발행자의 트랜잭션 종료 후 실행</td></tr>
+          <tr><td>리스너 예외 시</td><td>발행자 트랜잭션 롤백</td><td>발행자에 영향 없음</td></tr>
+          <tr><td>DB 수정 시</td><td>같은 트랜잭션 활용</td><td><code>REQUIRES_NEW</code> 필요</td></tr>
+          <tr><td>트랜잭션 없을 때</td><td>항상 실행</td><td>실행 안 됨 (fallbackExecution으로 조정)</td></tr>
+          </tbody>
+          </table>
+
+          <p><mark>부가 로직을 이벤트로 분리하는 대부분의 경우, <code>@TransactionalEventListener</code>가 올바른 선택</mark>이다. 핵심 트랜잭션이 확정된 후에 부가 작업을 수행하는 것이 안전하기 때문이다.</p>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Spring</span>
+          <span>#Event</span>
+          <span>#TransactionalEventListener</span>
+          <span>#트랜잭션</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="spring-event-1-design.html">&larr; 이전 글</a>
+          <a href="../pages/nbuntu.html">목록으로 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

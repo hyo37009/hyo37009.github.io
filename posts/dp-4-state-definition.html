@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[코딩테스트] 4. 상태 정의 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[코딩테스트] 4. 상태 정의</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.03.12
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">DP 가이드 (4/11)</div>
+            <p>이전 편: <a href="dp-3-tabulation.html">[코딩테스트] 3. 타뷸레이션</a></p>
+            <p>다음 편: <a href="dp-5-recurrence.html">[코딩테스트] 5. 점화식 도출</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">DP 설계 전략 시리즈</div>
+            <p><a href="dp-4-state-definition.html">상태 정의</a> · <a href="dp-5-recurrence.html">점화식 도출</a> · <a href="dp-6-initialization.html">초기값과 탐색 순서</a></p>
+            <p>DP 가이드 : <a href="dp-1-recursion-limits.html">기본 개념</a> → <strong>설계 전략</strong> → <a href="dp-7-linear.html">유형별 패턴</a></p>
+          </div>
+
+          <p>기본 개념 시리즈에서 피보나치로 DP의 원리를 익혔다. 이제 문제가 바뀌어도 스스로 DP를 설계할 수 있어야 한다. 설계에서 가장 먼저 해야 할 일은 <mark><code>dp[i]</code>에 무엇을 저장할지 결정</mark>하는 것이다.</p>
+
+          <h2>dp 배열이란</h2>
+
+          <p><code>dp</code> 배열은 "중간 계산 결과를 저장하는 공간"이다. <code>dp[i]</code>에 어떤 값을 저장할지는 문제마다 다르다.</p>
+
+          <p>피보나치에서는 <code>dp[i]</code> = i번째 피보나치 수였다. 그런데 모든 문제가 이렇게 단순하지 않다. 상태를 잘못 정의하면 점화식을 세울 수 없다.</p>
+
+          <h2>상태 정의 방법</h2>
+
+          <p>"지금 모르는 게 뭔가?"로 시작하면 된다.</p>
+
+          <p><strong>동전 교환 문제</strong>를 예로 보자. 동전 종류 <code>[1, 5, 10]</code>이 있을 때 금액 N원을 만드는 최소 동전 수를 구해야 한다.</p>
+
+          <p>"지금 모르는 게 뭔가?" → 각 금액을 만드는 최소 동전 수.</p>
+
+          <p>그래서 <code>dp[i]</code> = <strong>금액 i원을 만들 수 있는 최소 동전 수</strong>로 정의한다.</p>
+
+          <p>최종 답은 <code>dp[N]</code>이 된다.</p>
+
+          <h2>상태 정의가 맞는지 확인하는 법</h2>
+
+          <p>정의한 상태가 올바른지 두 가지를 확인한다.</p>
+
+          <ul>
+            <li><strong>최종 답을 표현할 수 있는가</strong> : <code>dp[N]</code>이 구하려는 값인가</li>
+            <li><strong>이전 상태로부터 계산 가능한가</strong> : <code>dp[i]</code>를 <code>dp[j]</code> (j < i)로 표현할 수 있는가</li>
+          </ul>
+
+          <p>동전 문제에서:</p>
+
+          <ul>
+            <li><code>dp[N]</code>이 N원을 만드는 최소 동전 수 → 최종 답 O</li>
+            <li><code>dp[i]</code>를 <code>dp[i - 동전]</code> 값들로 계산 가능 → 이전 상태 활용 O</li>
+          </ul>
+
+          <h2>상태가 2차원이 되는 경우</h2>
+
+          <p>때로는 <code>dp[i]</code> 하나로 상태를 표현하기 부족할 때가 있다.</p>
+
+          <p>무게 제한이 있는 배낭 문제를 보자. N개의 물건이 있고 배낭에 담을 수 있는 무게는 W다. 물건마다 무게와 가치가 있을 때 최대 가치를 구해야 한다.</p>
+
+          <p>"지금 모르는 게 뭔가?" → i번 물건까지 고려했을 때 무게 j로 담을 수 있는 최대 가치.</p>
+
+          <p>변수가 두 개다. 그래서 <code>dp[i][j]</code> = <strong>물건 1~i를 고려하고 용량이 j일 때의 최대 가치</strong>로 정의한다.</p>
+
+          <div class="callout callout-info">
+            <div class="callout-title">상태 변수는 "결과에 영향을 주는 모든 변수"</div>
+            <p><code>dp[i]</code>만으로 다음 상태를 결정할 수 없다면 변수를 추가해야 한다. "현재 상황을 완전히 설명하려면 어떤 정보가 필요한가"를 따져보자.</p>
+          </div>
+
+          <h2>상태 정의 연습</h2>
+
+          <p>상태 정의는 경험이 쌓일수록 자연스러워진다. 처음에는 다음 질문을 순서대로 던져보자.</p>
+
+          <ul>
+            <li>"최종 답은 무엇인가?" → 그것을 dp 배열의 값으로</li>
+            <li>"어떤 인덱스에서 꺼내면 최종 답이 되는가?" → dp 배열의 인덱스로</li>
+            <li>"인덱스 하나로 충분한가, 아니면 더 필요한가?" → 2D, 3D 결정</li>
+          </ul>
+
+          <p>→ <a href="dp-5-recurrence.html">다음 : 점화식 도출</a></p>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#코딩테스트</span>
+          <span>#DP</span>
+          <span>#다이나믹프로그래밍</span>
+          <span>#상태정의</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="dp-3-tabulation.html">&larr; 이전 글</a>
+          <a href="dp-5-recurrence.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

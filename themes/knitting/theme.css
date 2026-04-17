@@ -352,18 +352,17 @@
   background: var(--nav-bg);
 }
 
-/* ── 티커 ── */
-.ticker {
+/* ── 타이핑 바 ── */
+.typing-bar {
   background: #fef9f4;
+  border-bottom-color: var(--border-color);
 }
-
-.ticker::before {
-  background: linear-gradient(90deg, #fef9f4, transparent);
-}
-
-.ticker::after {
-  background: linear-gradient(90deg, transparent, #fef9f4);
-}
+.typing-bar .tb-prompt { color: #d4a07a; }
+.typing-bar .tb-host   { color: #c07850; }
+.typing-bar .tb-dollar { color: #a0887a; }
+.typing-bar .tb-cmd    { color: #5d4037; }
+.typing-bar .tb-output { color: #e17055; }
+.typing-bar .tb-cursor { background: #5d4037; }
 
 /* ── 환영 박스 ── */
 .welcome-box {

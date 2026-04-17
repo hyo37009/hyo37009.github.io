@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[코딩테스트] 8. 격자 DP - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[코딩테스트] 8. 격자 DP</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.03.12
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">DP 가이드 (8/11)</div>
+            <p>이전 편: <a href="dp-7-linear.html">[코딩테스트] 7. 선형 DP</a></p>
+            <p>다음 편: <a href="dp-9-lis.html">[코딩테스트] 9. LIS</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">DP 유형별 패턴 시리즈</div>
+            <p><a href="dp-7-linear.html">선형 DP</a> · <a href="dp-8-grid.html">격자 DP</a> · <a href="dp-9-lis.html">LIS</a> · <a href="dp-10-knapsack.html">배낭 문제</a> · <a href="dp-11-interview.html">실전 패턴과 면접 대비</a></p>
+            <p>DP 가이드 : <a href="dp-1-recursion-limits.html">기본 개념</a> → <a href="dp-4-state-definition.html">설계 전략</a> → <strong>유형별 패턴</strong></p>
+          </div>
+
+          <p>격자 DP는 2차원 배열에서 특정 위치에 도달하는 최적값을 구하는 패턴이다. 행과 열을 인덱스로 쓰므로 <code>dp[i][j]</code> 형태가 기본이다. <mark>이동 방향 제약</mark>이 핵심이다.</p>
+
+          <h2>기본 형태</h2>
+
+          <p>N×M 격자에서 <code>(0,0)</code>에서 출발해 <code>(N-1, M-1)</code>에 도달하려 한다. 오른쪽과 아래쪽으로만 이동할 수 있을 때 경로 위 숫자의 최대 합은?</p>
+
+          <p>상태 정의 : <code>dp[i][j]</code> = <code>(0,0)</code>에서 <code>(i,j)</code>에 도달할 때의 최대 합</p>
+
+          <p>점화식 : <code>(i,j)</code>에 도달하는 방법은 위에서 오거나, 왼쪽에서 오거나.</p>
+
+<pre><code>dp[i][j] = max(dp[i-1][j], dp[i][j-1]) + grid[i][j]</code></pre>
+
+<div class="mermaid">
+flowchart TD
+    A["dp[i-1][j]\n위에서"] --> C["dp[i][j]"]
+    B["dp[i][j-1]\n왼쪽에서"] --> C
+</div>
+
+<pre><code class="language-java">dp[0][0] = grid[0][0];
+
+for (int i = 0; i &lt; n; i++) {
+    for (int j = 0; j &lt; m; j++) {
+        if (i == 0 &amp;&amp; j == 0) continue;
+        int fromUp   = (i &gt; 0) ? dp[i-1][j] : Integer.MIN_VALUE;
+        int fromLeft = (j &gt; 0) ? dp[i][j-1] : Integer.MIN_VALUE;
+        dp[i][j] = Math.max(fromUp, fromLeft) + grid[i][j];
+    }
+}</code></pre>
+          <p>위에서 오거나 왼쪽에서 오거나 — 두 경우 중 더 큰 값을 선택한다.</p>
+
+          <h2>경계 처리</h2>
+
+          <p>격자 DP에서 자주 실수하는 부분이 첫 행과 첫 열이다.</p>
+
+          <ul>
+            <li>첫 행(<code>i=0</code>) : 위에서 오는 경로가 없다. 왼쪽에서만 올 수 있다</li>
+            <li>첫 열(<code>j=0</code>) : 왼쪽에서 오는 경로가 없다. 위에서만 올 수 있다</li>
+          </ul>
+
+          <p>코드에서 <code>(i &gt; 0)</code> 조건으로 처리하거나, 첫 행과 첫 열을 별도로 초기화하는 방법이 있다.</p>
+
+<pre><code class="language-java">// 첫 행 초기화 (위에서 올 수 없으므로 왼쪽에서만)
+for (int j = 1; j &lt; m; j++) {
+    dp[0][j] = dp[0][j-1] + grid[0][j];
+}
+
+// 첫 열 초기화 (왼쪽에서 올 수 없으므로 위에서만)
+for (int i = 1; i &lt; n; i++) {
+    dp[i][0] = dp[i-1][0] + grid[i][0];
+}
+
+// 나머지
+for (int i = 1; i &lt; n; i++) {
+    for (int j = 1; j &lt; m; j++) {
+        dp[i][j] = Math.max(dp[i-1][j], dp[i][j-1]) + grid[i][j];
+    }
+}</code></pre>
+          <p>첫 행과 첫 열을 미리 처리해두면 본문 로직이 단순해진다.</p>
+
+          <h2>이동 방향이 복잡해지면</h2>
+
+          <p>오른쪽/아래만 이동하는 문제는 탐색 순서가 자연스럽게 위→아래, 왼→오른이다. 그런데 이동 방향이 추가되면 어떻게 될까.</p>
+
+          <p>좌우 이동이 허용되지만 <strong>위로는 갈 수 없고 재방문도 금지</strong>라면, 단순한 2D 점화식으로는 처리하기 어렵다. 이런 경우에는 행 단위로 분리해서 방향별 배열을 따로 만드는 기법을 쓴다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">이동 제약 → 처리 방향 힌트</div>
+            <p>"위로 갈 수 없다" → 행 단위로 순서대로 처리 가능</p>
+            <p>"오른쪽으로만" → 열 오름차순 처리</p>
+            <p>이동 제약은 탐색 순서의 힌트다.</p>
+          </div>
+
+          <p>→ <a href="dp-9-lis.html">다음 : LIS</a></p>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#코딩테스트</span>
+          <span>#DP</span>
+          <span>#격자DP</span>
+          <span>#다이나믹프로그래밍</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="dp-7-linear.html">&larr; 이전 글</a>
+          <a href="dp-9-lis.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[자주하는 실수] 로직 실수 모음 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+  <style>
+    /* ══════════════════════════════════════
+       자주하는 실수 — 탭 브라우저 템플릿
+       nbh@nbuntu:~$ vim /var/log/mistakes.log
+       ══════════════════════════════════════ */
+
+    /* ── 탭 바 — 에디터 탭 느낌 ── */
+    .mistake-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 0;
+      padding: 12px 14px 0;
+      background: #edf2f7;
+      border: 1px solid #d0d7de;
+      border-bottom: none;
+      border-radius: var(--post-border-radius) var(--post-border-radius) 0 0;
+    }
+    .mistake-tab {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 9px 14px;
+      font-family: 'JetBrains Mono', 'NeoDunggeunmo', monospace;
+      font-size: 11.5px;
+      color: #6a737d;
+      background: #e2e8f0;
+      border: 1px solid #d0d7de;
+      border-bottom: none;
+      border-radius: 6px 6px 0 0;
+      cursor: pointer;
+      transition: all 0.15s;
+      user-select: none;
+      position: relative;
+      top: 1px;
+      white-space: nowrap;
+    }
+    .mistake-tab .tab-label {
+      display: inline;
+    }
+    .mistake-tab:hover {
+      background: #f0f4f8;
+      color: var(--text-color);
+    }
+    .mistake-tab.active {
+      background: #fff;
+      color: var(--text-color);
+      border-color: #d0d7de;
+      font-weight: bold;
+      z-index: 1;
+    }
+    .mistake-tab .tab-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      background: #d73a49;
+      color: #fff;
+      font-size: 10px;
+      font-weight: bold;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+    .mistake-tab.active .tab-num {
+      background: #059669;
+    }
+    .mistake-tab .tab-src {
+      font-size: 9.5px;
+      color: #9ca3af;
+      margin-left: 2px;
+    }
+    .mistake-tab.active .tab-src {
+      color: #6a737d;
+    }
+
+    /* ── 콘텐츠 영역 — 에디터 본문 ── */
+    .mistake-viewer {
+      border: 1px solid #d0d7de;
+      border-radius: 0 0 var(--post-border-radius) var(--post-border-radius);
+      background: #fff;
+      margin-bottom: 28px;
+      min-height: 200px;
+      position: relative;
+    }
+
+    /* 상단 상태 바 */
+    .mistake-statusbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 16px;
+      background: #f6f8fa;
+      border-bottom: 1px solid #edf2f7;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: #6a737d;
+    }
+    .mistake-statusbar .status-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .mistake-statusbar .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #d73a49;
+    }
+    .mistake-statusbar .status-src {
+      color: #0550ae;
+    }
+    .mistake-statusbar .status-right {
+      display: flex;
+      gap: 6px;
+    }
+    .mistake-statusbar .nav-btn {
+      padding: 2px 8px;
+      background: #edf2f7;
+      border: 1px solid #d0d7de;
+      border-radius: 3px;
+      font-family: inherit;
+      font-size: 11px;
+      color: #6a737d;
+      cursor: pointer;
+      transition: all 0.12s;
+    }
+    .mistake-statusbar .nav-btn:hover {
+      background: #dbeafe;
+      color: #0550ae;
+      border-color: #93c5fd;
+    }
+    .mistake-statusbar .nav-btn:disabled {
+      opacity: 0.35;
+      cursor: default;
+    }
+    .mistake-statusbar .nav-btn:disabled:hover {
+      background: #edf2f7;
+      color: #6a737d;
+      border-color: #d0d7de;
+    }
+
+    /* 패널 콘텐츠 */
+    .mistake-panel {
+      display: none;
+      padding: 24px;
+      animation: panelIn 0.2s ease;
+    }
+    .mistake-panel.active {
+      display: block;
+    }
+    @keyframes panelIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .mistake-panel > p:first-child {
+      margin-top: 0;
+    }
+    .mistake-panel h3 {
+      margin-top: 20px;
+      font-size: 14px;
+    }
+    .mistake-panel h3:first-of-type {
+      margin-top: 16px;
+    }
+
+    /* ── 코드 비교 — diff 스타일 ── */
+    .code-diff {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+      margin: 18px 0;
+      border: 1px solid #d0d7de;
+      border-radius: var(--post-border-radius);
+      overflow: hidden;
+    }
+    .code-panel {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .code-panel + .code-panel {
+      border-left: 1px solid #d0d7de;
+    }
+    .code-panel-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: bold;
+      letter-spacing: 1px;
+    }
+    .code-panel-header .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .code-panel.wrong .code-panel-header {
+      background: #fef2f2;
+      color: #991b1b;
+      border-bottom: 1px solid #fecaca;
+    }
+    .code-panel.wrong .status-dot { background: #ef4444; }
+    .code-panel.right .code-panel-header {
+      background: #f0fdf4;
+      color: #166534;
+      border-bottom: 1px solid #bbf7d0;
+    }
+    .code-panel.right .status-dot { background: #22c55e; }
+    .code-panel pre {
+      margin: 0 !important;
+      border: none !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+      flex: 1;
+      padding-top: 12px !important;
+    }
+    .code-panel pre::before { display: none !important; }
+    .code-panel.wrong pre { background: #fffbfb !important; }
+    .code-panel.right pre { background: #fbfffc !important; }
+
+    /* 단일 코드 블록 */
+    .code-single {
+      border-radius: var(--post-border-radius);
+      overflow: hidden;
+      margin: 14px 0;
+    }
+    .code-single pre {
+      margin: 0 !important;
+      border: none !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+    }
+    .code-single pre::before { display: none !important; }
+    .code-single.right { border: 1px solid #bbf7d0; }
+    .code-single.right pre { background: #fbfffc !important; }
+
+    /* ── 교훈 박스 ── */
+    .mistake-lesson {
+      position: relative;
+      background: #fffbeb;
+      border: 1px solid #fcd34d;
+      border-left: 4px solid #f59e0b;
+      border-radius: 0 var(--post-border-radius) var(--post-border-radius) 0;
+      padding: 14px 18px 14px 16px;
+      margin-top: 20px;
+    }
+    .mistake-lesson::before {
+      content: 'LESSON';
+      position: absolute;
+      top: -1px;
+      right: -1px;
+      background: #f59e0b;
+      color: #fff;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      font-weight: bold;
+      letter-spacing: 1.5px;
+      padding: 3px 8px;
+      border-radius: 0 var(--post-border-radius) 0 4px;
+    }
+    .mistake-lesson p { font-size: 13.5px; }
+    .mistake-lesson p:last-child { margin-bottom: 0; }
+    .mistake-lesson code { font-size: 12px; }
+
+    /* ── 하단 패널 네비게이션 ── */
+    .panel-nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 28px;
+      padding-top: 16px;
+      border-top: 1px solid #edf2f7;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+    }
+    .panel-nav a {
+      color: #6a737d;
+      text-decoration: none;
+      padding: 6px 12px;
+      border: 1px solid #d0d7de;
+      border-radius: 4px;
+      transition: all 0.15s;
+      cursor: pointer;
+    }
+    .panel-nav a:hover {
+      background: #eef6fc;
+      color: #0891b2;
+      border-color: #b8d4e3;
+      text-decoration: none;
+    }
+    .panel-nav .counter {
+      color: #9ca3af;
+      font-size: 11px;
+    }
+
+    /* ── 키보드 힌트 ── */
+    .kbd-hint {
+      text-align: center;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10.5px;
+      color: #9ca3af;
+      margin-top: 8px;
+      margin-bottom: 20px;
+    }
+    .kbd-hint kbd {
+      display: inline-block;
+      padding: 1px 6px;
+      background: #f0f4f8;
+      border: 1px solid #d0d7de;
+      border-radius: 3px;
+      font-family: inherit;
+      font-size: 10px;
+      box-shadow: 0 1px 0 #d0d7de;
+    }
+
+    /* ── 반응형 — 중간 폭: 코드 비교 세로 전환 ── */
+    @media (max-width: 960px) {
+      .code-diff {
+        grid-template-columns: 1fr;
+      }
+      .code-panel + .code-panel {
+        border-left: none;
+        border-top: 1px solid #d0d7de;
+      }
+    }
+
+    /* ── 반응형 — 좁은 폭: 탭을 번호만 표시 ── */
+    @media (max-width: 768px) {
+      .mistake-tabs {
+        padding: 10px 10px 0;
+        gap: 5px;
+        justify-content: center;
+      }
+      .mistake-tab {
+        padding: 8px 12px;
+        font-size: 10.5px;
+        gap: 0;
+      }
+      .mistake-tab .tab-label,
+      .mistake-tab .tab-src {
+        display: none;
+      }
+      .mistake-tab .tab-num {
+        width: 24px;
+        height: 24px;
+        font-size: 12px;
+      }
+      .mistake-panel {
+        padding: 16px;
+      }
+      .mistake-statusbar {
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .mistake-statusbar .status-left {
+        font-size: 10.5px;
+        min-width: 0;
+        overflow: hidden;
+      }
+      .mistake-statusbar .status-title {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .panel-nav {
+        font-size: 11px;
+      }
+      .kbd-hint { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[자주하는 실수] 로직 실수 모음</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.03.12
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">자주하는 실수 시리즈</div>
+            <p><strong>로직 실수 모음</strong> &larr; 현재 문서</p>
+            <p><a href="mistake-index.html">인덱스 실수 모음</a></p>
+            <p><a href="mistake-datastructure.html">자료구조 오용 모음</a></p>
+            <p><a href="mistake-misc.html">기타 실수 모음</a></p>
+          </div>
+
+          <p>코딩테스트에서 반복적으로 저지르는 로직 실수를 모았다. 실수를 하고 나서야 깨닫는 것들이지만, 패턴을 알면 미리 피할 수 있다.</p>
+
+          <!-- ══ 탭 바 ══ -->
+          <div class="mistake-tabs" role="tablist">
+            <button class="mistake-tab active" role="tab" data-tab="0">
+              <span class="tab-num">1</span>
+              <span class="tab-label">그리디에 그리디</span>
+              <span class="tab-src">17136</span>
+            </button>
+            <button class="mistake-tab" role="tab" data-tab="1">
+              <span class="tab-num">2</span>
+              <span class="tab-label">그리디를 완전탐색</span>
+              <span class="tab-src">13305</span>
+            </button>
+            <button class="mistake-tab" role="tab" data-tab="2">
+              <span class="tab-num">3</span>
+              <span class="tab-label">정렬 최적화</span>
+              <span class="tab-src">7568</span>
+            </button>
+            <button class="mistake-tab" role="tab" data-tab="3">
+              <span class="tab-num">4</span>
+              <span class="tab-label">괄호 누락</span>
+              <span class="tab-src">2531</span>
+            </button>
+            <button class="mistake-tab" role="tab" data-tab="4">
+              <span class="tab-num">5</span>
+              <span class="tab-label">캐스팅 누락</span>
+              <span class="tab-src">19236</span>
+            </button>
+          </div>
+
+          <!-- ══ 뷰어 ══ -->
+          <div class="mistake-viewer">
+
+            <!-- 상태 바 -->
+            <div class="mistake-statusbar">
+              <div class="status-left">
+                <span class="status-dot"></span>
+                <span class="status-title">그리디 적용 불가 문제에 그리디 사용</span>
+                &mdash;
+                <span class="status-src">BOJ17136</span>
+              </div>
+              <div class="status-right">
+                <button class="nav-btn" id="prevBtn" disabled>&larr; prev</button>
+                <button class="nav-btn" id="nextBtn">next &rarr;</button>
+              </div>
+            </div>
+
+            <!-- #1 -->
+            <div class="mistake-panel active" data-panel="0"
+                 data-title="그리디 적용 불가 문제에 그리디 사용" data-src="BOJ17136">
+
+              <p>"최소 개수", "최소 비용"을 구하라는 문제를 보면 직관적으로 "가장 큰 것부터 선택"하는 그리디를 떠올리기 쉽다. 하지만 <mark>선택 간에 상호 간섭</mark>이 있으면 그리디는 통하지 않는다.</p>
+
+              <h3>색종이 붙이기</h3>
+              <p>10&times;10 종이 위에 1인 칸을 1~5 크기의 색종이(각 5장)로 모두 덮되, 최소 장수를 구하는 문제다.</p>
+
+              <div class="code-diff">
+                <div class="code-panel wrong">
+                  <div class="code-panel-header"><span class="status-dot"></span> ERROR</div>
+<pre><code class="language-pseudo">1을 찾는다
+→ 최대 크기 색종이를 붙인다
+→ 다음 1을 찾는다
+→ 반복
+// 되돌리기 없는 탐욕</code></pre>
+                </div>
+                <div class="code-panel right">
+                  <div class="code-panel-header"><span class="status-dot"></span> FIXED</div>
+<pre><code class="language-java">for (int k = 5; k &gt;= 1; k--) {
+    if (remaining[k] == 0) continue;
+    if (!canPlace(r, c, k)) continue;
+    place(r, c, k, 0);
+    remaining[k]--;
+    solve(r, c, count + 1);  // 재귀
+    place(r, c, k, 1);       // 복구
+    remaining[k]++;
+}</code></pre>
+                </div>
+              </div>
+
+              <p>그리디와의 결정적 차이는 <strong>되돌리기(복구)</strong>가 있다는 것이다.</p>
+
+              <div class="mistake-lesson">
+                <p>그리디 적용 전 체크: (1) 탐욕 선택이 항상 최적인가? (2) 선택 간 상호 간섭이 있는가? (3) 반례를 만들 수 있는가? &mdash; 2번에 해당하거나 3번이 가능하면 백트래킹이나 DP를 고려.</p>
+              </div>
+
+              <div class="panel-nav">
+                <span></span>
+                <span class="counter">1 / 5</span>
+                <a onclick="switchTab(1)">다음 실수 &rarr;</a>
+              </div>
+            </div>
+
+            <!-- #2 -->
+            <div class="mistake-panel" data-panel="1"
+                 data-title="그리디 문제를 완전탐색으로 접근" data-src="BOJ13305">
+
+              <p>그리디로 풀 수 있는 문제를 DFS/BFS 등 완전탐색으로 접근하는 실수다. "모든 경우를 봐야 할 것 같다"는 직감이 먼저 오면 탐색부터 떠올리게 되는데, <mark>그리디 조건을 먼저 점검</mark>하는 습관이 필요하다.</p>
+
+              <div class="code-diff">
+                <div class="code-panel wrong">
+                  <div class="code-panel-header"><span class="status-dot"></span> ERROR</div>
+<pre><code class="language-pseudo">// DFS로 모든 주유 조합 탐색
+// → N=100,000에서 경우의 수 폭발
+dfs(city, fuel, cost)</code></pre>
+                </div>
+                <div class="code-panel right">
+                  <div class="code-panel-header"><span class="status-dot"></span> FIXED</div>
+<pre><code class="language-java">long minPrice = price[0];
+for (int i = 0; i &lt; n - 1; i++) {
+    minPrice = Math.min(minPrice, price[i]);
+    answer += distance[i] * minPrice;
+}
+// O(N) 한 번 순회로 해결</code></pre>
+                </div>
+              </div>
+
+              <p>왼쪽&rarr;오른쪽 일방통행이고, 각 도시의 최적 선택이 이후에 영향을 주지 않으므로 그리디가 성립한다.</p>
+
+              <div class="mistake-lesson">
+                <p>되돌아갈 필요가 없는 구조(일방통행, 정렬된 순서)에서 각 단계의 최적 선택이 전체 최적을 보장하면 그리디다. 하나라도 "아니오"면 완전탐색이나 DP를 고려하자.</p>
+              </div>
+
+              <div class="panel-nav">
+                <a onclick="switchTab(0)">&larr; 이전 실수</a>
+                <span class="counter">2 / 5</span>
+                <a onclick="switchTab(2)">다음 실수 &rarr;</a>
+              </div>
+            </div>
+
+            <!-- #3 -->
+            <div class="mistake-panel" data-panel="2"
+                 data-title="브루트포스에 정렬 최적화 시도" data-src="BOJ7568">
+
+              <p>전수 비교가 필요한 문제에서, 정렬 후 <code>break</code>로 탐색을 조기 종료하려는 시도다. 비교 조건이 <strong>단일 기준</strong>이면 정렬 최적화가 통하지만, <mark>두 조건을 동시에 만족해야</mark> 하는 경우에는 어떤 정렬 기준도 "이후는 볼 필요 없다"를 보장할 수 없다.</p>
+
+              <div class="code-diff">
+                <div class="code-panel wrong">
+                  <div class="code-panel-header"><span class="status-dot"></span> ERROR</div>
+<pre><code class="language-java">Arrays.sort(sorted, (a, b) -&gt;
+    b[1] != a[1] ? b[1]-a[1] : b[0]-a[0]);
+for (int j = 0; j &lt; n; j++) {
+    if (sorted[j][0] &gt; now[0]
+     &amp;&amp; sorted[j][1] &gt; now[1])
+        c++;
+    else break;  // 여기가 문제
+}</code></pre>
+                </div>
+                <div class="code-panel right">
+                  <div class="code-panel-header"><span class="status-dot"></span> FIXED</div>
+<pre><code class="language-java">for (int j = 0; j &lt; n; j++) {
+    if (peoples[j][0] &gt; now[0]
+     &amp;&amp; peoples[j][1] &gt; now[1])
+        c++;
+    // break 없이 전부 순회
+}</code></pre>
+                </div>
+              </div>
+
+<pre><code class="language-pseudo">(45, 190)  ← 키는 크지만 몸무게 작다 → 조건 실패 → break
+(88, 188)  ← 둘 다 크지만 break 때문에 못 봄</code></pre>
+
+              <div class="mistake-lesson">
+                <p>정렬 후 <code>break</code>가 유효하려면, 정렬 기준이 <strong>비교 조건 전체를 포함</strong>해야 한다. 두 값을 모두 비교해야 하면 전수 순회가 필요하다.</p>
+              </div>
+
+              <div class="panel-nav">
+                <a onclick="switchTab(1)">&larr; 이전 실수</a>
+                <span class="counter">3 / 5</span>
+                <a onclick="switchTab(3)">다음 실수 &rarr;</a>
+              </div>
+            </div>
+
+            <!-- #4 -->
+            <div class="mistake-panel" data-panel="3"
+                 data-title="연산자 우선순위 괄호 누락" data-src="BOJ2531">
+
+              <p><code>%</code> 연산자는 <code>+</code>보다 우선순위가 높다. <code>a + b % c</code>는 <code>a + (b % c)</code>로 계산된다. 원형 배열의 인덱스 계산에서 이걸 놓치면 완전히 다른 값이 나온다.</p>
+
+              <div class="code-diff">
+                <div class="code-panel wrong">
+                  <div class="code-panel-header"><span class="status-dot"></span> ERROR</div>
+<pre><code class="language-java">int newSushi = i + k % n;
+// 실제로는 i + (k % n)
+// k%n은 상수 → 매번 같은 오프셋</code></pre>
+                </div>
+                <div class="code-panel right">
+                  <div class="code-panel-header"><span class="status-dot"></span> FIXED</div>
+<pre><code class="language-java">int newSushi = (i + k) % n;
+// i+k를 먼저 계산 후 n으로 나머지
+// 인덱스가 n 넘으면 0으로 순환</code></pre>
+                </div>
+              </div>
+
+              <p>예시 (n=5, k=3):</p>
+
+              <table>
+                <thead>
+                  <tr><th>i</th><th><code>i + k % n</code> (잘못)</th><th><code>(i + k) % n</code> (올바름)</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td>0</td><td>3</td><td>3</td></tr>
+                  <tr><td>1</td><td>4</td><td>4</td></tr>
+                  <tr><td>2</td><td>5 <strong>(범위 초과)</strong></td><td>0</td></tr>
+                  <tr><td>3</td><td>6 <strong>(범위 초과)</strong></td><td>1</td></tr>
+                </tbody>
+              </table>
+
+              <div class="mistake-lesson">
+                <p>원형 인덱스 공식: <code>(현재 + 오프셋) % 전체크기</code>. 반드시 <mark>덧셈을 괄호로 묶고</mark> 나머지 연산을 적용한다.</p>
+              </div>
+
+              <div class="panel-nav">
+                <a onclick="switchTab(2)">&larr; 이전 실수</a>
+                <span class="counter">4 / 5</span>
+                <a onclick="switchTab(4)">다음 실수 &rarr;</a>
+              </div>
+            </div>
+
+            <!-- #5 -->
+            <div class="mistake-panel" data-panel="4"
+                 data-title="instanceof 후 캐스팅 누락" data-src="BOJ19236">
+
+              <p><code>instanceof</code>로 타입을 확인했다고 해서 자동으로 그 타입이 되는 게 아니다. 확인 후에도 변수는 여전히 <mark>원래 타입</mark>이며, 해당 타입의 필드나 메서드에 접근하려면 명시적 캐스팅이 필요하다.</p>
+
+              <div class="code-diff">
+                <div class="code-panel wrong">
+                  <div class="code-panel-header"><span class="status-dot"></span> ERROR</div>
+<pre><code class="language-java">public boolean equals(Object other) {
+    if (other instanceof Position)
+        return this.row == other.row
+            &amp;&amp; this.col == other.col;
+    // 컴파일 에러: Object에 row 없음
+    return false;
+}</code></pre>
+                </div>
+                <div class="code-panel right">
+                  <div class="code-panel-header"><span class="status-dot"></span> FIXED</div>
+<pre><code class="language-java">public boolean equals(Object other) {
+    if (other instanceof Position) {
+        Position p = (Position) other;
+        return this.row == p.row
+            &amp;&amp; this.col == p.col;
+    }
+    return false;
+}</code></pre>
+                </div>
+              </div>
+
+              <p>Java 16+에서는 패턴 매칭으로 한 줄에 처리할 수 있다:</p>
+
+              <div class="code-single right">
+<pre><code class="language-java">if (other instanceof Position p)
+    return this.row == p.row &amp;&amp; this.col == p.col;</code></pre>
+              </div>
+
+              <div class="mistake-lesson">
+                <p>백준에서 Java 11을 쓴다면 패턴 매칭 <code>instanceof</code>는 불가. 명시적 캐스팅을 사용하자.</p>
+              </div>
+
+              <div class="panel-nav">
+                <a onclick="switchTab(3)">&larr; 이전 실수</a>
+                <span class="counter">5 / 5</span>
+                <span></span>
+              </div>
+            </div>
+
+          </div><!-- /.mistake-viewer -->
+
+          <div class="kbd-hint">
+            <kbd>&larr;</kbd> <kbd>&rarr;</kbd> 키로 탐색
+          </div>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#자주하는실수</span>
+          <span>#로직실수</span>
+          <span>#그리디</span>
+          <span>#백트래킹</span>
+          <span>#브루트포스</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+          <a href="mistake-index.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js — 문법 하이라이팅 -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid — 다이어그램 -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <script src="../script.js"></script>
+
+  <script>
+    /* ── 탭 전환 로직 ── */
+    const tabs = document.querySelectorAll('.mistake-tab');
+    const panels = document.querySelectorAll('.mistake-panel');
+    const statusTitle = document.querySelector('.status-title');
+    const statusSrc = document.querySelector('.status-src');
+    const statusDot = document.querySelector('.mistake-statusbar .status-dot');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const total = tabs.length;
+    let current = 0;
+
+    function switchTab(idx) {
+      if (idx < 0 || idx >= total) return;
+      current = idx;
+
+      tabs.forEach(t => t.classList.remove('active'));
+      panels.forEach(p => p.classList.remove('active'));
+
+      tabs[idx].classList.add('active');
+      panels[idx].classList.add('active');
+
+      /* 상태 바 업데이트 */
+      const panel = panels[idx];
+      statusTitle.textContent = panel.dataset.title;
+      statusSrc.textContent = panel.dataset.src;
+
+      /* 상태 도트 색상 — 현재 에러 표시 */
+      statusDot.style.background = '#d73a49';
+
+      /* prev/next 버튼 */
+      prevBtn.disabled = idx === 0;
+      nextBtn.disabled = idx === total - 1;
+
+      /* 탭이 보이도록 스크롤 */
+      tabs[idx].scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+
+      /* Prism 재하이라이팅 */
+      if (window.Prism) Prism.highlightAllUnder(panels[idx]);
+    }
+
+    /* 탭 클릭 */
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => switchTab(+tab.dataset.tab));
+    });
+
+    /* 상단 prev/next */
+    prevBtn.addEventListener('click', () => switchTab(current - 1));
+    nextBtn.addEventListener('click', () => switchTab(current + 1));
+
+    /* 키보드 좌우 화살표 */
+    document.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if (e.key === 'ArrowLeft') switchTab(current - 1);
+      if (e.key === 'ArrowRight') switchTab(current + 1);
+    });
+  </script>
+</body>
+</html>
