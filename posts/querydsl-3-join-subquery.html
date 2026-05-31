@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[QueryDSL] 3. 조인과 서브쿼리 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[QueryDSL] 3. 조인과 서브쿼리</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">QueryDSL 가이드 (3/8)</div>
+            <p>이전 편: <a href="querydsl-2-basic-query.html">[QueryDSL] 2. 기본 쿼리 작성</a></p>
+            <p>다음 편: <a href="querydsl-4-dynamic-query.html">[QueryDSL] 4. 동적 쿼리</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">QueryDSL 시리즈</div>
+            <p><strong>01 기본</strong></p>
+            <p>1. <a href="querydsl-1-setup.html">환경 설정과 Q클래스</a></p>
+            <p>2. <a href="querydsl-2-basic-query.html">기본 쿼리 작성</a></p>
+            <p>3. <a href="querydsl-3-join-subquery.html">조인과 서브쿼리</a> ← 현재 편</p>
+            <p><strong>02 실전</strong></p>
+            <p>4. <a href="querydsl-4-dynamic-query.html">동적 쿼리</a></p>
+            <p>5. <a href="querydsl-5-projection-dto.html">프로젝션과 DTO 매핑</a></p>
+            <p>6. <a href="querydsl-6-spring-data.html">Spring Data JPA 통합</a></p>
+            <p><strong>03 심화</strong></p>
+            <p>7. <a href="querydsl-7-performance.html">성능 최적화</a></p>
+            <p>8. <a href="querydsl-8-patterns.html">실전 패턴과 면접 대비</a></p>
+          </div>
+
+          <p>실무에서 단일 테이블 조회만으로 끝나는 경우는 거의 없다. 대부분의 비즈니스 로직은 여러 테이블을 엮어서 데이터를 가져와야 한다. 이 편에서는 QueryDSL의 조인과 서브쿼리를 다룬다.</p>
+
+<div class="mermaid">
+graph TD
+    J[조인] --> IJ["join()<br/>INNER JOIN"]
+    J --> LJ["leftJoin()<br/>LEFT JOIN"]
+    J --> FJ[".fetchJoin()<br/>FETCH JOIN"]
+
+    S[서브쿼리] --> SW["WHERE 절<br/>JPAExpressions"]
+    S --> SS["SELECT 절<br/>스칼라 서브쿼리"]
+    S --> SE["EXISTS<br/>존재 여부"]
+</div>
+          <h2>기본 조인</h2>
+
+          <p>QueryDSL의 조인은 JPA 연관관계를 기반으로 동작한다. 엔티티에 <code>@ManyToOne</code>, <code>@OneToMany</code> 같은 연관관계가 정의되어 있으면, Q클래스의 연관 필드를 통해 조인할 수 있다.</p>
+
+<pre><code class="language-java">List&lt;Feed&gt; feeds = queryFactory
+        .selectFrom(feed)
+        .join(feed.user, user)
+        .where(user.name.eq("kim"))
+        .fetch();</code></pre>
+          <p><code>join(feed.user, user)</code>는 Feed 엔티티의 <code>user</code> 필드를 기준으로 User 테이블과 INNER JOIN한다. 두 번째 인자 <code>user</code>는 조인 대상의 별칭이다. SQL로 변환하면 <code>SELECT f.* FROM feed f INNER JOIN user u ON f.user_id = u.id WHERE u.name = 'kim'</code>이 된다.</p>
+
+          <div class="callout callout-info">
+            <div class="callout-title">join()의 두 번째 인자</div>
+            <p><code>join(feed.user, user)</code>에서 두 번째 <code>user</code>는 <code>QUser.user</code>를 static import한 것이다. 이 별칭을 통해 조인된 테이블의 컬럼에 접근한다. 생략하면 <code>feed.user.name</code>처럼 경로 탐색으로 접근해야 하는데, 이 경우 QueryDSL이 내부적으로 크로스 조인을 생성할 수 있다.</p>
+          </div>
+
+          <h2>left join</h2>
+
+          <p>INNER JOIN은 양쪽 테이블에 매칭되는 행만 반환한다. 매칭되지 않는 행도 포함하려면 LEFT JOIN을 사용한다.</p>
+
+<pre><code class="language-java">List&lt;User&gt; users = queryFactory
+        .selectFrom(user)
+        .leftJoin(user.feeds, feed)
+        .where(feed.title.contains("spring").or(feed.isNull()))
+        .fetch();</code></pre>
+          <p><code>leftJoin(user.feeds, feed)</code>는 User 기준으로 Feed를 LEFT JOIN한다. Feed가 없는 User도 결과에 포함된다.</p>
+
+          <h2>fetch join</h2>
+
+          <p>JPA의 지연 로딩은 연관 엔티티에 접근할 때마다 추가 쿼리를 발생시킨다. 이것이 <mark>N+1 문제</mark>다. User 10명을 조회한 뒤, 각 User의 프로필에 접근하면 프로필을 가져오는 쿼리가 10번 더 실행된다. fetch join은 이 문제를 한 번의 쿼리로 해결한다.</p>
+
+<pre><code class="language-java">List&lt;Feed&gt; feeds = queryFactory
+        .selectFrom(feed)
+        .join(feed.user, user).fetchJoin()
+        .fetch();</code></pre>
+          <p><code>.fetchJoin()</code>을 붙이면 조인된 엔티티를 한 번에 함께 가져온다. SQL에서 <code>JOIN FETCH</code>에 해당한다. 이렇게 하면 <code>feed.getUser()</code>에 접근할 때 추가 쿼리가 발생하지 않는다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    participant App as Application
+    participant DB as Database
+
+    Note over App,DB: fetch join 없이 (N+1)
+    App->>DB: SELECT * FROM feed
+    loop 각 Feed마다
+        App->>DB: SELECT * FROM user WHERE id = ?
+    end
+
+    Note over App,DB: fetch join 사용
+    App->>DB: SELECT f.*, u.* FROM feed f JOIN user u ON ...
+    Note right of App: 추가 쿼리 없음
+</div>
+          <p><code>leftJoin</code>에도 fetch join을 적용할 수 있다.</p>
+
+<pre><code class="language-java">List&lt;User&gt; users = queryFactory
+        .selectFrom(user)
+        .leftJoin(user.profile, profile).fetchJoin()
+        .fetch();</code></pre>
+          <div class="callout callout-warning">
+            <div class="callout-title">fetch join의 제약</div>
+            <p>- fetch join에는 별칭을 통한 <code>where</code> 필터링을 하면 안 된다. JPA 스펙상 fetch join된 컬렉션을 필터링하면 영속성 컨텍스트와 실제 데이터가 불일치할 수 있다.</p>
+            <p>- <code>@OneToMany</code> 컬렉션을 fetch join하면서 페이징(<code>offset</code>/<code>limit</code>)을 사용하면, <mark>하이버네이트가 메모리에서 페이징</mark>을 수행한다. 데이터가 많으면 OutOfMemoryError가 발생할 수 있다.</p>
+            <p>- 둘 이상의 컬렉션을 동시에 fetch join할 수 없다. <code>MultipleBagFetchException</code>이 발생한다.</p>
+          </div>
+
+          <h2>on 절</h2>
+
+          <p>조인 조건을 추가하려면 <code>on()</code>을 사용한다. INNER JOIN에서는 <code>where</code>와 결과가 같지만, LEFT JOIN에서는 의미가 다르다.</p>
+
+<pre><code class="language-java">// LEFT JOIN + ON: Feed가 없거나, 공개된 Feed만 조인
+List&lt;User&gt; users = queryFactory
+        .selectFrom(user)
+        .leftJoin(user.feeds, feed)
+        .on(feed.isPublic.isTrue())
+        .fetch();</code></pre>
+          <p>LEFT JOIN에서 <code>on</code>에 조건을 넣으면 <mark>조인 자체에 필터</mark>가 걸린다. <code>where</code>에 넣으면 조인 후 전체 결과에서 필터링하므로, LEFT JOIN의 의미가 사라진다.</p>
+
+<div class="mermaid">
+graph TD
+    subgraph "ON 절에 조건"
+        O1[LEFT JOIN + ON 필터] --> O2[조인 시점에 필터링]
+        O2 --> O3["Feed 없는 User도<br/>결과에 포함"]
+    end
+
+    subgraph "WHERE 절에 조건"
+        W1[LEFT JOIN + WHERE 필터] --> W2[조인 후 전체 필터링]
+        W2 --> W3["Feed 없는 User는<br/>결과에서 제외"]
+    end
+
+    style O3 fill:#9f9,stroke:#333
+    style W3 fill:#f96,stroke:#333
+</div>
+          <p>이 차이는 LEFT JOIN을 쓸 때 반드시 이해해야 하는 핵심이다.</p>
+
+          <h2>세타 조인</h2>
+
+          <p>연관관계가 없는 테이블끼리 조인하는 것을 세타 조인이라고 한다. <code>from</code>에 엔티티를 여러 개 나열하면 크로스 조인이 생성되고, <code>where</code>로 조인 조건을 지정한다.</p>
+
+<pre><code class="language-java">List&lt;Tuple&gt; result = queryFactory
+        .select(user, feed)
+        .from(user, feed)
+        .where(user.name.eq(feed.authorName))
+        .fetch();</code></pre>
+          <p>이 방식은 <code>@ManyToOne</code> 같은 연관관계가 엔티티에 정의되어 있지 않을 때 사용한다. 다만 크로스 조인은 성능에 주의해야 한다.</p>
+
+          <h2>서브쿼리</h2>
+
+          <p>QueryDSL에서 서브쿼리는 <code>JPAExpressions</code>로 작성한다. WHERE 절과 SELECT 절에서 사용할 수 있다.</p>
+
+          <h3>WHERE 절 서브쿼리</h3>
+
+<pre><code class="language-java">List&lt;User&gt; users = queryFactory
+        .selectFrom(user)
+        .where(user.age.gt(
+                JPAExpressions
+                        .select(user.age.avg())
+                        .from(user)
+        ))
+        .fetch();</code></pre>
+          <p>평균 나이보다 많은 사용자를 조회하는 쿼리다. 서브쿼리 안에서도 Q클래스를 사용할 수 있다.</p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">서브쿼리의 별칭 충돌</div>
+            <p>서브쿼리에서 메인 쿼리와 같은 테이블을 참조할 때는 별칭이 충돌하지 않도록 새로운 Q인스턴스를 만들어야 한다.</p>
+            <p>```java</p>
+            <p>QUser subUser = new QUser("subUser");</p>
+            <p>List<User> users = queryFactory</p>
+            <p>.selectFrom(user)</p>
+            <p>.where(user.age.gt(</p>
+            <p>JPAExpressions</p>
+            <p>.select(subUser.age.avg())</p>
+            <p>.from(subUser)</p>
+            <p>))</p>
+            <p>.fetch();</p>
+            <p>```</p>
+          </div>
+
+          <h3>IN 서브쿼리</h3>
+
+<pre><code class="language-java">List&lt;Feed&gt; feeds = queryFactory
+        .selectFrom(feed)
+        .where(feed.user.id.in(
+                JPAExpressions
+                        .select(user.id)
+                        .from(user)
+                        .where(user.role.eq(Role.ADMIN))
+        ))
+        .fetch();</code></pre>
+          <p>관리자가 작성한 피드만 조회한다. <code>in()</code> 안에 서브쿼리를 넣으면 <code>IN (SELECT ...)</code> 구문이 생성된다.</p>
+
+          <h3>EXISTS 서브쿼리</h3>
+
+<pre><code class="language-java">List&lt;User&gt; users = queryFactory
+        .selectFrom(user)
+        .where(JPAExpressions
+                .selectOne()
+                .from(feed)
+                .where(feed.user.id.eq(user.id))
+                .exists()
+        )
+        .fetch();</code></pre>
+          <p>피드를 하나라도 작성한 사용자를 조회한다. <code>selectOne()</code>은 <code>SELECT 1</code>에 해당하고, <code>.exists()</code>로 존재 여부를 확인한다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">IN보다 EXISTS가 빠른 경우</div>
+            <p>서브쿼리 결과 집합이 클 때는 <code>IN</code>보다 <code>EXISTS</code>가 더 효율적이다. <code>IN</code>은 서브쿼리 결과를 모두 메모리에 올린 뒤 비교하지만, <code>EXISTS</code>는 첫 번째 매칭 행을 찾으면 즉시 멈춘다.</p>
+          </div>
+
+          <h3>SELECT 절 서브쿼리</h3>
+
+<pre><code class="language-java">List&lt;Tuple&gt; result = queryFactory
+        .select(
+                user.name,
+                JPAExpressions
+                        .select(feed.count())
+                        .from(feed)
+                        .where(feed.user.id.eq(user.id))
+        )
+        .from(user)
+        .fetch();</code></pre>
+          <p>각 사용자의 이름과 피드 수를 함께 조회한다. SELECT 절에 서브쿼리를 넣으면 스칼라 서브쿼리가 된다.</p>
+
+<div class="mermaid">
+graph LR
+    subgraph "서브쿼리 사용 가능 위치"
+        W["WHERE 절 ✅"]
+        S["SELECT 절 ✅"]
+        F["FROM 절 ❌"]
+    end
+
+    F -.->|"JPQL 제한"| ALT["대안: 쿼리 분리<br/>네이티브 쿼리<br/>DB 뷰"]
+
+    style F fill:#f96,stroke:#333
+    style ALT fill:#ff9,stroke:#333
+</div>
+          <div class="callout callout-warning">
+            <div class="callout-title">JPA 서브쿼리의 제한</div>
+            <p>JPQL은 FROM 절 서브쿼리를 지원하지 않는다. QueryDSL도 JPQL 위에서 동작하므로 같은 제약을 받는다. FROM 절 서브쿼리가 필요하면 네이티브 쿼리를 사용하거나, 쿼리를 분리하거나, DB 뷰를 활용해야 한다.</p>
+          </div>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">경로 탐색으로 인한 크로스 조인</div>
+            <p><code>feed.user.name.eq("kim")</code>처럼 연관 엔티티의 필드에 직접 접근하면, QueryDSL이 내부적으로 크로스 조인을 생성할 수 있다. 명시적으로 <code>join(feed.user, user)</code>을 선언하고 <code>user.name.eq("kim")</code>으로 접근하는 것이 안전하다.</p>
+            <p>[!DANGER] fetch join + 페이징 조합</p>
+            <p>컬렉션 fetch join에 <code>offset</code>/<code>limit</code>을 걸면 하이버네이트가 경고 로그를 남기면서 메모리에서 페이징을 수행한다. 데이터가 많으면 장애로 이어질 수 있다. 컬렉션 조회가 필요하면 <code>@BatchSize</code> 또는 별도 쿼리로 분리하는 것이 낫다.</p>
+            <p>[!DANGER] 서브쿼리에서 별칭 충돌</p>
+            <p>메인 쿼리와 서브쿼리가 같은 테이블을 참조할 때, 같은 Q인스턴스를 쓰면 별칭이 충돌하여 잘못된 SQL이 생성된다. 서브쿼리용 Q인스턴스를 <code>new QUser("subUser")</code>처럼 별도로 만들어야 한다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#QueryDSL</span>
+          <span>#JPA</span>
+          <span>#Spring</span>
+          <span>#조인</span>
+          <span>#서브쿼리</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="querydsl-2-basic-query.html">&larr; 이전 글</a>
+          <a href="querydsl-4-dynamic-query.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

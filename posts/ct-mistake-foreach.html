@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Java 자료구조] forEach 사용 기준 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Java 자료구조] forEach 사용 기준</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">작성 정보</div>
+            <p>- <strong>작성일</strong> : 2026-05-29</p>
+            <p>- <strong>관련 문제</strong> : <a href="코딩테스트문제-풀이프로그래머스pg42579-베스트-앨범00-복습-인덱스.html">PG42579 베스트 앨범</a></p>
+          </div>
+
+          <p><code>forEach</code>는 컬렉션의 각 원소에 대해 작업을 수행할 때 쓴다. 새 값을 만들어 반환하는 API가 아니라, 이미 있는 원소에 대해 동작을 실행하는 API라고 보는 편이 안전하다.</p>
+
+          <h2>forEach가 어울리는 경우</h2>
+
+          <p>각 장르의 노래 목록을 정렬하는 코드는 <code>forEach</code>와 잘 맞는다.</p>
+
+<pre><code class="language-java">genreMap.values().forEach(g -&gt; g.songs.sort(Song::compareTo));</code></pre>
+          <p>여기서는 새 컬렉션을 만드는 것이 아니라, 이미 존재하는 각 <code>Genre</code>의 <code>songs</code> 리스트를 정렬한다. 즉 부수 효과가 목적이다.</p>
+
+          <p>일반 for문으로 쓰면 다음과 같다.</p>
+
+<pre><code class="language-java">for (Genre genre : genreMap.values()) {
+    genre.songs.sort(Song::compareTo);
+}</code></pre>
+          <p>둘은 의미상 거의 같다. 코딩테스트에서는 더 읽기 쉬운 쪽을 고르면 된다.</p>
+
+          <h2>forEach가 덜 어울리는 경우</h2>
+
+          <p>값을 변환해서 새 리스트를 만들고 싶다면 <code>map</code>, <code>filter</code>, <code>collect</code>가 더 맞다.</p>
+
+<pre><code class="language-java">List&lt;Integer&gt; indexes = songs.stream()
+        .map(song -&gt; song.index)
+        .collect(Collectors.toList());</code></pre>
+          <p>이런 작업을 <code>forEach</code>로도 만들 수는 있다.</p>
+
+<pre><code class="language-java">List&lt;Integer&gt; indexes = new ArrayList&lt;&gt;();
+songs.forEach(song -&gt; indexes.add(song.index));</code></pre>
+          <p>하지만 스트림을 이미 쓰고 있다면 <code>map</code>이 의도를 더 잘 드러낸다. <code>forEach</code>는 "각각 실행"이고, <code>map</code>은 "변환"이다.</p>
+
+          <h2>stream 안에서 forEach를 조심해야 하는 이유</h2>
+
+          <p>스트림 중간에서 외부 리스트에 값을 추가하는 방식은 코드 흐름이 흐려질 수 있다.</p>
+
+<pre><code class="language-java">List&lt;Integer&gt; answer = new ArrayList&lt;&gt;();
+
+genreMap.entrySet().stream()
+        .sorted(Map.Entry.comparingByValue())
+        .forEach(e -&gt; answer.add(...));</code></pre>
+          <p>이 방식이 항상 틀린 것은 아니다. 다만 반환값을 만드는 흐름이라면 다음처럼 스트림의 마지막까지 연결하는 쪽이 더 읽기 쉽다.</p>
+
+<pre><code class="language-java">int[] answer = genreMap.entrySet().stream()
+        .sorted(Map.Entry.comparingByValue())
+        .flatMap(e -&gt; e.getValue().songs.stream().limit(2))
+        .mapToInt(song -&gt; song.index)
+        .toArray();</code></pre>
+          <h2>기억할 기준</h2>
+
+          <table>
+          <thead>
+          <tr><th>목적</th><th>API</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>각 원소에 작업 실행</td><td><code>forEach</code></td></tr>
+          <tr><td>원소를 다른 값으로 변환</td><td><code>map</code></td></tr>
+          <tr><td>일부만 남기기</td><td><code>filter</code></td></tr>
+          <tr><td>여러 스트림을 하나로 펴기</td><td><code>flatMap</code></td></tr>
+          <tr><td>결과 컬렉션 만들기</td><td><code>collect</code></td></tr>
+          <tr><td>primitive 배열 만들기</td><td><code>mapToInt(...).toArray()</code></td></tr>
+          </tbody>
+          </table>
+
+          <h2>실수 체크</h2>
+
+          <ul class="task-list">
+            <li><input type="checkbox" disabled> 새 값을 만들려는 작업에 <code>forEach</code>를 억지로 쓰지 않았는가</li>
+            <li><input type="checkbox" disabled> 기존 객체를 정렬하거나 갱신하는 작업이라 <code>forEach</code>가 자연스러운가</li>
+            <li><input type="checkbox" disabled> 스트림 결과를 반환해야 한다면 <code>map</code>, <code>flatMap</code>, <code>collect</code>, <code>toArray</code> 흐름이 더 맞지 않은가</li>
+            <li><input type="checkbox" disabled> 일반 for문이 더 읽기 쉬우면 무리해서 <code>forEach</code>를 쓰지 않았는가</li>
+          </ul>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#코딩테스트</span>
+          <span>#자주하는실수</span>
+          <span>#Java</span>
+          <span>#forEach</span>
+          <span>#Stream</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

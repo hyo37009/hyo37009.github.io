@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Kotlin] 1. Kotlin 이디엄 — Java 코드를 Kotlin답게 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Kotlin] 1. Kotlin 이디엄 — Java 코드를 Kotlin답게</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Kotlin 사고방식 (1/7)</div>
+            <p>다음 편: <a href="kotlin-mindset-2-types.html">[Kotlin] 2. 타입 시스템 마스터</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">Kotlin 사고방식 시리즈 (1/7)</div>
+            <p>다음 편: <a href="kotlin-mindset-2-types.html">2 타입 시스템 마스터</a></p>
+            <p>Kotlin 문법을 알고 있다는 전제 하에, <strong>사고방식의 전환</strong>에 집중하는 시리즈다.</p>
+          </div>
+
+          <p>Kotlin 문법을 배우는 것과 Kotlin답게 코드를 짜는 것은 전혀 다른 이야기다.</p>
+
+          <p>Java를 오래 쓴 개발자가 Kotlin을 시작하면, 무의식적으로 Java 패턴을 Kotlin 문법으로 번역하게 된다. <code>Builder</code>를 그대로 만들고, <code>Optional</code>을 쓰고, 유틸 클래스를 만든다. 문법은 Kotlin인데 사고방식은 Java인 코드가 나온다. 동작은 하지만, Kotlin을 쓰는 이유를 살리지 못한 코드다.</p>
+
+          <p>이 문서에서는 실제 Java 코드를 가져와서, Kotlin의 이디엄으로 어떻게 바뀌는지 단계별로 본다. 단순한 문법 변환이 아니라, <strong>"왜 Kotlin에서는 이렇게 하는 게 더 나은지"</strong>를 이해하는 것이 목표다.</p>
+
+          <h2>Builder 패턴 → Named Argument + Default Parameter</h2>
+
+          <p>Java에서 Builder 패턴은 가장 흔한 객체 생성 방식 중 하나다. 파라미터가 많은 객체를 만들 때 어떤 값이 어디에 들어가는지 명확하게 보여주는 장점이 있다.</p>
+
+<pre><code class="language-java">Post post = Post.builder()
+    .title("첫 번째 글")
+    .content("&lt;p&gt;내용&lt;/p&gt;")
+    .thumbnail(null)
+    .isPublished(true)
+    .build();</code></pre>
+          <p>Builder 패턴은 문제를 잘 해결하지만, 대가가 크다. Builder 클래스를 별도로 만들어야 하고, 필드가 추가될 때마다 Builder도 수정해야 한다. Lombok의 <code>@Builder</code>가 이 수고를 덜어주지만, 여전히 어노테이션 프로세싱에 의존하는 간접적인 해법이다.</p>
+
+          <p>Kotlin에서는 <mark>언어 차원에서 이 문제가 이미 해결</mark>되어 있다.</p>
+
+<pre><code class="language-kotlin">val post = Post(
+    title = "첫 번째 글",
+    content = "&lt;p&gt;내용&lt;/p&gt;",
+    isPublished = true
+)</code></pre>
+          <p>Named argument로 어떤 값이 어떤 파라미터인지 명확하고, default parameter로 선택적 파라미터를 처리한다. Builder 클래스가 필요 없다.</p>
+
+          <p>여기서 더 나아가, 초기화 후 추가 설정이 필요하면 <code>apply</code>를 쓴다.</p>
+
+<pre><code class="language-kotlin">val post = Post(
+    title = "첫 번째 글",
+    content = "&lt;p&gt;내용&lt;/p&gt;"
+).apply {
+    addTag("Kotlin")
+    addTag("Spring")
+}</code></pre>
+          <p>Builder가 하던 역할을 <strong>named argument + default parameter + apply</strong> 세 가지 조합으로 완전히 대체할 수 있다. 별도 클래스나 어노테이션 없이, 언어의 기본 기능만으로.</p>
+
+          <hr>
+
+          <h2>Optional → Nullable Type</h2>
+
+          <p>Java 8에서 도입된 <code>Optional</code>은 null을 안전하게 다루기 위한 래퍼 클래스다.</p>
+
+<pre><code class="language-java">Optional&lt;User&gt; userOpt = userRepository.findById(id);
+String name = userOpt
+    .map(User::getName)
+    .orElse("익명");</code></pre>
+          <p><code>Optional</code>은 의도는 좋지만 몇 가지 불편함이 있다. 객체를 감싸는 오버헤드가 있고, <code>map</code>, <code>flatMap</code>, <code>orElse</code>를 체이닝해야 하고, 필드에 <code>Optional</code>을 쓰면 안 된다는 규칙도 있다. Java에서 "null 반환보다는 낫지만, 완벽하지는 않은" 타협안이었다.</p>
+
+          <p>Kotlin은 nullable type이 타입 시스템에 내장되어 있기 때문에 <code>Optional</code>이 필요 없다.</p>
+
+<pre><code class="language-kotlin">val user: User? = userRepository.findByIdOrNull(id)
+val name = user?.name ?: "익명"</code></pre>
+          <p><code>?.</code>과 <code>?:</code>이 <code>Optional</code>의 <code>map()</code>과 <code>orElse()</code>를 대체한다. 래퍼 객체도 없고, 추가 import도 없다. <mark>타입 시스템이 null을 관리하니까 별도 래퍼가 불필요</mark>한 것이다.</p>
+
+          <p><code>Optional</code>의 다른 메서드들도 Kotlin 이디엄으로 바뀐다.</p>
+
+<pre><code class="language-kotlin">// Optional.isPresent() + get()
+// → 스마트 캐스트
+if (user != null) {
+    println(user.name)  // 자동으로 non-null
+}
+
+// Optional.orElseThrow()
+// → Elvis + throw
+val user = userRepository.findByIdOrNull(id)
+    ?: throw NotFoundException("사용자를 찾을 수 없습니다")
+
+// Optional.ifPresent()
+// → ?.let
+user?.let { sendWelcomeEmail(it) }</code></pre>
+          <div class="callout callout-tip">
+            <div class="callout-title">Spring Data의 findByIdOrNull</div>
+            <p>Spring Data JPA의 <code>findById()</code>는 <code>Optional&lt;T&gt;</code>을 반환한다. Kotlin에서는 <code>findByIdOrNull()</code> 확장 함수를 쓰면 <code>T?</code>를 바로 받을 수 있다. <code>import org.springframework.data.repository.findByIdOrNull</code>을 추가하자.</p>
+          </div>
+
+          <hr>
+
+          <h2>Stream API → 컬렉션 함수</h2>
+
+          <p>Java의 Stream API는 함수형 데이터 처리를 위한 훌륭한 도구이지만, 사용할 때마다 <code>stream()</code>으로 열고 <code>collect()</code>로 닫아야 하는 의식(ritual)이 필요하다.</p>
+
+<pre><code class="language-java">List&lt;String&gt; titles = posts.stream()
+    .filter(p -&gt; p.isPublished())
+    .map(Post::getTitle)
+    .sorted()
+    .collect(Collectors.toList());</code></pre>
+          <p>Kotlin에서는 컬렉션에 바로 함수형 메서드가 붙어 있다. 열고 닫는 의식이 없다.</p>
+
+<pre><code class="language-kotlin">val titles = posts
+    .filter { it.isPublished }
+    .map { it.title }
+    .sorted()</code></pre>
+          <p>코드 양만 줄어든 게 아니다. 사고의 흐름이 달라진다. Java의 Stream은 "스트림을 열고 → 처리하고 → 수집한다"는 3단계 사고인 반면, Kotlin은 "컬렉션을 변환한다"라는 1단계 사고다.</p>
+
+          <p>자주 쓰이는 변환 패턴을 비교하면 이렇다.</p>
+
+<pre><code class="language-kotlin">// Java: Collectors.groupingBy → Kotlin: groupBy
+val byCategory = posts.groupBy { it.category }
+
+// Java: Collectors.toMap → Kotlin: associate
+val idToTitle = posts.associate { it.id to it.title }
+
+// Java: Collectors.joining → Kotlin: joinToString
+val tagLine = tags.joinToString(", ")
+
+// Java: stream().findFirst().orElse(null) → Kotlin: firstOrNull
+val latest = posts.sortedByDescending { it.createdAt }.firstOrNull()</code></pre>
+          <p><code>Collectors</code>의 복잡한 팩토리 메서드를 외울 필요가 없다. Kotlin의 컬렉션 함수 이름은 하려는 행동을 그대로 표현한다.</p>
+
+          <hr>
+
+          <h2>유틸 클래스 → 확장 함수</h2>
+
+          <p>Java에서는 특정 타입에 대한 유틸리티 메서드를 모아놓은 클래스를 만드는 것이 관행이다.</p>
+
+<pre><code class="language-java">public class DateUtils {
+    public static String toDisplayFormat(LocalDateTime dateTime) {
+        return dateTime.format(DateTimeFormatter.ofPattern("yyyy.MM.dd"));
+    }
+}
+// 사용
+DateUtils.toDisplayFormat(post.getCreatedAt());</code></pre>
+          <p>유틸 클래스는 "이 기능이 어디 있더라?"하고 찾아야 하는 문제가 있다. <code>DateUtils</code>인지 <code>DateHelper</code>인지 <code>DateFormatter</code>인지, 프로젝트마다 다르다.</p>
+
+          <p>Kotlin에서는 확장 함수로 해당 타입에 직접 붙인다.</p>
+
+<pre><code class="language-kotlin">fun LocalDateTime.toDisplayFormat(): String =
+    format(DateTimeFormatter.ofPattern("yyyy.MM.dd"))
+
+// 사용
+post.createdAt.toDisplayFormat()</code></pre>
+          <p><code>post.createdAt.</code> 을 찍는 순간 IDE가 <code>toDisplayFormat()</code>을 자동완성으로 제안해준다. 유틸 클래스 이름을 기억할 필요가 없다. <mark>메서드가 타입에 "속해 있는 것처럼" 느껴지기 때문에, 발견 가능성(discoverability)이 높아진다.</mark></p>
+
+          <p>프로젝트에서 확장 함수를 정리하는 좋은 패턴은 <strong>파일 단위</strong>로 묶는 것이다.</p>
+
+<pre><code>src/main/kotlin/com/blog/common/
+├── StringExtensions.kt     // String 관련 확장
+├── DateTimeExtensions.kt   // 날짜/시간 관련 확장
+└── CollectionExtensions.kt // 컬렉션 관련 확장</code></pre>
+          <hr>
+
+          <h2>Strategy 패턴 → 함수 타입</h2>
+
+          <p>Java에서 전략 패턴은 인터페이스 + 구현 클래스로 만든다.</p>
+
+<pre><code class="language-java">public interface DiscountStrategy {
+    int apply(int price);
+}
+
+public class PercentDiscount implements DiscountStrategy {
+    private final int percent;
+    public PercentDiscount(int percent) { this.percent = percent; }
+    public int apply(int price) { return price * (100 - percent) / 100; }
+}</code></pre>
+          <p>인터페이스, 구현 클래스, 생성자, 메서드... 간단한 로직인데 코드가 많다.</p>
+
+          <p>Kotlin에서는 함수가 일급 시민이기 때문에, <mark>인터페이스 대신 함수 타입을 바로 쓸 수 있다.</mark></p>
+
+<pre><code class="language-kotlin">typealias DiscountStrategy = (price: Int) -&gt; Int
+
+val percentDiscount: (Int) -&gt; Int = { price -&gt; price * 80 / 100 }
+val fixedDiscount: (Int) -&gt; Int = { price -&gt; price - 1000 }
+
+fun calculatePrice(price: Int, discount: DiscountStrategy): Int {
+    return discount(price)
+}
+
+calculatePrice(10000, percentDiscount)   // 8000
+calculatePrice(10000, fixedDiscount)     // 9000
+calculatePrice(10000) { it / 2 }        // 5000 — 인라인 람다도 가능</code></pre>
+          <p>인터페이스와 구현 클래스를 만들 필요가 없다. 함수 자체를 파라미터로 넘기면 된다. 로직이 간단할 때는 인라인 람다로 바로 전달할 수도 있다.</p>
+
+          <p>물론 전략이 복잡하거나, 상태를 가지거나, 여러 메서드가 필요하면 인터페이스가 여전히 맞는 선택이다. 핵심은 <strong>"메서드 하나짜리 인터페이스는 함수 타입으로 대체할 수 있다"</strong>는 판단 기준이다.</p>
+
+          <hr>
+
+          <h2>Getter/Setter 보일러플레이트 → 프로퍼티</h2>
+
+          <p>Java의 POJO는 필드 + getter + setter의 반복이다. Lombok이 이걸 줄여주지만, Kotlin에서는 애초에 이런 보일러플레이트가 존재하지 않는다.</p>
+
+<pre><code class="language-java">// Java — 20줄
+public class User {
+    private String name;
+    private int age;
+    private String email;
+
+    public User(String name, int age, String email) {
+        this.name = name;
+        this.age = age;
+        this.email = email;
+    }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+    public int getAge() { return age; }
+    public void setAge(int age) { this.age = age; }
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
+}</code></pre>
+
+<pre><code class="language-kotlin">// Kotlin — 1줄
+class User(var name: String, var age: Int, var email: String)</code></pre>
+          <p>Kotlin의 프로퍼티는 getter/setter를 내장하고 있다. 필드에 접근하는 것처럼 보이지만 <mark>실제로는 getter/setter가 호출</mark>된다. 커스텀 로직이 필요하면 그때 getter/setter를 오버라이드하면 된다.</p>
+
+          <p>이건 사소한 차이가 아니다. Java에서 Lombok을 쓸지, Record를 쓸지, 직접 작성할지 고민하던 시간이 Kotlin에서는 사라진다. 모든 클래스가 기본적으로 깔끔하다.</p>
+
+          <hr>
+
+          <h2>체크 예외 → 언체크 예외</h2>
+
+          <p>Java에는 체크 예외(checked exception)가 있다. <code>IOException</code>, <code>SQLException</code> 같은 예외를 메서드 시그니처에 선언하거나 <code>try-catch</code>로 감싸야 한다.</p>
+
+<pre><code class="language-java">public String readFile(String path) throws IOException {
+    return new String(Files.readAllBytes(Paths.get(path)));
+}</code></pre>
+          <p>체크 예외의 의도는 좋았다. "이 메서드는 이런 예외가 발생할 수 있으니 호출하는 쪽에서 처리하라"는 것이다. 하지만 실무에서는 대부분 <code>catch</code>에서 로깅만 하거나, <code>RuntimeException</code>으로 다시 감싸는 보일러플레이트가 된다.</p>
+
+          <p>Kotlin에는 <mark>체크 예외가 없다.</mark> 모든 예외가 언체크다.</p>
+
+<pre><code class="language-kotlin">fun readFile(path: String): String =
+    String(Files.readAllBytes(Paths.get(path)))</code></pre>
+          <p><code>throws</code> 선언도, 강제 <code>try-catch</code>도 없다. 예외를 처리하고 싶으면 자유롭게 <code>try-catch</code>를 쓰면 되고, 안 쓰면 상위로 전파된다. 개발자의 판단에 맡기는 것이다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">Java 코드를 호출할 때</div>
+            <p>Kotlin에서 Java의 체크 예외 메서드를 호출해도 <code>try-catch</code>를 강제하지 않는다. 하지만 해당 예외가 발생할 수 있다는 건 알고 있어야 한다. <code>@Throws</code> 어노테이션은 반대로 Java에서 Kotlin 함수를 호출할 때, 체크 예외가 있다고 알려주는 역할이다.</p>
+          </div>
+
+          <hr>
+
+          <h2>심화 분석</h2>
+
+          <h4>이디엄 전환의 핵심 원칙</h4>
+
+          <p>지금까지 본 패턴들을 관통하는 원칙이 있다.</p>
+
+          <ol>
+            <li><strong>래퍼보다 언어 기능을 쓴다</strong> — <code>Optional</code> 대신 nullable, <code>Builder</code> 대신 named argument</li>
+            <li><strong>클래스보다 함수를 쓴다</strong> — 전략 패턴의 인터페이스 대신 함수 타입, 유틸 클래스 대신 확장 함수</li>
+            <li><strong>명시적인 것을 선호한다</strong> — 타입 변환, null 처리, 상속 허용 모두 명시적</li>
+          </ol>
+
+          <p>Kotlin이 Java보다 코드가 짧은 이유는 "축약해서"가 아니라, <mark>불필요한 간접 계층(indirection)을 제거</mark>해서다. Builder 클래스, Optional 래퍼, 유틸 클래스 — 이런 간접 계층이 Kotlin에서는 언어 기능으로 대체된다.</p>
+
+          <h4>Java 코드를 Kotlin으로 마이그레이션할 때</h4>
+
+          <p>IntelliJ에서 Java 파일을 Kotlin으로 변환하면(<code>Ctrl+Shift+Alt+K</code>) 문법은 바뀌지만, 이디엄은 바뀌지 않는다. <code>Optional</code>은 그대로 남고, Builder 패턴도 그대로 남는다.</p>
+
+          <p>자동 변환 후에 이 문서에서 다룬 패턴들을 하나씩 적용하는 것이 실질적인 마이그레이션이다. 한 번에 다 바꾸려 하지 말고, 새로 작성하는 코드부터 Kotlin 이디엄을 적용하고, 기존 코드는 건드릴 때마다 점진적으로 변환하는 전략이 현실적이다.</p>
+
+          <hr>
+
+          <h2>자주 하는 실수</h2>
+
+          <h4>Java 습관으로 Optional 사용</h4>
+
+<pre><code class="language-kotlin">// 나쁜 예 — Kotlin에서 Optional을 쓰는 건 이상한 코드다
+fun findUser(id: Long): Optional&lt;User&gt; {
+    return Optional.ofNullable(userRepository.findByIdOrNull(id))
+}
+
+// 좋은 예
+fun findUser(id: Long): User? {
+    return userRepository.findByIdOrNull(id)
+}</code></pre>
+          <p>Kotlin에서 <code>Optional</code>을 쓰면 nullable type과 <code>Optional</code>이 혼재하면서 코드가 오히려 복잡해진다.</p>
+
+          <h4>확장 함수 대신 유틸 클래스 생성</h4>
+
+<pre><code class="language-kotlin">// Java 습관 — 유틸 클래스
+object StringUtils {
+    fun isValidEmail(str: String): Boolean = str.contains("@")
+}
+
+// Kotlin 이디엄 — 확장 함수
+fun String.isValidEmail(): Boolean = contains("@")</code></pre>
+          <p><code>object</code>로 유틸 클래스를 만드는 건 동작하지만, Kotlin의 장점을 살리지 못한 코드다.</p>
+
+          <h4>불필요한 Builder 패턴 구현</h4>
+
+          <p>Kotlin에서 Builder 패턴을 직접 구현하는 경우가 간혹 있다. named argument + default parameter + apply로 충분한 상황에서 Builder를 만들면, 유지보수할 코드만 늘어난다. Builder가 정당화되는 경우는 <strong>Java 코드에서 호출해야 할 때</strong> 정도다.</p>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Kotlin</span>
+          <span>#이디엄</span>
+          <span>#리팩토링</span>
+          <span>#Java비교</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+          <a href="kotlin-mindset-2-types.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

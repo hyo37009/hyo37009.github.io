@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Java] URI와 URL의 차이 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Java] URI와 URL의 차이</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+
+          <p>웹 개발에서 URI와 URL을 혼용해서 쓰는 경우가 많다. 하지만 Java에서는 <code>java.net.URI</code>와 <code>java.net.URL</code>이 별개의 클래스이고, 동작 방식이 꽤 다르다. 차이를 정확히 알아야 올바른 클래스를 선택할 수 있다.</p>
+
+          <h2>개념 차이</h2>
+
+          <p><strong>URI</strong>는 Uniform Resource <mark>Identifier</mark>다. 리소스를 <mark>식별</mark>하는 문자열이다.</p>
+
+          <p><strong>URL</strong>은 Uniform Resource <mark>Locator</mark>다. 리소스의 <mark>위치</mark>를 알려주는 문자열이다.</p>
+
+          <p><mark>URL은 URI의 부분집합</mark>이다. 모든 URL은 URI지만, 모든 URI가 URL은 아니다.</p>
+
+<pre><code>URI (전체 집합)
+├── URL  — 위치로 식별 (https://example.com/api/users)
+└── URN  — 이름으로 식별 (urn:isbn:0451450523)</code></pre>
+          <ul>
+            <li><code>https://example.com/image.png</code> → URI이면서 URL. 프로토콜 + 위치가 있으니 "어디서 가져올지" 알 수 있다</li>
+            <li><code>urn:isbn:0451450523</code> → URI이지만 URL은 아니다. 책의 식별자이지, 어디서 가져올지는 모른다</li>
+          </ul>
+
+          <h2>Java에서의 차이</h2>
+
+          <h3>java.net.URI</h3>
+
+          <p><mark>순수한 파싱/조합용</mark> 클래스다. 네트워크 연결을 하지 않는다.</p>
+
+<pre><code class="language-java">URI uri = new URI("https://example.com/path?query=1");
+uri.getHost();    // "example.com"
+uri.getPath();    // "/path"
+uri.getQuery();   // "query=1"</code></pre>
+          <p>문법 검증만 수행한다. 존재하지 않는 프로토콜이어도 파싱이 가능하다.</p>
+
+          <h3>java.net.URL</h3>
+
+          <p><mark>네트워크 연결이 가능한</mark> 클래스다. <code>openConnection()</code>으로 실제 HTTP 요청을 보낼 수 있다.</p>
+
+<pre><code class="language-java">URL url = URI.create("https://example.com/path").toURL();
+HttpURLConnection conn = (HttpURLConnection) url.openConnection();</code></pre>
+          <p>생성 시 프로토콜 핸들러가 있어야 한다. <code>http</code>, <code>https</code>, <code>ftp</code> 등 알려진 프로토콜만 가능하다.</p>
+
+          <h3>equals()의 함정</h3>
+
+          <p><code>URL.equals()</code>는 <mark>DNS 조회</mark>를 수행한다. 두 URL이 같은 IP로 해석되면 같다고 판단한다. 네트워크 호출이 발생하므로 느리고, DNS 결과에 따라 동일한 URL이 다르게 판단될 수 있다.</p>
+
+<pre><code class="language-java">// URL.equals()는 DNS 조회 — 예측 불가능
+new URL("https://example.com").equals(new URL("https://example.com"))  // 느림
+
+// URI.equals()는 순수 문자열 비교 — 안전
+new URI("https://example.com").equals(new URI("https://example.com"))  // 빠르고 예측 가능</code></pre>
+          <div class="callout callout-warning">
+            <p><code>Map</code>의 key나 <code>Set</code>에 URL을 넣으면 <code>equals()</code>와 <code>hashCode()</code>가 DNS에 의존해서 예측 불가능한 동작이 생긴다. <mark>컬렉션에는 항상 <code>URI</code>를 사용</mark>한다.</p>
+          </div>
+
+          <h2>실무에서의 선택 기준</h2>
+
+          <table>
+          <thead>
+          <tr><th>상황</th><th>선택</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>URL 파싱, 경로 추출, 쿼리 파라미터 분리</td><td><code>URI</code></td></tr>
+          <tr><td>URL 문자열을 변수로 저장</td><td><code>String</code> 또는 <code>URI</code></td></tr>
+          <tr><td>네트워크 요청</td><td><code>HttpClient</code> + <code>URI</code></td></tr>
+          <tr><td>컬렉션에 URL 저장</td><td><code>URI</code> (절대 <code>URL</code> 아님)</td></tr>
+          </tbody>
+          </table>
+
+          <p><mark><code>URI</code>를 기본으로 쓰고, 실제 연결이 필요할 때만 <code>URL</code>로 변환</mark>하는 것이 권장 패턴이다. 현대 Java에서는 <code>HttpClient</code>가 <code>URI</code>를 직접 받으므로 <code>URL</code>을 쓸 일이 거의 없다.</p>
+
+          <p>이 프로젝트에서 S3 presigned URL을 <code>String</code>으로 반환하는 이유도 같다. DB 저장, JSON 응답, <code>&lt;img src=""&gt;</code> — 모든 소비자가 문자열로 쓰기 때문에 <code>URI</code>나 <code>URL</code> 타입으로 감쌀 이유가 없다.</p>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Java</span>
+          <span>#URI</span>
+          <span>#URL</span>
+          <span>#네트워크</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

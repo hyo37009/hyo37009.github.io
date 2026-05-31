@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>7. 03 Spring Boot 컨테이너 설정 맞추기 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">7. 03 Spring Boot 컨테이너 설정 맞추기</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Docker Compose 정리 (7/9)</div>
+            <p>이전 편: <a href="docker-compose-6-refine.html">6. 02 Compose 파일 1차 정리하기</a></p>
+            <p>다음 편: <a href="docker-compose-8-postgresql.html">8. 04 PostgreSQL 볼륨과 초기화 다루기</a></p>
+          </div>
+
+
+
+          <p>﻿# [Docker Compose 실습] Spring Boot 컨테이너 설정 맞추기</p>
+
+          <div class="callout callout-info">
+            <div class="callout-title">Docker Compose 실습편</div>
+            <p>- <a href="docker-compose-5-diagnose.html">현재 docker-compose.yml 진단하기</a></p>
+            <p>- <a href="docker-compose-6-refine.html">Compose 파일 1차 정리하기</a></p>
+            <p>- <mark>Spring Boot 컨테이너 설정 맞추기</mark> ← 현재 문서</p>
+            <p>- <a href="docker-compose-8-postgresql.html">PostgreSQL 볼륨과 초기화 다루기</a></p>
+            <p>- <a href="docker-compose-9-verify.html">실행 검증과 문제 해결 루틴</a></p>
+          </div>
+
+          <p>Compose 파일을 정리해도 앱 컨테이너 자체가 올바르게 실행되지 않으면 전체 환경은 뜨지 않는다. 이번 실습의 목표는 Spring Boot 앱 이미지가 어떤 JAR을 실행하는지, 어떤 포트를 여는지, DB 주소를 어디서 받는지 맞추는 것이다.</p>
+
+          <h2>현재 Dockerfile의 핵심 문제</h2>
+
+          <p>현재 Dockerfile은 JAR 파일명을 환경 변수로 조립해서 실행한다.</p>
+
+<pre><code class="language-dockerfile">ENV PROJECT_NAME=discodeit
+ENV PROJECT_VERSION=0.0.1-SNAPSHOT
+
+ENTRYPOINT ["sh", "-c", "java $JVM_OPTS -jar build/libs/${PROJECT_NAME}-${PROJECT_VERSION}.jar"]</code></pre>
+          <p>하지만 현재 <code>build.gradle</code>에는 다음 값이 있다.</p>
+
+<pre><code class="language-groovy">version = '2.0-M9'</code></pre>
+          <p><code>settings.gradle</code>의 프로젝트 이름은 다음과 같다.</p>
+
+<pre><code class="language-groovy">rootProject.name = 'discodeit'</code></pre>
+          <p>이 조합이면 기본 JAR 이름은 <code>discodeit-2.0-M9.jar</code> 형태가 될 가능성이 높다. Dockerfile은 <code>discodeit-0.0.1-SNAPSHOT.jar</code>를 실행하려고 하므로, 컨테이너 시작 시 파일을 찾지 못할 수 있다.</p>
+
+          <p>가장 단순한 해결책은 빌드된 JAR을 고정된 이름으로 복사해서 실행하는 것이다.</p>
+
+          <h2>권장 Dockerfile 형태</h2>
+
+          <p>아래는 현재 프로젝트에 맞춘 정리안이다.</p>
+
+<pre><code class="language-dockerfile">FROM amazoncorretto:17 AS builder
+
+WORKDIR /app
+
+COPY gradlew .
+COPY gradle gradle
+COPY build.gradle .
+COPY settings.gradle .
+
+RUN chmod +x gradlew
+
+COPY src src
+RUN ./gradlew clean bootJar -x test --no-daemon
+
+FROM amazoncorretto:17
+
+WORKDIR /app
+
+COPY --from=builder /app/build/libs/*.jar app.jar
+
+EXPOSE 80
+
+ENV JVM_OPTS=""
+
+ENTRYPOINT ["sh", "-c", "java $JVM_OPTS -jar app.jar"]</code></pre>
+          <p>이 방식의 핵심은 <code>COPY --from=builder /app/build/libs/*.jar app.jar</code>다. Gradle 버전이 바뀌어 JAR 파일명이 달라져도 최종 이미지 안에서는 항상 <code>app.jar</code>로 실행한다.</p>
+
+          <p>또한 빌드 스테이지와 실행 스테이지를 나누면 최종 이미지에 소스 코드와 Gradle 빌드 산출 과정을 덜 남길 수 있다. 이 프로젝트는 학습용이라 치명적인 문제는 아니지만, 컨테이너 이미지를 이해하고 관리하는 관점에서는 분리하는 편이 좋다.</p>
+
+          <h2>build 대신 bootJar를 쓰는 이유</h2>
+
+          <p>Spring Boot 앱을 컨테이너에서 실행할 때 필요한 것은 실행 가능한 Boot JAR이다. <code>./gradlew build</code>는 테스트, 검증, 여러 빌드 작업을 함께 포함한다. 현재 Dockerfile은 <code>-x test</code>로 테스트를 제외하고 있지만, 의도는 "실행 JAR 만들기"에 가깝다.</p>
+
+          <p>그래서 Docker 이미지 빌드에서는 다음처럼 목적을 명확히 해도 된다.</p>
+
+<pre><code class="language-bash">./gradlew clean bootJar -x test --no-daemon</code></pre>
+          <p>테스트를 이미지 빌드 단계에서 제외할지는 팀의 선택이다. 로컬 학습 환경에서는 빌드 속도를 위해 제외할 수 있다. CI에서는 이미지 빌드 전에 별도의 <code>test</code> 단계를 두는 편이 더 명확하다.</p>
+
+          <h2>컨테이너의 DB URL 맞추기</h2>
+
+          <p>현재 <code>application-prod.yml</code>에는 다음 설정이 있다.</p>
+
+<pre><code class="language-yaml">spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/discodeit_prod</code></pre>
+          <p>컨테이너 안에서 이 값이 그대로 쓰이면 앱은 DB 컨테이너를 찾지 못한다. Compose에서 환경 변수로 덮어써야 한다.</p>
+
+<pre><code class="language-yaml">app:
+  environment:
+    SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB}
+    SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+    SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}</code></pre>
+          <p>이 값이 들어가면 Spring Boot는 <code>application-prod.yml</code>의 <code>localhost</code> URL 대신 Compose 환경에 맞는 <code>db</code> 서비스 이름을 사용한다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">설정 파일도 함께 정리할 수 있다</div>
+            <p>더 명확하게 하려면 <code>application-prod.yml</code>의 DB URL도 운영 기본값이 아니라 환경 변수 기반으로 바꿀 수 있다.</p>
+            <p>```yaml</p>
+            <p>spring:</p>
+            <p>datasource:</p>
+            <p>url: ${SPRING_DATASOURCE_URL}</p>
+            <p>username: ${SPRING_DATASOURCE_USERNAME}</p>
+            <p>password: ${SPRING_DATASOURCE_PASSWORD}</p>
+            <p>```</p>
+            <p>그러면 운영 프로필은 "이 값은 외부에서 주입되어야 한다"는 의도가 더 선명해진다.</p>
+          </div>
+
+          <h2>포트 맞추기</h2>
+
+          <p>현재 운영 프로필은 앱 포트를 80으로 둔다.</p>
+
+<pre><code class="language-yaml">server:
+  port: 80</code></pre>
+          <p>Dockerfile도 같은 포트를 문서화한다.</p>
+
+<pre><code class="language-dockerfile">EXPOSE 80</code></pre>
+          <p>Compose는 호스트 8081을 컨테이너 80에 연결한다.</p>
+
+<pre><code class="language-yaml">ports:
+  - "${APP_PORT:-8081}:80"</code></pre>
+          <p>이 셋이 같은 방향을 보고 있어야 한다.</p>
+
+          <table>
+          <thead>
+          <tr><th>위치</th><th>값</th><th>의미</th></tr>
+          </thead>
+          <tbody>
+          <tr><td><code>application-prod.yml</code></td><td><code>server.port: 80</code></td><td>Spring Boot가 컨테이너 안에서 여는 포트</td></tr>
+          <tr><td><code>Dockerfile</code></td><td><code>EXPOSE 80</code></td><td>이미지가 80번 포트를 사용한다는 힌트</td></tr>
+          <tr><td><code>docker-compose.yml</code></td><td><code>${APP_PORT:-8081}:80</code></td><td>호스트 포트를 컨테이너 80에 연결</td></tr>
+          </tbody>
+          </table>
+
+          <h2>이미지 빌드 확인</h2>
+
+          <p>Dockerfile을 정리한 뒤에는 앱 이미지만 먼저 빌드한다.</p>
+
+<pre><code class="language-bash">docker compose build app</code></pre>
+          <p>빌드가 성공하면 컨테이너를 실행한다.</p>
+
+<pre><code class="language-bash">docker compose up -d app</code></pre>
+          <p>다만 <code>app</code>은 <code>db</code>에 의존하므로 실제로는 다음처럼 전체를 띄우는 편이 자연스럽다.</p>
+
+<pre><code class="language-bash">docker compose up -d --build</code></pre>
+          <p>실패하면 앱 로그를 먼저 본다.</p>
+
+<pre><code class="language-bash">docker compose logs -f app</code></pre>
+          <p>JAR 파일명 문제라면 로그에 <code>Unable to access jarfile</code> 같은 메시지가 나온다. DB URL 문제라면 <code>Connection refused</code>, <code>UnknownHostException</code>, 인증 실패 메시지가 나온다.</p>
+
+          <h2>체크리스트</h2>
+
+          <ul class="task-list">
+            <li><input type="checkbox" disabled> Dockerfile이 특정 버전 JAR 이름에 의존하지 않는다.</li>
+            <li><input type="checkbox" disabled> 최종 실행 명령이 <code>java $JVM_OPTS -jar app.jar</code>처럼 단순하다.</li>
+            <li><input type="checkbox" disabled> 앱의 컨테이너 내부 포트는 <code>80</code>으로 맞춰져 있다.</li>
+            <li><input type="checkbox" disabled> Compose의 앱 DB URL은 <code>localhost</code>가 아니라 <code>db</code> 서비스 이름을 사용한다.</li>
+            <li><input type="checkbox" disabled> 이미지 빌드 실패와 컨테이너 실행 실패를 로그로 구분할 수 있다.</li>
+          </ul>
+
+          <p>이 단계까지 끝나면 앱 컨테이너는 "어떤 JAR을 실행할지"와 "어디 DB에 붙을지"가 명확해진다.</p>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Dockerfile</span>
+          <span>#SpringBoot</span>
+          <span>#Docker_Compose</span>
+          <span>#실습</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="docker-compose-6-refine.html">&larr; 이전 글</a>
+          <a href="docker-compose-8-postgresql.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

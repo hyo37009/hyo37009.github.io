@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Kotlin] 2. 타입 시스템 마스터 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Kotlin] 2. 타입 시스템 마스터</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Kotlin 사고방식 (2/7)</div>
+            <p>이전 편: <a href="kotlin-mindset-1-idioms.html">[Kotlin] 1. Kotlin 이디엄 — Java 코드를 Kotlin답게</a></p>
+            <p>다음 편: <a href="kotlin-mindset-3-functions.html">[Kotlin] 3. 함수는 일급 시민이다</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">Kotlin 사고방식 시리즈 (2/7)</div>
+            <p>이전 편: <a href="kotlin-mindset-1-idioms.html">1 Kotlin 이디엄</a></p>
+            <p>다음 편: <a href="kotlin-mindset-3-functions.html">3 함수는 일급 시민이다</a></p>
+          </div>
+
+          <p>Java의 타입 시스템은 "이 변수에 어떤 종류의 값이 들어가는가"를 관리한다. Kotlin의 타입 시스템은 여기에 한 가지를 더 관리한다 — <strong>"이 변수가 null일 수 있는가."</strong> 이 차이 하나가 코드 작성 방식을 근본적으로 바꾼다.</p>
+
+          <p>하지만 Kotlin의 타입 시스템은 nullable만 있는 게 아니다. 제네릭의 공변/반공변, sealed class 계층, value class, <code>Nothing</code> 타입 등 Java보다 풍부한 표현력을 가지고 있다. 이것들을 이해하면 <strong>컴파일러가 더 많은 실수를 잡아주는</strong> 코드를 작성할 수 있다.</p>
+
+          <p>이 문서에서는 Kotlin 타입 시스템의 핵심 개념들을 Java와 비교하며 깊이 파본다.</p>
+
+          <h2>타입 계층 구조</h2>
+
+          <p>Java에서 모든 클래스의 최상위 타입은 <code>Object</code>다. Kotlin에서는 <code>Any</code>가 그 역할을 한다. 하지만 Kotlin의 타입 계층은 Java보다 구조가 더 명확하다.</p>
+
+<div class="mermaid">
+graph TD
+    Any["Any (모든 non-null 타입의 최상위)"]
+    AnyN["Any? (모든 타입의 최상위)"]
+    String["String"]
+    Int["Int"]
+    StringN["String?"]
+    Nothing["Nothing (모든 타입의 최하위)"]
+    NothingN["Nothing? (null만 가능)"]
+
+    AnyN --> Any
+    AnyN --> StringN
+    Any --> String
+    Any --> Int
+    String --> Nothing
+    Int --> Nothing
+    StringN --> NothingN
+    Nothing --> NothingN
+
+    style Any fill:#e1f5fe
+    style AnyN fill:#fff3e0
+    style Nothing fill:#fce4ec
+    style NothingN fill:#fce4ec
+</div>
+          <p>핵심을 짚으면 이렇다.</p>
+
+          <ul>
+            <li><code>Any</code> — 모든 non-null 타입의 최상위. Java의 <code>Object</code>와 비슷하지만, primitive 타입도 포함한다.</li>
+            <li><code>Any?</code> — null을 포함한 모든 타입의 진짜 최상위.</li>
+            <li><code>Nothing</code> — 모든 타입의 최하위. "이 함수는 절대 정상 종료하지 않는다"를 표현한다.</li>
+            <li><code>Unit</code> — Java의 <code>void</code>에 해당. "반환할 값이 없다"를 나타낸다.</li>
+          </ul>
+
+          <p>Java에서는 <code>Object</code>가 최상위이면서 모든 것을 대표하지만, Kotlin은 <strong>nullable과 non-null을 타입 계층에서 분리</strong>한다. <code>String</code>은 <code>Any</code>의 하위 타입이고, <code>String?</code>은 <code>Any?</code>의 하위 타입이다. 이 구분이 컴파일 타임에 null 안전성을 보장하는 기반이다.</p>
+
+          <hr>
+
+          <h2>Nothing 타입</h2>
+
+          <p><code>Nothing</code>은 Java에 없는 개념이라 처음에 와닿지 않을 수 있다. "값이 존재할 수 없는 타입"이다.</p>
+
+          <p>어떤 상황에서 쓰일까? 함수가 <strong>예외를 던지거나 무한 루프에 빠져서 절대 정상 반환하지 않을 때</strong>다.</p>
+
+<pre><code class="language-kotlin">fun fail(message: String): Nothing {
+    throw BusinessException(message)
+}</code></pre>
+          <p>반환 타입이 <code>Nothing</code>이면 "이 함수를 호출한 뒤의 코드는 실행되지 않는다"는 뜻이다. 컴파일러가 이걸 알기 때문에, <code>Nothing</code>을 반환하는 함수 뒤에 도달 불가능한 코드를 쓰면 경고를 준다.</p>
+
+          <p>실용적으로 유용한 점은 <strong>Elvis 연산자와의 조합</strong>이다.</p>
+
+<pre><code class="language-kotlin">val user = userRepository.findByIdOrNull(id)
+    ?: fail("사용자를 찾을 수 없습니다")
+
+// 여기서 user는 User (non-null)로 추론됨
+println(user.name)</code></pre>
+          <p><code>fail()</code>이 <code>Nothing</code>을 반환하기 때문에, Elvis 연산자의 오른쪽이 실행되면 함수가 끝난다는 것을 컴파일러가 안다. 따라서 <code>?:</code> 이후 <code>user</code>는 자동으로 non-null로 추론된다.</p>
+
+          <p><code>Nothing</code>은 타입 계층의 <mark>최하위(bottom type)</mark>다. 모든 타입의 하위 타입이기 때문에, 어떤 타입이 기대되는 자리에든 <code>Nothing</code>을 넣을 수 있다. <code>throw</code>가 표현식으로 쓰일 수 있는 이유가 이것이다.</p>
+
+<pre><code class="language-kotlin">val name: String = user?.name ?: throw NotFoundException()
+// throw는 Nothing 타입이므로, String 자리에 올 수 있다</code></pre>
+          <hr>
+
+          <h2>제네릭 — 공변과 반공변</h2>
+
+          <p>Java에서 제네릭을 깊이 다루다 보면 <code>? extends T</code>와 <code>? super T</code>를 만나게 된다. 쓸 때마다 헷갈리는 이 문법을, Kotlin은 <code>out</code>과 <code>in</code>으로 더 직관적으로 표현한다.</p>
+
+          <p>먼저 문제를 이해하자. <code>Dog</code>가 <code>Animal</code>의 하위 타입이라면, <code>List&lt;Dog&gt;</code>는 <code>List&lt;Animal&gt;</code>의 하위 타입일까?</p>
+
+<pre><code class="language-kotlin">open class Animal
+class Dog : Animal()
+class Cat : Animal()
+
+// Dog는 Animal의 하위 타입
+val animal: Animal = Dog()  // OK
+
+// 그러면 List&lt;Dog&gt;도 List&lt;Animal&gt;의 하위 타입?
+// val animals: List&lt;Animal&gt; = listOf(Dog())  // ?</code></pre>
+          <p>Java에서 배열은 이걸 허용하고(<code>Animal[] = new Dog[]</code>), 그래서 런타임에 <code>ArrayStoreException</code>이 터질 수 있다. 제네릭에서는 이걸 막기 위해 기본적으로 <strong>불변(invariant)</strong>이다. <code>List&lt;Dog&gt;</code>와 <code>List&lt;Animal&gt;</code>은 아무 관계도 아니다.</p>
+
+          <p>하지만 "이 리스트에서 읽기만 한다"면 <code>List&lt;Dog&gt;</code>를 <code>List&lt;Animal&gt;</code> 자리에 써도 안전하다. 읽어서 나오는 게 <code>Dog</code>이고, <code>Dog</code>는 <code>Animal</code>이니까.</p>
+
+          <hr>
+
+          <h3>out (공변, covariant)</h3>
+
+          <p>"이 타입 파라미터를 <strong>출력 위치(반환)에만</strong> 쓴다"는 선언이다.</p>
+
+<pre><code class="language-kotlin">interface Producer&lt;out T&gt; {
+    fun produce(): T     // OK — T를 반환
+    // fun consume(item: T)  // 컴파일 에러 — T를 파라미터로 받을 수 없음
+}</code></pre>
+          <p><code>out</code>을 붙이면 <code>Producer&lt;Dog&gt;</code>가 <code>Producer&lt;Animal&gt;</code>의 하위 타입이 된다. 값을 <strong>꺼내기만</strong> 하니까 안전한 것이다.</p>
+
+          <p>Kotlin의 <code>List&lt;out E&gt;</code>가 대표적인 예다. <code>List</code>는 읽기 전용이므로 <code>out</code>이 붙어 있고, 그래서 <code>List&lt;Dog&gt;</code>를 <code>List&lt;Animal&gt;</code> 자리에 넣을 수 있다.</p>
+
+<pre><code class="language-kotlin">val dogs: List&lt;Dog&gt; = listOf(Dog(), Dog())
+val animals: List&lt;Animal&gt; = dogs  // OK! List가 out이니까</code></pre>
+          <p>Java로 표현하면 <code>List&lt;? extends Animal&gt;</code>에 해당한다. <code>out</code> 한 글자가 <code>? extends</code>를 대체한다.</p>
+
+          <hr>
+
+          <h3>in (반공변, contravariant)</h3>
+
+          <p><code>out</code>의 반대다. "이 타입 파라미터를 <strong>입력 위치(파라미터)에만</strong> 쓴다"는 선언이다.</p>
+
+<pre><code class="language-kotlin">interface Consumer&lt;in T&gt; {
+    fun consume(item: T)   // OK — T를 파라미터로 받음
+    // fun produce(): T    // 컴파일 에러 — T를 반환할 수 없음
+}</code></pre>
+          <p><code>in</code>을 붙이면 관계가 뒤집힌다. <code>Consumer&lt;Animal&gt;</code>이 <code>Consumer&lt;Dog&gt;</code>의 하위 타입이 된다. <code>Animal</code>을 먹을 수 있는 소비자는 <code>Dog</code>도 먹을 수 있으니까.</p>
+
+          <p>Java로 표현하면 <code>Consumer&lt;? super Dog&gt;</code>에 해당한다.</p>
+
+          <hr>
+
+          <h3>기억법</h3>
+
+<pre><code>out = 출력(Output) = 꺼내기만 = ? extends = 생산자(Producer)
+in = 입력(Input) = 넣기만 = ? super = 소비자(Consumer)</code></pre>
+          <p>Java의 PECS(Producer-Extends, Consumer-Super) 규칙과 같은 개념이다. Kotlin은 이걸 <code>out</code>/<code>in</code> 두 키워드로 선언 지점에서 한 번만 명시하면 된다. Java처럼 사용 지점마다 <code>? extends</code>를 쓸 필요가 없다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">선언 지점 변성 vs 사용 지점 변성</div>
+            <p>Kotlin의 <code>out</code>/<code>in</code>은 <strong>선언 지점 변성(declaration-site variance)</strong>이다. 클래스를 정의할 때 한 번만 지정하면 모든 사용 지점에 적용된다. Java의 <code>? extends</code>/<code>? super</code>는 <strong>사용 지점 변성(use-site variance)</strong>으로, 쓸 때마다 매번 지정해야 한다. Kotlin도 사용 지점 변성을 지원하지만, 대부분 선언 지점에서 해결된다.</p>
+          </div>
+
+          <hr>
+
+          <h2>Sealed Class와 Sealed Interface</h2>
+
+          <p>enum은 값의 종류를 제한하지만, 각 값이 <strong>서로 다른 데이터</strong>를 가질 수는 없다. sealed class는 이 한계를 넘는다.</p>
+
+<pre><code class="language-kotlin">sealed class ApiResult&lt;out T&gt; {
+    data class Success&lt;T&gt;(val data: T) : ApiResult&lt;T&gt;()
+    data class Error(val message: String, val code: Int) : ApiResult&lt;Nothing&gt;()
+    data object Loading : ApiResult&lt;Nothing&gt;()
+}</code></pre>
+          <ul>
+            <li><code>Success</code>는 데이터를 담고, <code>Error</code>는 메시지와 코드를 담고, <code>Loading</code>은 아무것도 없다.</li>
+            <li>각 하위 타입이 서로 다른 프로퍼티를 가질 수 있다. enum으로는 불가능한 구조다.</li>
+          </ul>
+
+          <p>sealed class의 핵심 가치는 <mark><code>when</code>에서 모든 경우를 컴파일 타임에 검증</mark>할 수 있다는 것이다.</p>
+
+<pre><code class="language-kotlin">fun &lt;T&gt; handleResult(result: ApiResult&lt;T&gt;): T? = when (result) {
+    is ApiResult.Success -&gt; result.data
+    is ApiResult.Error -&gt; throw BusinessException(result.message)
+    is ApiResult.Loading -&gt; null
+    // else가 필요 없다 — 모든 하위 타입을 다뤘으니까
+}</code></pre>
+          <p>나중에 <code>ApiResult</code>에 새 하위 클래스(예: <code>Timeout</code>)를 추가하면, 이 <code>when</code>을 처리하지 않은 모든 곳에서 <strong>컴파일 에러</strong>가 난다. 실수로 빠뜨리는 것이 불가능하다.</p>
+
+          <p>Kotlin 1.5부터는 <code>sealed interface</code>도 지원한다. sealed class와 같은 기능이지만, 인터페이스이므로 <strong>다중 구현</strong>이 가능하다.</p>
+
+<pre><code class="language-kotlin">sealed interface Renderable {
+    data class Text(val content: String) : Renderable
+    data class Image(val url: String, val alt: String) : Renderable
+    data class Code(val language: String, val source: String) : Renderable
+}</code></pre>
+          <p>실무에서 sealed class/interface는 주로 <strong>에러 타입 정의</strong>, <strong>API 응답 래핑</strong>, <strong>상태 머신</strong> 등에 쓰인다. enum보다 유연하고, 일반 상속보다 안전하다.</p>
+
+          <hr>
+
+          <h2>Value Class (Inline Class)</h2>
+
+          <p>ID를 <code>Long</code>으로 쓰다 보면, 서로 다른 도메인의 ID를 혼동할 수 있다.</p>
+
+<pre><code class="language-kotlin">fun findPost(postId: Long): Post { /* ... */ }
+fun findUser(userId: Long): User { /* ... */ }
+
+val postId: Long = 42
+val userId: Long = 42
+findPost(userId)  // 컴파일은 되지만 논리적으로 틀림!</code></pre>
+          <p><code>value class</code>는 이런 문제를 <mark>런타임 오버헤드 없이</mark> 해결한다.</p>
+
+<pre><code class="language-kotlin">@JvmInline
+value class PostId(val value: Long)
+
+@JvmInline
+value class UserId(val value: Long)
+
+fun findPost(postId: PostId): Post { /* ... */ }
+fun findUser(userId: UserId): User { /* ... */ }
+
+val postId = PostId(42)
+val userId = UserId(42)
+// findPost(userId)  // 컴파일 에러! 타입이 다르다</code></pre>
+          <ul>
+            <li><code>value class</code>는 컴파일 시 래퍼가 제거되고, 내부 값(<code>Long</code>)이 직접 사용된다.</li>
+            <li>런타임에는 <code>Long</code>과 동일한 성능이지만, 컴파일 타임에는 타입 안전성을 보장한다.</li>
+          </ul>
+
+          <p>비유하자면 "이름표를 붙이는 것"이다. <code>Long</code>이라는 같은 상자에 "이건 PostId야", "이건 UserId야"라는 이름표를 붙여서 실수로 바꿔 쓰는 것을 막는다. 이름표를 붙이는 비용(런타임 오버헤드)은 0이다.</p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">value class의 제약</div>
+            <p><code>value class</code>는 프로퍼티를 하나만 가질 수 있고, <code>var</code>는 안 된다. 상속도 불가하지만 인터페이스 구현은 가능하다. 모든 곳에서 인라인되는 건 아니고, nullable이나 제네릭 컨텍스트에서는 boxing이 발생할 수 있다.</p>
+          </div>
+
+          <hr>
+
+          <h2>심화 분석</h2>
+
+          <h4>플랫폼 타입</h4>
+
+          <p>Java 코드에서 오는 타입은 Kotlin이 nullable인지 non-null인지 알 수 없다. 이런 타입을 <mark>플랫폼 타입</mark>이라 하고, IDE에서 <code>String!</code> 처럼 느낌표로 표시된다.</p>
+
+<pre><code class="language-kotlin">// Java 메서드
+public String getName() { return name; }
+
+// Kotlin에서 호출하면
+val name = javaObject.getName()   // name의 타입은 String! (플랫폼 타입)</code></pre>
+          <p>플랫폼 타입은 <strong>위험하다.</strong> Kotlin 컴파일러가 null 체크를 강제하지 않기 때문에, Java 메서드가 null을 반환하면 런타임에 NPE가 터진다.</p>
+
+          <p>방어하는 방법은 명시적 타입 선언이다.</p>
+
+<pre><code class="language-kotlin">val name: String = javaObject.getName()   // non-null로 선언 — null 오면 즉시 예외
+val name: String? = javaObject.getName()  // nullable로 선언 — 안전하게 처리</code></pre>
+          <ul>
+            <li>non-null로 선언하면 Java 메서드가 null을 반환하는 순간 대입 지점에서 바로 예외가 터진다. 원인 추적이 쉽다.</li>
+            <li>nullable로 선언하면 이후 <code>?.</code>나 <code>?:</code>로 안전하게 처리할 수 있다.</li>
+          </ul>
+
+          <p>어떤 방식이든, <strong>플랫폼 타입을 그대로 두지 말고 명시적으로 타입을 지정</strong>하는 것이 중요하다. 이 주제는 <a href="kotlin-mindset-5-null-safety.html">5 Null Safety 완전 정복</a>에서 더 깊이 다룬다.</p>
+
+          <h4>스마트 캐스트와 타입 체크</h4>
+
+          <p><code>is</code> 체크 후 자동으로 캐스팅되는 스마트 캐스트는 Kotlin의 타입 시스템이 <strong>흐름 분석(flow analysis)</strong>을 한다는 뜻이다.</p>
+
+<pre><code class="language-kotlin">fun process(result: ApiResult&lt;Post&gt;) {
+    if (result is ApiResult.Success) {
+        // 여기서 result는 자동으로 ApiResult.Success&lt;Post&gt;
+        println(result.data.title)
+    }
+}</code></pre>
+          <p>Java에서는 <code>instanceof</code> 체크 후 명시적 캐스팅이 필요했다. Kotlin은 컴파일러가 "이 시점에서 이 변수의 타입이 뭔지"를 추적하기 때문에 캐스팅이 자동이다. 이것은 <code>when</code>에서 sealed class를 다룰 때 특히 유용하다.</p>
+
+          <hr>
+
+          <h2>자주 하는 실수</h2>
+
+          <h4>제네릭에서 out/in 혼동</h4>
+
+<pre><code class="language-kotlin">// "이 리스트에서 꺼내기만 한다" → out
+fun printAll(items: List&lt;out Animal&gt;) { /* ... */ }
+
+// "이 리스트에 넣기만 한다" → in
+fun addDog(items: MutableList&lt;in Dog&gt;) { /* ... */ }</code></pre>
+          <p>읽기 전용이면 <code>out</code>, 쓰기 전용이면 <code>in</code>이다. 헷갈리면 "이 파라미터에서 T를 꺼내는가(out), 넣는가(in)" 를 기준으로 판단하자.</p>
+
+          <h4>sealed class의 하위 클래스를 다른 파일에 선언</h4>
+
+          <p>sealed class의 하위 클래스는 <mark>같은 패키지</mark> 안에 있어야 한다 (Kotlin 1.5+, 이전에는 같은 파일). 다른 패키지에 선언하면 컴파일 에러가 발생한다. sealed의 의미 자체가 "확장을 제한한다"이기 때문이다.</p>
+
+          <h4>value class를 JPA 엔티티 ID로 사용</h4>
+
+          <p><code>value class</code>를 JPA 엔티티의 ID 타입으로 쓰면 Hibernate가 제대로 처리하지 못할 수 있다. JPA 레이어에서는 <code>Long</code>을 쓰고, 도메인 레이어에서만 <code>value class</code>를 쓰는 것이 현실적인 타협안이다.</p>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Kotlin</span>
+          <span>#타입시스템</span>
+          <span>#제네릭</span>
+          <span>#SealedClass</span>
+          <span>#ValueClass</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="kotlin-mindset-1-idioms.html">&larr; 이전 글</a>
+          <a href="kotlin-mindset-3-functions.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

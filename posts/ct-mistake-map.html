@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Java 자료구조] Map 정렬과 computeIfAbsent - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Java 자료구조] Map 정렬과 computeIfAbsent</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">작성 정보</div>
+            <p>- <strong>작성일</strong> : 2026-05-29</p>
+            <p>- <strong>관련 문제</strong> : <a href="코딩테스트문제-풀이프로그래머스pg42579-베스트-앨범00-복습-인덱스.html">PG42579 베스트 앨범</a></p>
+            <p>- <strong>관련 문서</strong> : <a href="중첩-map과-의미-있는-타입.html">중첩 Map과 의미 있는 타입</a>, <a href="comparable과-compareto.html">Comparable과 compareTo</a></p>
+          </div>
+
+          <p><code>Map</code>은 key로 값을 빠르게 찾기 위한 자료구조다. 그래서 일반적인 <code>HashMap</code>은 저장 순서나 정렬 순서를 보장하지 않는다. 정렬이 필요하면 <code>entrySet</code>, <code>keySet</code>, <code>values</code> 중 필요한 것을 꺼내서 정렬해야 한다.</p>
+
+          <h2>Map 자체를 정렬하지 않는다</h2>
+
+          <p>다음처럼 생각한다.</p>
+
+<pre><code class="language-text">Map을 정렬한다 X
+Map에서 Entry 목록을 꺼내 정렬한다 O</code></pre>
+          <p>스트림으로 정렬할 수 있다.</p>
+
+<pre><code class="language-java">genreMap.entrySet().stream()
+        .sorted(Map.Entry.comparingByValue())
+        .toList();</code></pre>
+          <p>제출 환경이 Java 8 기준이라면 <code>Collectors.toList()</code>를 쓴다.</p>
+
+<pre><code class="language-java">List&lt;Map.Entry&lt;String, Genre&gt;&gt; list = genreMap.entrySet().stream()
+        .sorted(Map.Entry.comparingByValue())
+        .collect(Collectors.toList());</code></pre>
+          <p>또는 리스트로 만든 뒤 정렬해도 된다.</p>
+
+<pre><code class="language-java">List&lt;Map.Entry&lt;String, Genre&gt;&gt; list = new ArrayList&lt;&gt;(genreMap.entrySet());
+list.sort(Map.Entry.comparingByValue());</code></pre>
+          <h2>key 기준 정렬과 value 기준 정렬</h2>
+
+          <p>key 기준 정렬은 다음처럼 쓴다.</p>
+
+<pre><code class="language-java">list.sort(Map.Entry.comparingByKey());</code></pre>
+          <p>value 기준 정렬은 다음처럼 쓴다.</p>
+
+<pre><code class="language-java">list.sort(Map.Entry.comparingByValue());</code></pre>
+          <p>value가 직접 비교 가능한 타입이어야 한다. <code>Integer</code>, <code>String</code>은 이미 가능하다. 직접 만든 클래스라면 <code>Comparable</code>을 구현하거나 별도 <code>Comparator</code>를 넘긴다.</p>
+
+<pre><code class="language-java">list.sort(Map.Entry.comparingByValue(
+        Comparator.comparingInt(Genre::getTotalPlayCounts).reversed()
+));</code></pre>
+          <p>코딩테스트에서는 getter를 만들지 않았다면 람다로 직접 비교해도 된다.</p>
+
+<pre><code class="language-java">list.sort((a, b) -&gt;
+        Integer.compare(b.getValue().totalPlayCounts, a.getValue().totalPlayCounts)
+);</code></pre>
+          <h2>computeIfAbsent</h2>
+
+          <p><code>computeIfAbsent</code>는 key가 없을 때만 값을 만들어 넣고, 최종 value를 반환한다.</p>
+
+<pre><code class="language-java">genreMap.computeIfAbsent(genres[i], Genre::new)
+        .addSong(song);</code></pre>
+          <p>직접 풀어 쓰면 다음과 같다.</p>
+
+<pre><code class="language-java">if (!genreMap.containsKey(genres[i])) {
+    genreMap.put(genres[i], new Genre(genres[i]));
+}
+genreMap.get(genres[i]).addSong(song);</code></pre>
+          <p><code>Genre::new</code>는 key를 인자로 받아 새 값을 만드는 함수다.</p>
+
+<pre><code class="language-java">Function&lt;String, Genre&gt; f = Genre::new;</code></pre>
+          <p>그래서 <code>computeIfAbsent</code>는 함수형 인터페이스를 사용하는 API라고 볼 수 있다. 다만 Map의 상태를 변경하므로 순수 함수형 코드라고 보기는 어렵다.</p>
+
+          <h2>언제 쓰면 좋은가</h2>
+
+          <p><code>computeIfAbsent</code>는 "없으면 만들고, 있으면 기존 것을 사용한다"는 패턴에 좋다.</p>
+
+<pre><code class="language-java">Map&lt;String, List&lt;Integer&gt;&gt; map = new HashMap&lt;&gt;();
+
+map.computeIfAbsent("a", key -&gt; new ArrayList&lt;&gt;())
+        .add(1);</code></pre>
+          <p>다음처럼 그룹핑할 때 자주 나온다.</p>
+
+<pre><code class="language-java">Map&lt;String, List&lt;Song&gt;&gt; songsByGenre = new HashMap&lt;&gt;();
+
+for (Song song : songs) {
+    songsByGenre.computeIfAbsent(song.genre, key -&gt; new ArrayList&lt;&gt;())
+            .add(song);
+}</code></pre>
+          <h2>실수 체크</h2>
+
+          <ul class="task-list">
+            <li><input type="checkbox" disabled> <code>HashMap</code> 자체의 순서를 믿지 않았는가</li>
+            <li><input type="checkbox" disabled> 정렬이 필요하면 <code>entrySet()</code>을 꺼냈는가</li>
+            <li><input type="checkbox" disabled> value 기준 정렬이면 value가 비교 가능한 타입인가</li>
+            <li><input type="checkbox" disabled> key가 없을 때만 새 객체를 만들고 싶은 상황인가</li>
+            <li><input type="checkbox" disabled> <code>computeIfAbsent</code>의 두 번째 인자가 key를 받아 value를 만드는 함수라는 점을 이해했는가</li>
+          </ul>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#코딩테스트</span>
+          <span>#자주하는실수</span>
+          <span>#Java</span>
+          <span>#Map</span>
+          <span>#HashMap</span>
+          <span>#computeIfAbsent</span>
+          <span>#정렬</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Kotlin] 3. 구조화된 동시성과 예외 처리 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Kotlin] 3. 구조화된 동시성과 예외 처리</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Kotlin 코루틴 (3/5)</div>
+            <p>이전 편: <a href="kotlin-coroutine-2-scope-context.html">[Kotlin] 2. CoroutineScope, Context, Dispatcher</a></p>
+            <p>다음 편: <a href="kotlin-coroutine-4-flow.html">[Kotlin] 4. Flow</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">Kotlin 코루틴 시리즈 (3/5)</div>
+            <p>이전 편: <a href="kotlin-coroutine-2-scope-context.html">2 CoroutineScope, Context, Dispatcher</a></p>
+            <p>다음 편: <a href="kotlin-coroutine-4-flow.html">4 Flow</a></p>
+          </div>
+
+          <p>코루틴을 쓰다 보면 "자식 코루틴이 실패하면 부모는 어떻게 되지?", "하나가 취소되면 나머지는?" 같은 의문이 생긴다. 이걸 체계적으로 관리하는 것이 <mark>구조화된 동시성(Structured Concurrency)</mark>이다.</p>
+
+          <p>구조화된 동시성은 코루틴의 가장 중요한 설계 원칙이다. 이 원칙이 없으면 코루틴은 그냥 "가벼운 스레드"일 뿐이고, 스레드에서 겪었던 문제(누수, 추적 불가, 예외 유실)를 그대로 겪게 된다.</p>
+
+          <h2>구조화된 동시성이란</h2>
+
+          <p>핵심 규칙은 간단하다. <strong><mark>모든 코루틴은 스코프에 속하고, 부모 코루틴은 모든 자식이 완료될 때까지 끝나지 않는다.</mark></strong></p>
+
+<pre><code class="language-kotlin">suspend fun fetchProfile() = coroutineScope {
+    val user = async { fetchUser() }        // 자식 1
+    val posts = async { fetchPosts() }      // 자식 2
+
+    // 두 자식이 모두 완료될 때까지 여기서 대기
+    UserProfile(user.await(), posts.await())
+}
+// fetchProfile이 반환될 때, 모든 자식 코루틴은 이미 완료된 상태다</code></pre>
+          <p>비유하자면 회사의 팀 구조와 같다. 팀장(부모)은 팀원(자식)이 모든 업무를 끝내기 전에 "끝났습니다"라고 보고할 수 없다. 팀원 하나가 문제를 일으키면 팀장이 책임지고, 팀이 해체되면 팀원 전원의 작업도 중단된다.</p>
+
+          <p>이 규칙이 보장하는 것들은 다음과 같다.</p>
+
+          <ul>
+            <li><strong>누수 방지</strong> — 부모가 끝나면 자식도 끝난다. "어딘가에서 돌고 있는 잊혀진 코루틴"이 생기지 않는다.</li>
+            <li><strong>에러 전파</strong> — 자식이 실패하면 부모가 알고, 다른 자식도 취소된다.</li>
+            <li><strong>취소 전파</strong> — 부모가 취소되면 모든 자식이 취소된다.</li>
+          </ul>
+
+          <hr>
+
+          <h2>부모-자식 관계</h2>
+
+          <p><code>launch</code>나 <code>async</code>로 코루틴을 만들면, 현재 스코프의 Job이 <strong>부모 Job</strong>이 된다.</p>
+
+<div class="mermaid">
+graph TD
+    P["부모 Job (coroutineScope)"]
+    C1["자식 Job (async: fetchUser)"]
+    C2["자식 Job (async: fetchPosts)"]
+    C3["손자 Job (launch: logActivity)"]
+
+    P --> C1
+    P --> C2
+    C2 --> C3
+
+    style P fill:#e1f5fe
+    style C1 fill:#e8f5e9
+    style C2 fill:#e8f5e9
+    style C3 fill:#fff3e0
+</div>
+          <p>이 계층에서 규칙은 세 가지다.</p>
+
+          <ol>
+            <li><strong>부모는 모든 자식이 완료될 때까지 완료되지 않는다.</strong></li>
+            <li><strong>부모가 취소되면 모든 자식(과 손자)이 취소된다.</strong></li>
+            <li><strong>자식이 예외로 실패하면 부모도 취소되고, 다른 자식도 취소된다.</strong></li>
+          </ol>
+
+          <p>3번 규칙이 중요하다. <code>fetchPosts</code>가 실패하면 <code>fetchUser</code>도 취소된다. "하나가 실패하면 전부 실패"가 기본 동작이다.</p>
+
+          <hr>
+
+          <h2>coroutineScope vs supervisorScope</h2>
+
+          <h3>coroutineScope — 하나 실패하면 전부 취소</h3>
+
+<pre><code class="language-kotlin">suspend fun fetchProfile() = coroutineScope {
+    val user = async { fetchUser() }
+    val posts = async { fetchPosts() }  // 여기서 예외 발생!
+
+    // fetchPosts 실패 → fetchUser도 취소 → coroutineScope 전체가 실패
+    UserProfile(user.await(), posts.await())
+}</code></pre>
+          <p><code>coroutineScope</code>은 자식 중 하나라도 실패하면 <strong>나머지 자식을 모두 취소하고, 자신도 예외를 던진다.</strong> "전부 성공하거나 전부 실패"하는 트랜잭션 같은 동작이다.</p>
+
+          <hr>
+
+          <h3>supervisorScope — 실패가 전파되지 않음</h3>
+
+<pre><code class="language-kotlin">suspend fun fetchDashboard() = supervisorScope {
+    val user = async { fetchUser() }              // 성공
+    val notifications = async { fetchNotifications() }  // 실패!
+
+    // notifications는 실패하지만, user는 영향 없이 완료됨
+    val userData = user.await()
+    val notiData = runCatching { notifications.await() }.getOrDefault(emptyList())
+
+    Dashboard(userData, notiData)
+}</code></pre>
+          <p><code>supervisorScope</code>은 자식의 실패가 다른 자식에게 전파되지 않는다. 각 자식이 독립적으로 성공/실패한다.</p>
+
+          <p>언제 어떤 걸 쓸지 판단하는 기준은 이렇다.</p>
+
+          <ul>
+            <li><strong><code>coroutineScope</code></strong> — 자식들이 서로 의존적일 때. 하나가 실패하면 나머지도 의미 없을 때.</li>
+            <li><strong><code>supervisorScope</code></strong> — 자식들이 독립적일 때. 하나가 실패해도 나머지는 의미가 있을 때.</li>
+          </ul>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">대시보드 패턴</div>
+            <p>대시보드 화면처럼 여러 독립적인 데이터를 동시에 불러올 때 <code>supervisorScope</code>가 적합하다. 알림 조회가 실패해도 사용자 정보는 보여줘야 하니까.</p>
+          </div>
+
+          <hr>
+
+          <h2>취소(Cancellation)</h2>
+
+          <p>코루틴의 취소는 <strong>협조적(cooperative)</strong>이다. 코루틴이 스스로 "나 취소됐나?" 확인하는 방식이다.</p>
+
+<pre><code class="language-kotlin">val job = launch {
+    repeat(1000) { i -&gt;
+        println("작업 $i")
+        delay(100)  // 중단점 — 여기서 취소를 확인
+    }
+}
+
+delay(500)
+job.cancel()  // 취소 요청</code></pre>
+          <p><code>cancel()</code>을 호출하면 코루틴의 Job이 취소 상태가 된다. 하지만 코루틴이 <strong>즉시</strong> 멈추는 것은 아니다. 다음 <strong>중단점(suspension point)</strong>에서 <code>CancellationException</code>이 발생하면서 코루틴이 종료된다.</p>
+
+          <p><code>delay()</code>, <code>yield()</code>, <code>withContext()</code> 등 모든 <code>suspend</code> 함수가 중단점이다.</p>
+
+          <hr>
+
+          <h3>취소가 안 되는 경우</h3>
+
+          <p>중단점이 없으면 취소가 동작하지 않는다.</p>
+
+<pre><code class="language-kotlin">val job = launch {
+    var i = 0
+    while (true) {
+        i++  // CPU 바운드 루프 — 중단점이 없다!
+    }
+}
+
+job.cancel()  // 이 코루틴은 취소되지 않는다</code></pre>
+          <p>이런 경우에는 명시적으로 취소 상태를 확인해야 한다.</p>
+
+<pre><code class="language-kotlin">val job = launch {
+    var i = 0
+    while (isActive) {  // isActive로 취소 상태 확인
+        i++
+    }
+}</code></pre>
+          <p>또는 <code>yield()</code>를 주기적으로 호출해서 중단점을 만든다.</p>
+
+<pre><code class="language-kotlin">val job = launch {
+    var i = 0
+    while (true) {
+        i++
+        if (i % 1000 == 0) yield()  // 주기적으로 중단점 삽입
+    }
+}</code></pre>
+          <hr>
+
+          <h2>예외 처리</h2>
+
+          <p>코루틴의 예외 처리는 일반 try-catch와 약간 다르게 동작한다.</p>
+
+          <h3>launch의 예외</h3>
+
+          <p><code>launch</code>에서 발생한 예외는 <strong>부모로 전파</strong>된다.</p>
+
+<pre><code class="language-kotlin">val scope = CoroutineScope(Dispatchers.Default)
+
+scope.launch {
+    throw RuntimeException("실패!")  // 부모 스코프로 전파
+}</code></pre>
+          <p><code>launch</code> 안의 예외는 try-catch로 잡을 수 없다(밖에서). 예외가 구조화된 동시성 계층을 따라 올라가기 때문이다.</p>
+
+          <hr>
+
+          <h3>async의 예외</h3>
+
+          <p><code>async</code>에서 발생한 예외는 <code>await()</code> 호출 시 던져진다.</p>
+
+<pre><code class="language-kotlin">val deferred = async {
+    throw RuntimeException("실패!")
+}
+
+try {
+    deferred.await()  // 여기서 예외가 발생
+} catch (e: RuntimeException) {
+    println("잡았다: ${e.message}")
+}</code></pre>
+          <p>하지만 <code>await()</code>로 잡는다고 부모에 전파가 안 되는 건 아니다. <code>supervisorScope</code> 안에서 써야 부모 전파 없이 <code>await()</code>에서만 잡을 수 있다.</p>
+
+          <hr>
+
+          <h3>CoroutineExceptionHandler</h3>
+
+          <p>최상위 코루틴의 예외를 포괄적으로 처리할 때 쓴다.</p>
+
+<pre><code class="language-kotlin">val handler = CoroutineExceptionHandler { _, exception -&gt;
+    log.error("코루틴 예외: ${exception.message}", exception)
+}
+
+val scope = CoroutineScope(Dispatchers.Default + handler)
+
+scope.launch {
+    throw RuntimeException("처리되지 않은 예외")
+    // handler에서 잡힌다
+}</code></pre>
+          <ul>
+            <li><code>CoroutineExceptionHandler</code>는 <strong>최상위 코루틴</strong>(<code>launch</code>로 시작된)의 처리되지 않은 예외만 잡는다.</li>
+            <li><code>async</code>의 예외는 잡지 않는다 (<code>await()</code>에서 처리해야 하므로).</li>
+            <li>자식 코루틴에는 효과 없다. 반드시 스코프에 직접 설정해야 한다.</li>
+          </ul>
+
+          <hr>
+
+          <h2>심화 분석</h2>
+
+          <h4>CancellationException은 특별하다</h4>
+
+          <p>코루틴이 취소되면 <code>CancellationException</code>이 발생한다. 이 예외는 <strong>"정상적인 취소"</strong>로 취급되어, 부모에 실패로 전파되지 않는다.</p>
+
+<pre><code class="language-kotlin">coroutineScope {
+    val job1 = launch {
+        delay(1000)
+        println("1 완료")
+    }
+    val job2 = launch {
+        delay(500)
+        job1.cancel()  // job1을 취소
+        println("2 완료")
+    }
+    // job1은 취소되지만, coroutineScope는 실패하지 않는다
+}</code></pre>
+          <p><code>CancellationException</code>을 catch할 때 주의할 점이 있다.</p>
+
+<pre><code class="language-kotlin">// 나쁜 예 — CancellationException까지 잡아버림
+try {
+    delay(1000)
+} catch (e: Exception) {
+    // CancellationException도 여기서 잡힌다!
+    // 코루틴이 취소되지 않음
+}
+
+// 좋은 예 — CancellationException은 다시 던진다
+try {
+    delay(1000)
+} catch (e: Exception) {
+    if (e is CancellationException) throw e
+    // 나머지 예외만 처리
+}</code></pre>
+          <h4>예외 처리 전략 선택</h4>
+
+<div class="mermaid">
+graph TD
+    A[예외가 어디서 발생?]
+    A -->|launch| B[CoroutineExceptionHandler<br>또는 supervisorScope]
+    A -->|async| C[await에서 try-catch]
+    A -->|자식들이 독립적| D[supervisorScope]
+    A -->|전부 성공해야 의미| E[coroutineScope]
+
+    style B fill:#e1f5fe
+    style C fill:#e8f5e9
+    style D fill:#fff3e0
+    style E fill:#fce4ec
+</div>
+          <hr>
+
+          <h2>자주 하는 실수</h2>
+
+          <h4>SupervisorJob을 직접 전달하면서 구조화 깨뜨리기</h4>
+
+<pre><code class="language-kotlin">// 나쁜 예 — 부모-자식 관계가 깨진다
+launch(SupervisorJob()) {
+    // 이 코루틴은 부모와 분리됨!
+}
+
+// 좋은 예 — supervisorScope 사용
+supervisorScope {
+    launch { /* ... */ }
+}</code></pre>
+          <p><code>launch(SupervisorJob())</code>을 하면 새 Job이 부모와의 관계를 대체해버려서 구조화된 동시성이 깨진다. <code>supervisorScope</code>을 쓰는 것이 올바른 방법이다.</p>
+
+          <h4>모든 곳에 try-catch</h4>
+
+<pre><code class="language-kotlin">// 과도한 try-catch
+launch {
+    try {
+        val data = fetchData()
+        try {
+            processData(data)
+        } catch (e: Exception) { /* ... */ }
+    } catch (e: Exception) { /* ... */ }
+}</code></pre>
+          <p>코루틴의 예외 전파 메커니즘을 이해하면 이런 방어적 코딩이 줄어든다. <code>coroutineScope</code>/<code>supervisorScope</code>와 <code>CoroutineExceptionHandler</code>로 계층적으로 처리하는 것이 깔끔하다.</p>
+
+          <h4>finally에서 suspend 함수 호출</h4>
+
+<pre><code class="language-kotlin">launch {
+    try {
+        fetchData()
+    } finally {
+        // delay(100)  // CancellationException! — 이미 취소된 코루틴에서 suspend 불가
+        withContext(NonCancellable) {
+            delay(100)  // NonCancellable 안에서는 가능
+            cleanup()
+        }
+    }
+}</code></pre>
+          <p>코루틴이 취소된 후 <code>finally</code>에서 suspend 함수를 호출하면 <code>CancellationException</code>이 다시 발생한다. <code>withContext(NonCancellable)</code>로 감싸야 한다.</p>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Kotlin</span>
+          <span>#코루틴</span>
+          <span>#구조화된동시성</span>
+          <span>#예외처리</span>
+          <span>#취소</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="kotlin-coroutine-2-scope-context.html">&larr; 이전 글</a>
+          <a href="kotlin-coroutine-4-flow.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

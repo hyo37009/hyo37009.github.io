@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[스프링] 4. SSE 안정성과 이벤트 유실 복구 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[스프링] 4. SSE 안정성과 이벤트 유실 복구</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">SSE 실시간 알림 (4/8)</div>
+            <p>이전 편: <a href="spring-sse-3-architecture.html">[스프링] 3. 실시간 알림 아키텍처</a></p>
+            <p>다음 편: <a href="spring-sse-5-setup.html">[스프링] 5. 프로젝트 세팅과 도메인 설계</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">SSE 실시간 알림 시리즈</div>
+            <p><strong>개념</strong></p>
+            <p>1. <a href="spring-sse-1-protocol.html">SSE와 실시간 통신</a></p>
+            <p>2. <a href="spring-sse-2-connection.html">SSE 연결 관리와 동시성</a></p>
+            <p>3. <a href="spring-sse-3-architecture.html">실시간 알림 아키텍처</a></p>
+            <p>4. <a href="spring-sse-4-reliability.html">SSE 안정성과 이벤트 유실 복구</a> ← 현재 편</p>
+            <p><strong>실습</strong></p>
+            <p>1. <a href="spring-sse-5-setup.html">프로젝트 세팅과 도메인 설계</a></p>
+            <p>2. <a href="spring-sse-6-service.html">SSE 연결 서비스 구현</a></p>
+            <p>3. <a href="spring-sse-7-integration.html">알림 서비스와 프론트엔드 통합</a></p>
+            <p>4. <a href="spring-sse-8-heartbeat.html">Heartbeat와 이벤트 유실 복구 구현</a></p>
+          </div>
+
+          <p>SSE 연결은 영원하지 않다. 네트워크 불안정, 프록시 타임아웃, 서버 재시작 등으로 언제든 끊길 수 있다. 이 편에서는 연결이 끊겼을 때 어떤 문제가 생기는지, 그리고 Heartbeat와 이벤트 저장소로 어떻게 안정성을 확보하는지를 다룬다.</p>
+
+          <h2>SSE 연결이 끊어지는 시나리오</h2>
+
+          <p>SSE 연결이 끊기는 원인은 다양하다:</p>
+
+          <ul>
+            <li><strong>네트워크 순단</strong> : Wi-Fi 전환, 모바일 데이터 끊김 등</li>
+            <li><strong>프록시 타임아웃</strong> : Nginx 같은 리버스 프록시가 일정 시간 데이터가 없으면 연결을 끊음</li>
+            <li><strong>서버 재시작</strong> : 배포나 스케일링으로 서버 인스턴스가 교체됨</li>
+            <li><strong>클라이언트 슬립</strong> : 노트북 덮기, 모바일 백그라운드 전환</li>
+          </ul>
+
+<div class="mermaid">
+graph TD
+    A[SSE 연결 중단 원인] --> B[네트워크 요인]
+    A --> C[서버/인프라 요인]
+    A --> D[클라이언트 요인]
+    
+    B --> B1[Wi-Fi 전환]
+    B --> B2[모바일 데이터 끊김]
+    
+    C --> C1[프록시 타임아웃<br>Nginx 등]
+    C --> C2[서버 배포/재시작]
+    C --> C3[스케일링 인스턴스 교체]
+    
+    D --> D1[노트북 덮기<br>Sleep 모드]
+    D --> D2[모바일 백그라운드 전환]
+</div>
+          <p>문제는 <mark>연결이 끊긴 동안 서버에서 발생한 이벤트가 유실</mark>된다는 것이다. 브라우저가 자동으로 재연결해 주지만, 그 사이에 놓친 알림은 알아서 복구하지 않는다.</p>
+
+          <h2>Heartbeat 패턴</h2>
+
+          <h3>왜 Heartbeat가 필요한가</h3>
+
+          <p>연결이 끊겼는지 서버가 알 수 있는 시점은 <mark>다음 send()를 호출할 때</mark>뿐이다. 알림이 자주 발생하는 서비스면 금방 감지되지만, 조용한 시간대에는 끊긴 연결이 Map에 한참 동안 남아 있을 수 있다.</p>
+
+          <p>주기적으로 더미 메시지를 보내면:</p>
+
+          <ul>
+            <li>연결이 살아 있는지 확인할 수 있다.</li>
+            <li>끊긴 연결을 빠르게 감지하고 정리할 수 있다.</li>
+            <li>프록시의 유휴 타임아웃을 방지할 수 있다.</li>
+          </ul>
+
+          <p>이 더미 메시지가 바로 Heartbeat, 혹은 ping이다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    participant S as Server (@Scheduled)
+    participant P as Proxy (Nginx)
+    participant C as Client
+    
+    Note over S,C: 정상 연결 상태
+    loop 30초마다 (fixedRate)
+        S->>P: Heartbeat (ping) 전송
+        P->>C: 데이터 전달 (연결 유지)
+    end
+    
+    Note over S,C: 네트워크 단절 발생
+    S->>P: Heartbeat (ping) 시도
+    P-->>S: IOException 발생
+    S->>S: Map에서 Emitter 제거 및 정리
+</div>
+          <h3>@Scheduled로 주기적 실행</h3>
+
+          <p>Spring의 <code>@Scheduled</code>를 사용하면 특정 메서드를 일정 주기로 자동 실행할 수 있다.</p>
+
+<pre><code class="language-java">@Scheduled(fixedRate = 30000) // 30초마다
+public void cleanUp() {
+    // 비활성 연결 정리 + ping 전송
+}</code></pre>
+          <p><code>fixedRate</code>는 이전 실행 시작 시점 기준, <code>fixedDelay</code>는 이전 실행 종료 시점 기준이다. Heartbeat처럼 일정한 간격이 중요한 경우 <code>fixedRate</code>를 쓴다.</p>
+
+          <p><code>@Scheduled</code>를 활성화하려면 메인 클래스에 <code>@EnableScheduling</code>을 붙여야 한다. 이걸 빠뜨리면 스케줄러가 아무 동작도 하지 않는다.</p>
+
+          <h3>비활성 연결 감지와 정리</h3>
+
+          <p>ping을 보냈는데 <code>IOException</code>이 발생하면 해당 연결은 이미 죽은 것이다. Map에서 제거하고 emitter를 종료한다.</p>
+
+          <p>여기에 하나 더 — 마지막 활동 시간을 추적하면 "연결은 살아 있지만 오래 놀고 있는" 연결도 정리할 수 있다. 사용자별로 마지막 ping 성공 시각을 기록하고, 일정 시간(예: 5분) 이상 응답이 없으면 정리하는 방식이다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">ping 주기와 프록시 타임아웃</div>
+            <p>Nginx의 기본 <code>proxy_read_timeout</code>은 60초다. ping 주기를 30초로 설정하면 프록시 타임아웃 전에 항상 데이터가 흐르므로 연결이 유지된다. 운영 환경에서는 프록시 설정과 ping 주기를 맞춰야 한다.</p>
+          </div>
+
+          <h2>이벤트 유실 문제</h2>
+
+          <h3>유실이 발생하는 구간</h3>
+
+          <p>사용자 A가 연결된 상태에서 알림이 3건 발생했다고 하자.</p>
+
+          <ol>
+            <li>알림 1 → 전송 성공</li>
+            <li>연결 끊김</li>
+            <li>알림 2 발생 → 전송 시도 → <code>IOException</code> → 실패</li>
+            <li>알림 3 발생 → emitter가 이미 제거됨 → 전송 불가</li>
+            <li>브라우저 재연결</li>
+          </ol>
+
+<div class="mermaid">
+sequenceDiagram
+    participant S as Server
+    participant C as Client
+    
+    S->>C: 알림 1 전송 성공
+    Note right of C: 연결 끊김 (네트워크 불안정)
+    
+    Note over S: 알림 2 발생
+    S--x C: 전송 시도 (실패/유실)
+    
+    Note over S: 알림 3 발생
+    S--x C: 전송 불가 (Emitter 제거됨)
+    
+    C->>S: 재연결 요청
+    Note over C,S: 알림 2, 3 유실 상태
+</div>
+          <p>재연결 후 사용자는 알림 2, 3을 받지 못한다. DB에는 저장돼 있으므로 REST API로 조회하면 보이지만, <mark>실시간 푸시는 유실</mark>된 것이다.</p>
+
+          <h3>Last-Event-ID 심화</h3>
+
+          <p><a href="spring-sse-1-protocol.html">1편</a>에서 SSE 프로토콜의 <code>id</code> 필드와 브라우저의 <code>Last-Event-ID</code> 헤더를 봤다. 이 메커니즘을 서버 측에서 구현하면 유실을 복구할 수 있다.</p>
+
+          <p>흐름은 이렇다:</p>
+
+          <ol>
+            <li>서버는 이벤트를 보낼 때마다 고유 ID를 부여한다.</li>
+            <li>브라우저는 마지막으로 받은 ID를 기억한다.</li>
+            <li>재연결 시 <code>Last-Event-ID</code> 헤더로 서버에 알려준다.</li>
+            <li>서버는 그 ID 이후의 이벤트를 찾아서 재전송한다.</li>
+          </ol>
+
+<div class="mermaid">
+sequenceDiagram
+    participant S as Server (Event Store)
+    participant C as Client
+    
+    S->>C: Event (ID: 10) 전송
+    Note over C: Last-Event-ID = 10 저장
+    
+    Note right of C: 연결 일시 중단
+    Note over S: Event (ID: 11, 12) 발생 & 저장소 보관
+    
+    C->>S: 재연결 (Last-Event-ID: 10)
+    S->>S: 저장소에서 ID > 10 검색 (11, 12 찾음)
+    S->>C: Event 11 전송
+    S->>C: Event 12 전송
+    Note over C: 복구 완료
+</div>
+          <p>이 4번이 핵심이다. "그 ID 이후의 이벤트를 찾아서 재전송"하려면 <mark>이벤트를 어딘가에 보관</mark>해두어야 한다.</p>
+
+          <h2>이벤트 저장소 설계</h2>
+
+          <h3>왜 DB가 아닌 메모리인가</h3>
+
+          <p>알림 데이터는 이미 DB에 저장되어 있다. 하지만 DB에서 조회하면:</p>
+
+          <ul>
+            <li>쿼리 오버헤드가 있다.</li>
+            <li>DB에 저장되기 전에 유실될 수 있다.</li>
+            <li>이벤트 ID와 DB의 알림 ID가 반드시 일치하지 않을 수 있다.</li>
+          </ul>
+
+          <p>그래서 <mark>SSE 이벤트만을 위한 별도의 인메모리 저장소</mark>를 둔다. 짧은 기간(보통 30분 정도)의 이벤트만 보관하고, 그 이전 이벤트는 REST API로 조회하게 한다.</p>
+
+          <h3>AtomicLong으로 순차 ID 생성</h3>
+
+          <p>이벤트 ID는 순차적이어야 한다. "이 ID 이후의 이벤트"를 걸러내려면 대소 비교가 가능해야 하기 때문이다.</p>
+
+          <p>여러 스레드가 동시에 알림을 생성할 수 있으므로, ID 생성기도 스레드 안전해야 한다. <code>AtomicLong</code>의 <code>incrementAndGet()</code>은 <mark>CAS 연산으로 원자성을 보장</mark>한다. 잠금 없이 동시 호출해도 같은 번호가 나오지 않는다.</p>
+
+<pre><code class="language-java">private final AtomicLong eventIdGenerator = new AtomicLong(0);
+
+public String generateEventId() {
+    return String.valueOf(eventIdGenerator.incrementAndGet());
+}</code></pre>
+          <div class="callout callout-info">
+            <div class="callout-title">CAS란</div>
+            <p>Compare-And-Swap의 약자다. "현재 값이 내가 읽은 값과 같으면 새 값으로 바꿔라"라는 원자적 연산이다. 값이 달라져 있으면 실패하고 재시도한다. synchronized보다 가볍고, 경합이 적을 때 성능이 좋다.</p>
+          </div>
+
+          <h3>사용자별 이벤트 보관</h3>
+
+          <p>이벤트 저장소의 구조는 두 층이다:</p>
+
+          <ul>
+            <li><strong>사용자별 보관함</strong> : <code>Map&lt;String, List&lt;SseEvent&gt;&gt;</code>. 사용자마다 이벤트 리스트를 관리한다.</li>
+            <li><strong>ID 기반 인덱스</strong> : <code>Map&lt;String, SseEvent&gt;</code>. 이벤트 ID로 빠르게 검색할 때 쓴다.</li>
+          </ul>
+
+<div class="mermaid">
+classDiagram
+    class SseEventStore {
+        -Map~String, List~SseEvent~~ userEvents
+        -Map~String, SseEvent~ eventCache
+        +save(String userId, SseEvent event)
+        +findAllByUserIdAfter(String userId, String lastId)
+        +removeOldEvents()
+    }
+    class SseEvent {
+        +String id
+        +String name
+        +Object data
+        +LocalDateTime timestamp
+    }
+    SseEventStore "1" -- "*" SseEvent : 보관
+</div>
+          <p><code>computeIfAbsent</code>를 활용하면 키가 없을 때만 새 리스트를 생성할 수 있다. 리스트 자체도 <code>Collections.synchronizedList</code>로 감싸서 동시 접근에 안전하게 만든다.</p>
+
+          <h3>메모리 관리</h3>
+
+          <p>인메모리 저장소는 관리하지 않으면 메모리가 무한히 증가한다. 두 가지 제한을 건다:</p>
+
+          <ul>
+            <li><strong>최대 개수 제한</strong> : 사용자당 이벤트 수를 100개로 제한한다. 초과하면 가장 오래된 이벤트부터 삭제한다.</li>
+            <li><strong>TTL 기반 정리</strong> : <code>@Scheduled</code>로 10분마다 실행하면서, 30분 이상 된 이벤트를 일괄 삭제한다. 보관함이 비면 보관함 자체(Map의 키)도 삭제한다.</li>
+          </ul>
+
+          <h2>이벤트 복구 흐름</h2>
+
+          <p>모든 조각을 합치면 전체 복구 흐름은 이렇다:</p>
+
+          <ol>
+            <li>클라이언트가 재연결 요청을 보낸다. <code>Last-Event-ID</code> 파라미터를 함께 전달한다.</li>
+            <li>서버가 새 <code>SseEmitter</code>를 생성한다.</li>
+            <li>초기 연결 메시지를 보낸다.</li>
+            <li><code>Last-Event-ID</code>가 있으면 이벤트 저장소에서 해당 ID 이후의 이벤트를 조회한다.</li>
+            <li>누락된 이벤트를 순서대로 재전송한다.</li>
+            <li>이후 새 이벤트는 정상 흐름으로 전달된다.</li>
+          </ol>
+
+<div class="mermaid">
+flowchart TD
+    Start([재연결 요청 시작]) --> GetID{Last-Event-ID<br>존재 여부}
+    GetID -- 있음 --> FindEvents[이벤트 저장소에서<br>ID 이후 데이터 조회]
+    GetID -- 없음 --> SendInit[초기 연결 메시지 전송]
+    
+    FindEvents --> SendMissing[누락된 이벤트 순차 전송]
+    SendMissing --> SendInit
+    SendInit --> NormalFlow[정상 스트리밍 시작]
+    NormalFlow --> End([연결 유지])
+</div>
+          <p>프론트엔드 측에서도 <code>Last-Event-ID</code>를 관리해야 한다. 브라우저의 <code>EventSource</code>가 자동 재연결할 때는 알아서 보내주지만, <mark>수동으로 재연결하는 경우에는 localStorage 등에 마지막 ID를 저장</mark>해두고 쿼리 파라미터로 직접 전달해야 한다.</p>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">@EnableScheduling 누락</div>
+            <p><code>@Scheduled</code>를 붙여도 <code>@EnableScheduling</code>이 없으면 스케줄러가 동작하지 않는다. Heartbeat가 전혀 실행되지 않아서 죽은 연결이 계속 쌓인다.</p>
+            <p>[!DANGER] 이벤트 저장소에 TTL 미설정</p>
+            <p>인메모리 저장소에 이벤트를 쌓기만 하고 정리하지 않으면 서버 메모리가 고갈된다. 반드시 최대 개수와 TTL 기반 정리를 모두 적용한다.</p>
+            <p>[!DANGER] Last-Event-ID를 무시</p>
+            <p>클라이언트가 <code>Last-Event-ID</code>를 보내도 서버에서 처리하지 않으면 이벤트 복구가 불가능하다. 재연결 시 이 값을 받아서 이벤트 저장소를 조회하는 로직을 반드시 구현한다.</p>
+          </div>
+
+          <h2>면접 대비</h2>
+
+          <div class="callout callout-question">
+            <div class="callout-title">SSE와 WebSocket의 차이를 설명해 보세요.</div>
+            <p>SSE는 서버 → 클라이언트 단방향, HTTP 기반, 자동 재연결 내장이다. WebSocket은 양방향 전이중, TCP 기반, 재연결은 직접 구현해야 한다. 알림처럼 서버 푸시만 필요한 경우 SSE가 더 적합하고, 채팅처럼 양방향이 필요하면 WebSocket을 쓴다.</p>
+            <p>[!QUESTION] ConcurrentHashMap과 synchronized Map의 차이는?</p>
+            <p>synchronized Map은 모든 연산에 전체 잠금을 건다. ConcurrentHashMap은 버킷(노드) 단위로 잠금을 걸어서 서로 다른 키에 대한 동시 접근이 가능하고, 읽기는 잠금 없이 수행된다. SSE처럼 읽기가 잦은 경우 ConcurrentHashMap이 훨씬 효율적이다.</p>
+            <p>[!QUESTION] SSE 연결이 끊겼을 때 이벤트 유실을 어떻게 방지하나요?</p>
+            <p>세 가지를 조합한다. 이벤트를 보낼 때 고유 ID를 부여한다. 이벤트를 인메모리 저장소에 일정 시간 보관한다. 재연결 시 클라이언트가 Last-Event-ID를 보내면 그 이후의 이벤트를 재전송한다. 함정: "DB에서 조회하면 되지 않나요?" → DB 조회는 오버헤드가 크고, DB 저장 전에 유실된 이벤트는 복구가 불가능하다.</p>
+            <p>[!QUESTION] SseEmitter의 타임아웃은 어떻게 설정하나요? 왜 중요한가요?</p>
+            <p>생성자에 밀리초 단위로 전달한다. 설정하지 않으면 서블릿 컨테이너 기본값(보통 30초)이 적용되어, 30초마다 연결이 끊기고 재연결되는 비효율이 생긴다. 운영에서는 서비스 특성에 맞게 조절하되, Heartbeat와 함께 사용해서 프록시 타임아웃도 함께 고려해야 한다.</p>
+            <p>[!QUESTION] @Async를 사용할 때 주의할 점은?</p>
+            <p>같은 클래스 내부에서 호출하면 프록시를 거치지 않아서 비동기가 적용되지 않는다. 반드시 다른 빈에서 호출해야 한다. 또한 별도 스레드에서 실행되므로 호출한 쪽의 트랜잭션과는 독립적이다. 스레드 풀 설정도 확인해야 하며, 예외가 void 반환 메서드에서 발생하면 조용히 유실될 수 있다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#스프링</span>
+          <span>#SSE</span>
+          <span>#Heartbeat</span>
+          <span>#이벤트유실</span>
+          <span>#AtomicLong</span>
+          <span>#Scheduled</span>
+          <span>#면접</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="spring-sse-3-architecture.html">&larr; 이전 글</a>
+          <a href="spring-sse-5-setup.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

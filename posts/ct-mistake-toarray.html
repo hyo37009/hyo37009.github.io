@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Java 자료구조] toArray와 primitive 배열 변환 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Java 자료구조] toArray와 primitive 배열 변환</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">작성 정보</div>
+            <p>- <strong>작성일</strong> : 2026-05-29</p>
+            <p>- <strong>관련 문제</strong> : <a href="코딩테스트문제-풀이프로그래머스pg42579-베스트-앨범00-복습-인덱스.html">PG42579 베스트 앨범</a>, <a href="코딩테스트문제-풀이프로그래머스pg42888-오픈채팅방풀이-접근.html">PG42888 오픈채팅방</a></p>
+          </div>
+
+          <p><code>toArray</code>는 자주 까먹기 쉬운 API다. 핵심은 반환 타입이다. <code>String[]</code>가 필요한지, <code>Integer[]</code>가 필요한지, <code>int[]</code>가 필요한지에 따라 마지막 코드가 달라진다.</p>
+
+          <h2>List를 참조 타입 배열로 바꾸기</h2>
+
+          <p><code>List&lt;String&gt;</code>을 <code>String[]</code>로 바꿀 때는 다음처럼 쓴다.</p>
+
+<pre><code class="language-java">String[] result = list.toArray(new String[0]);</code></pre>
+          <p><code>new String[0]</code>은 반환 배열의 타입을 알려주는 역할이다.</p>
+
+          <p><code>List&lt;Integer&gt;</code>를 <code>Integer[]</code>로 바꾸면 다음과 같다.</p>
+
+<pre><code class="language-java">Integer[] result = list.toArray(new Integer[0]);</code></pre>
+          <h2>int[]가 필요할 때</h2>
+
+          <p><code>List&lt;Integer&gt;</code>에서 <code>int[]</code>를 만들 때는 <code>toArray(new int[0])</code>를 쓸 수 없다. 제네릭 컬렉션은 primitive 타입 배열을 직접 만들 수 없기 때문이다.</p>
+
+          <p>이때는 stream을 <code>IntStream</code>으로 바꾼 뒤 <code>toArray()</code>를 사용한다.</p>
+
+<pre><code class="language-java">int[] result = list.stream()
+        .mapToInt(Integer::intValue)
+        .toArray();</code></pre>
+          <p>객체 스트림에서 필드를 꺼낼 때도 같은 흐름이다.</p>
+
+<pre><code class="language-java">int[] result = songs.stream()
+        .mapToInt(song -&gt; song.index)
+        .toArray();</code></pre>
+          <p>또는 먼저 <code>Integer</code>로 매핑한 뒤 <code>mapToInt</code>를 써도 된다.</p>
+
+<pre><code class="language-java">int[] result = songs.stream()
+        .map(song -&gt; song.index)
+        .mapToInt(Integer::intValue)
+        .toArray();</code></pre>
+          <p>다만 바로 <code>mapToInt(song -&gt; song.index)</code>가 더 짧다.</p>
+
+          <h2>Stream.toList와 Collectors.toList</h2>
+
+          <p><code>stream().toList()</code>는 Java 16 이후 API다. 로컬 JDK가 17이어도 채점 환경이나 컴파일 타깃이 낮으면 인식되지 않을 수 있다.</p>
+
+          <p>프로그래머스에서 안전하게 가려면 다음처럼 쓴다.</p>
+
+<pre><code class="language-java">List&lt;Integer&gt; list = stream.collect(Collectors.toList());</code></pre>
+          <p>필요한 import는 다음이다.</p>
+
+<pre><code class="language-java">import java.util.stream.Collectors;</code></pre>
+          <h2>반환 타입별 기억표</h2>
+
+          <table>
+          <thead>
+          <tr><th>필요한 타입</th><th>코드</th></tr>
+          </thead>
+          <tbody>
+          <tr><td><code>String[]</code></td><td><code>list.toArray(new String[0])</code></td></tr>
+          <tr><td><code>Integer[]</code></td><td><code>list.toArray(new Integer[0])</code></td></tr>
+          <tr><td><code>int[]</code></td><td><code>list.stream().mapToInt(Integer::intValue).toArray()</code></td></tr>
+          <tr><td>객체 필드에서 <code>int[]</code></td><td><code>list.stream().mapToInt(x -&gt; x.field).toArray()</code></td></tr>
+          <tr><td>Java 8 호환 List</td><td><code>stream.collect(Collectors.toList())</code></td></tr>
+          </tbody>
+          </table>
+
+          <h2>실수 체크</h2>
+
+          <ul class="task-list">
+            <li><input type="checkbox" disabled> 필요한 반환 타입이 <code>int[]</code>인지 <code>Integer[]</code>인지 먼저 확인했는가</li>
+            <li><input type="checkbox" disabled> primitive 배열이면 <code>mapToInt(...).toArray()</code>를 썼는가</li>
+            <li><input type="checkbox" disabled> 참조 타입 배열이면 <code>new 타입[0]</code>을 넣었는가</li>
+            <li><input type="checkbox" disabled> 제출 환경이 애매하면 <code>stream().toList()</code> 대신 <code>Collectors.toList()</code>를 썼는가</li>
+          </ul>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#코딩테스트</span>
+          <span>#자주하는실수</span>
+          <span>#Java</span>
+          <span>#Stream</span>
+          <span>#toArray</span>
+          <span>#배열변환</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

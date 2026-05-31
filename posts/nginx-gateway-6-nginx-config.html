@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[스프링] 6. Nginx API Gateway 설정하기 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[스프링] 6. Nginx API Gateway 설정하기</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Nginx API Gateway (6/7)</div>
+            <p>이전 편: <a href="nginx-gateway-5-spring-boot.html">[스프링] 5. Spring Boot 마이크로서비스 구성하기</a></p>
+            <p>다음 편: <a href="nginx-gateway-7-docker-compose.html">[스프링] 7. Docker Compose로 전체 시스템 실행하기</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">Nginx API Gateway 실습 시리즈</div>
+            <p>1. <a href="nginx-gateway-5-spring-boot.html">Spring Boot 마이크로서비스 구성하기</a></p>
+            <p>2. <strong>Nginx API Gateway 설정하기</strong> (현재 문서)</p>
+            <p>3. <a href="nginx-gateway-7-docker-compose.html">Docker Compose로 전체 시스템 실행하기</a></p>
+          </div>
+
+          <p>이전 편에서 만든 3개의 Spring Boot 서비스를 하나로 묶어줄 관문이 필요하다. 이번 편에서는 Nginx를 API Gateway로 설정해서, URL 경로에 따라 적절한 서비스로 라우팅하고 Rate Limiting까지 적용한다. 테스트 대시보드 프론트엔드도 함께 구성한다.</p>
+
+          <h2>왜 Nginx 설정을 직접 작성하는가</h2>
+
+          <p>Nginx를 Docker에서 쓸 때 기본 이미지에 이미 설정 파일이 포함되어 있다. 하지만 API Gateway로 쓰려면 <mark>라우팅 규칙, 프록시 설정, Rate Limiting을 직접 정의</mark>해야 한다. 기본 설정은 정적 파일 서빙만 하기 때문이다.</p>
+
+          <p>이 편에서 만드는 파일은 세 가지다.</p>
+
+<pre><code>nginx/
+├── Dockerfile              ← Nginx 이미지 빌드
+├── conf/api-gateway.conf   ← 핵심: 라우팅 + Rate Limiting 설정
+└── html/
+    ├── index.html           ← 테스트 대시보드 UI
+    ├── script.js            ← API 테스트 로직
+    └── style.css            ← 대시보드 스타일</code></pre>
+          <h2>사전 준비</h2>
+
+          <p>프로젝트 루트에 <code>nginx</code> 폴더를 만들고 하위 디렉토리를 구성한다.</p>
+
+<pre><code>mkdir -p nginx/conf nginx/html</code></pre>
+          <h2>API Gateway 설정 파일 작성하기</h2>
+
+          <h3>단계 1 — upstream 정의</h3>
+
+          <p>먼저 Nginx가 요청을 보낼 백엔드 서비스의 주소를 등록한다. <code>nginx/conf/api-gateway.conf</code> 파일을 만든다.</p>
+
+<pre><code class="language-nginx"># 백엔드 서비스 정의
+upstream user-service {
+    server user-service:8081;
+}
+
+upstream order-service {
+    server order-service:8082;
+}
+
+upstream payment-service {
+    server payment-service:8083;
+}</code></pre>
+          <p><code>server user-service:8081</code>에서 <code>user-service</code>는 Docker Compose의 서비스 이름이다. Docker가 이 이름을 컨테이너 IP로 해석해준다. 아직 Docker Compose를 작성하지 않았지만, 이름을 미리 맞춰두는 것이다.</p>
+
+          <h3>단계 2 — Rate Limiting 규칙 선언</h3>
+
+          <p>upstream 위에 Rate Limiting 규칙을 선언한다. <code>limit_req_zone</code>은 server 블록 바깥에 위치해야 한다.</p>
+
+<pre><code class="language-nginx"># Rate Limiting 설정
+limit_req_zone $binary_remote_addr zone=users_limit:10m rate=20r/m;
+limit_req_zone $binary_remote_addr zone=orders_limit:10m rate=15r/m;
+limit_req_zone $binary_remote_addr zone=payments_limit:10m rate=10r/m;
+
+# Rate Limiting 에러 코드 설정(429)
+limit_req_status 429;</code></pre>
+          <p><code>$binary_remote_addr</code>로 <mark>클라이언트 IP별로 요청을 구분</mark>한다. 서비스별로 zone을 분리해서 차등 제한을 건다.</p>
+
+          <p><code>limit_req_status 429</code>는 기본 503 대신 429를 반환하도록 하는 설정이다. 이 한 줄이 없으면 Rate Limit 초과 시 "서비스 장애"와 "요청 초과"를 구분할 수 없다.</p>
+
+          <h3>단계 3 — server 블록과 location 작성</h3>
+
+          <p>server 블록 안에 각 URL 패턴에 대한 처리를 정의한다.</p>
+
+<pre><code class="language-nginx">server {
+    listen 80;
+    server_name localhost;
+
+    # 메인 페이지 (테스트 UI)
+    location / {
+        root /usr/share/nginx/html;
+        index index.html;
+        try_files $uri $uri/ /index.html;
+    }
+
+    # 정적 파일 (CSS, JS, 이미지)
+    location ~* \.(css|js|png|jpg|jpeg|gif|ico|svg)$ {
+        root /usr/share/nginx/html;
+    }
+
+    # API Gateway 헬스체크
+    location /health {
+        add_header Content-Type application/json;
+        return 200 '{"status":"UP","service":"api-gateway","message":"API Gateway is healthy"}';
+    }</code></pre>
+          <p><code>/health</code>는 백엔드로 프록시하지 않고 Nginx가 직접 JSON을 반환한다. Gateway 자체의 상태를 확인하는 엔드포인트다.</p>
+
+          <p>이어서 각 서비스로의 라우팅을 추가한다.</p>
+
+<pre><code class="language-nginx">    # User Service 라우팅 (분당 20 요청 제한)
+    location /api/users {
+        limit_req zone=users_limit burst=5 nodelay;
+
+        proxy_pass http://user-service;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        add_header X-Gateway-Service "user-service" always;
+        add_header X-Rate-Limit "20/min" always;
+    }
+
+    # Order Service 라우팅 (분당 15 요청 제한)
+    location /api/orders {
+        limit_req zone=orders_limit burst=3 nodelay;
+
+        proxy_pass http://order-service;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        add_header X-Gateway-Service "order-service" always;
+        add_header X-Rate-Limit "15/min" always;
+    }
+
+    # Payment Service 라우팅 (분당 10 요청 제한)
+    location /api/payments {
+        limit_req zone=payments_limit burst=3 nodelay;
+
+        proxy_pass http://payment-service;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        add_header X-Gateway-Service "payment-service" always;
+        add_header X-Rate-Limit "10/min" always;
+    }
+}</code></pre>
+          <p>세 location의 구조가 동일하다. 달라지는 부분은 <code>zone</code> 이름, <code>burst</code> 값, <code>proxy_pass</code> 대상, 커스텀 헤더 값뿐이다.</p>
+
+          <p>각 location 안에서 일어나는 일을 순서대로 정리하면 이렇다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant C as 클라이언트
+    participant N as Nginx
+    participant B as 백엔드 서비스
+
+    C->>N: GET /api/users
+
+    rect rgb(255, 243, 224)
+        Note over N: 1. limit_req 검사<br/>→ 허용 범위 내인지 확인
+    end
+
+    rect rgb(232, 248, 232)
+        Note over N: 2. proxy_set_header<br/>→ 원본 클라이언트 정보 보존
+        N->>B: GET /api/users<br/>+ Host, X-Real-IP 등
+        B-->>N: 200 OK + JSON
+    end
+
+    rect rgb(240, 248, 255)
+        Note over N: 3. add_header<br/>→ 응답에 Gateway 정보 추가
+        N-->>C: 200 OK + JSON<br/>+ X-Gateway-Service<br/>+ X-Rate-Limit
+    end
+</div>
+          <p>주황 영역에서 Rate Limiting 검사를 먼저 한다. 통과하면 초록 영역에서 프록시 헤더를 붙여 백엔드에 전달한다. 파란 영역에서 응답에 커스텀 헤더를 추가한 뒤 클라이언트에게 돌려준다.</p>
+
+          <h2>Nginx Dockerfile 작성하기</h2>
+
+          <h3>단계 1 — 기본 이미지와 설정 교체</h3>
+
+<pre><code class="language-dockerfile">FROM nginx:alpine
+
+LABEL maintainer="Codeit"
+LABEL description="API Gateway using Nginx for Microservices"
+LABEL version="1.0.0"
+
+RUN apk add --no-cache curl
+
+RUN rm /etc/nginx/conf.d/default.conf
+
+COPY conf/api-gateway.conf /etc/nginx/conf.d/</code></pre>
+          <p><code>nginx:alpine</code>은 경량 Linux 기반의 Nginx 이미지다. <code>curl</code>은 헬스체크에 필요하므로 설치한다. 기본 설정 파일인 <code>default.conf</code>를 삭제하고, 직접 작성한 <code>api-gateway.conf</code>를 복사한다.</p>
+
+          <p><mark>기본 설정을 삭제하는 이유</mark>는 충돌 방지다. <code>default.conf</code>에도 80번 포트를 사용하는 server 블록이 있어서, 우리 설정과 충돌한다.</p>
+
+          <h3>단계 2 — 정적 파일과 헬스체크</h3>
+
+<pre><code class="language-dockerfile">COPY html/ /usr/share/nginx/html/
+
+RUN mkdir -p /var/log/nginx &amp;&amp; \
+    chown -R nginx:nginx /var/log/nginx
+
+EXPOSE 80
+
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+    CMD curl -f http://localhost/health || exit 1
+
+CMD ["nginx", "-g", "daemon off;"]</code></pre>
+          <p><code>html/</code> 폴더 전체를 Nginx의 기본 웹 루트에 복사한다. <code>daemon off;</code>는 Nginx를 포그라운드로 실행하라는 뜻이다. Docker 컨테이너는 메인 프로세스가 종료되면 컨테이너도 종료되기 때문에, 백그라운드 데몬으로 돌리면 안 된다.</p>
+
+          <h2>테스트 대시보드 만들기</h2>
+
+          <p>테스트 대시보드는 브라우저에서 API Gateway의 동작을 확인하는 프론트엔드다. 서비스 헬스체크, API 호출 테스트, Rate Limiting 스트레스 테스트 기능을 제공한다.</p>
+
+          <h3>단계 1 — HTML 구조</h3>
+
+          <p><code>nginx/html/index.html</code>을 작성한다.</p>
+
+<pre><code class="language-html">&lt;!DOCTYPE html&gt;
+&lt;html lang="ko"&gt;
+&lt;head&gt;
+    &lt;meta charset="UTF-8"&gt;
+    &lt;meta name="viewport"
+          content="width=device-width, initial-scale=1.0"&gt;
+    &lt;title&gt;API Gateway 테스트 대시보드&lt;/title&gt;
+    &lt;link rel="stylesheet" href="style.css"&gt;
+&lt;/head&gt;
+&lt;body&gt;
+&lt;div class="container"&gt;
+    &lt;header&gt;
+        &lt;h1&gt;API Gateway 마이크로서비스 테스트&lt;/h1&gt;
+        &lt;p class="subtitle"&gt;Nginx를 통한 API 라우팅 및 Rate Limiting 테스트&lt;/p&gt;
+    &lt;/header&gt;
+
+    &lt;main&gt;
+        &lt;section class="status-section"&gt;
+            &lt;h2&gt;서비스 상태 확인&lt;/h2&gt;
+            &lt;div class="service-grid"&gt;
+                &lt;div class="service-card"&gt;
+                    &lt;h3&gt;API Gateway&lt;/h3&gt;
+                    &lt;div class="status-indicator" id="gateway-status"&gt;
+                        확인 중...&lt;/div&gt;
+                    &lt;button onclick="checkGatewayHealth()"&gt;상태 확인&lt;/button&gt;
+                &lt;/div&gt;
+                &lt;div class="service-card"&gt;
+                    &lt;h3&gt;User Service&lt;/h3&gt;
+                    &lt;div class="status-indicator" id="user-status"&gt;
+                        확인 중...&lt;/div&gt;
+                    &lt;button onclick="checkServiceHealth('users')"&gt;
+                        상태 확인&lt;/button&gt;
+                &lt;/div&gt;
+                &lt;div class="service-card"&gt;
+                    &lt;h3&gt;Order Service&lt;/h3&gt;
+                    &lt;div class="status-indicator" id="order-status"&gt;
+                        확인 중...&lt;/div&gt;
+                    &lt;button onclick="checkServiceHealth('orders')"&gt;
+                        상태 확인&lt;/button&gt;
+                &lt;/div&gt;
+                &lt;div class="service-card"&gt;
+                    &lt;h3&gt;Payment Service&lt;/h3&gt;
+                    &lt;div class="status-indicator" id="payment-status"&gt;
+                        확인 중...&lt;/div&gt;
+                    &lt;button onclick="checkServiceHealth('payments')"&gt;
+                        상태 확인&lt;/button&gt;
+                &lt;/div&gt;
+            &lt;/div&gt;
+        &lt;/section&gt;
+
+        &lt;section class="test-section"&gt;
+            &lt;h2&gt;API 기능 테스트&lt;/h2&gt;
+
+            &lt;div class="test-group"&gt;
+                &lt;h3&gt;User Service (Rate Limit: 20/분)&lt;/h3&gt;
+                &lt;div class="test-controls"&gt;
+                    &lt;button onclick="testAPI('/api/users', 'GET')"&gt;
+                        전체 사용자 조회&lt;/button&gt;
+                    &lt;button onclick="testAPI('/api/users/1', 'GET')"&gt;
+                        사용자 상세 조회&lt;/button&gt;
+                    &lt;button onclick="testUserCreate()"&gt;
+                        사용자 생성 테스트&lt;/button&gt;
+                    &lt;button onclick="stressTest('users', 20)"&gt;
+                        Rate Limit 테스트 (20회)&lt;/button&gt;
+                &lt;/div&gt;
+            &lt;/div&gt;
+
+            &lt;div class="test-group"&gt;
+                &lt;h3&gt;Order Service (Rate Limit: 15/분)&lt;/h3&gt;
+                &lt;div class="test-controls"&gt;
+                    &lt;button onclick="testAPI('/api/orders', 'GET')"&gt;
+                        전체 주문 조회&lt;/button&gt;
+                    &lt;button onclick="testOrderCreate()"&gt;
+                        주문 생성 테스트&lt;/button&gt;
+                    &lt;button onclick="stressTest('orders', 15)"&gt;
+                        Rate Limit 테스트 (15회)&lt;/button&gt;
+                &lt;/div&gt;
+            &lt;/div&gt;
+
+            &lt;div class="test-group"&gt;
+                &lt;h3&gt;Payment Service (Rate Limit: 10/분)&lt;/h3&gt;
+                &lt;div class="test-controls"&gt;
+                    &lt;button onclick="testAPI('/api/payments', 'GET')"&gt;
+                        전체 결제 조회&lt;/button&gt;
+                    &lt;button onclick="testPaymentCreate()"&gt;
+                        결제 생성 테스트&lt;/button&gt;
+                    &lt;button onclick="stressTest('payments', 10)"&gt;
+                        Rate Limit 테스트 (10회)&lt;/button&gt;
+                &lt;/div&gt;
+            &lt;/div&gt;
+        &lt;/section&gt;
+
+        &lt;section class="result-section"&gt;
+            &lt;h2&gt;테스트 결과&lt;/h2&gt;
+            &lt;div class="result-container"&gt;
+                &lt;div class="result-header"&gt;
+                    &lt;button onclick="clearResults()"&gt;결과 지우기&lt;/button&gt;
+                &lt;/div&gt;
+                &lt;div id="test-results" class="result-content"&gt;
+                    &lt;p class="placeholder"&gt;
+                        테스트를 실행하면 결과가 여기에 표시됩니다.&lt;/p&gt;
+                &lt;/div&gt;
+            &lt;/div&gt;
+        &lt;/section&gt;
+    &lt;/main&gt;
+&lt;/div&gt;
+
+&lt;script src="script.js"&gt;&lt;/script&gt;
+&lt;/body&gt;
+&lt;/html&gt;</code></pre>
+          <p>각 서비스 카드에 <mark>헬스체크 버튼</mark>과 <mark>API 테스트 버튼</mark>이 있다. "Rate Limit 테스트" 버튼은 지정한 횟수만큼 동시 요청을 보내서 429 응답이 오는지 확인한다.</p>
+
+          <h3>단계 2 — JavaScript 핵심 로직</h3>
+
+          <p><code>nginx/html/script.js</code>에서 API 호출과 테스트 로직을 구현한다. 핵심 클래스인 <code>APIGatewayTester</code>의 주요 메서드를 살펴본다.</p>
+
+<pre><code class="language-javascript">class APIGatewayTester {
+    constructor() {
+        this.baseURL = '';
+        this.testResults = document.getElementById('test-results');
+        this.init();
+    }
+
+    init() {
+        this.checkAllServices();
+    }
+
+    async makeRequest(url, method = 'GET', data = null) {
+        const options = {
+            method: method,
+            headers: { 'Content-Type': 'application/json' }
+        };
+        if (data &amp;&amp; method !== 'GET') {
+            options.body = JSON.stringify(data);
+        }
+
+        try {
+            const response = await fetch(url, options);
+            const responseData = await response.json();
+            return {
+                status: response.status,
+                ok: response.ok,
+                data: responseData,
+                headers: Object.fromEntries(response.headers.entries())
+            };
+        } catch (error) {
+            return { status: 0, ok: false, error: error.message };
+        }
+    }
+}</code></pre>
+          <p><code>baseURL</code>이 빈 문자열이라는 점에 주목해야 한다. 대시보드 HTML이 Nginx에서 서빙되기 때문에, fetch 요청은 <mark>같은 호스트(Nginx)로 전송</mark>된다. 별도의 API 서버 주소를 지정할 필요가 없다.</p>
+
+          <p>응답 헤더를 <code>Object.fromEntries(response.headers.entries())</code>로 변환하는 부분도 중요하다. 이렇게 해야 <code>X-Gateway-Service</code>나 <code>X-Rate-Limit</code> 같은 커스텀 헤더를 읽을 수 있다.</p>
+
+          <p>Rate Limiting 스트레스 테스트 함수는 <code>Promise.all</code>로 병렬 요청을 보낸다.</p>
+
+<pre><code class="language-javascript">async stressTest(serviceName, requestCount) {
+    const endpoint = `/api/${serviceName}`;
+    let successCount = 0;
+    let rateLimitCount = 0;
+
+    const requests = Array.from(
+        {length: requestCount},
+        (_, i) =&gt; this.makeRequest(endpoint).then(result =&gt; {
+            if (result.status === 429) rateLimitCount++;
+            else if (result.ok) successCount++;
+            return result;
+        })
+    );
+
+    await Promise.all(requests);
+    // 결과: successCount + rateLimitCount 표시
+}</code></pre>
+          <p>동시에 모든 요청을 발사하므로 Rate Limiting이 잘 걸리는지 확인할 수 있다. <code>status === 429</code>인 응답의 수가 곧 Rate Limiting이 차단한 요청 수다.</p>
+
+          <h2>코드 뜯어보기</h2>
+
+          <h3>api-gateway.conf의 설정 흐름</h3>
+
+          <p>설정 파일의 지시어들이 어떤 순서로 처리되는지 정리하면 전체 그림이 보인다.</p>
+
+<div class="mermaid">
+flowchart TD
+    REQ(["클라이언트 요청"])
+    REQ --> LOC{"location 매칭"}
+
+    LOC -->|"/api/users"| RL1["limit_req 검사<br/>users_limit"]
+    LOC -->|"/api/orders"| RL2["limit_req 검사<br/>orders_limit"]
+    LOC -->|"/api/payments"| RL3["limit_req 검사<br/>payments_limit"]
+    LOC -->|"/"| STATIC["정적 파일 서빙"]
+    LOC -->|"/health"| HEALTH["직접 200 반환"]
+
+    RL1 -->|"허용"| PROXY1["proxy_pass<br/>→ user-service:8081"]
+    RL1 -->|"초과"| REJECT["429 거부"]
+    RL2 -->|"허용"| PROXY2["proxy_pass<br/>→ order-service:8082"]
+    RL2 -->|"초과"| REJECT
+    RL3 -->|"허용"| PROXY3["proxy_pass<br/>→ payment-service:8083"]
+    RL3 -->|"초과"| REJECT
+
+    style REQ fill:#E8F4F8,stroke:#2196F3,stroke-width:2px,color:#000
+    style LOC fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#000
+    style RL1 fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#000
+    style RL2 fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#000
+    style RL3 fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#000
+    style PROXY1 fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style PROXY2 fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style PROXY3 fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style STATIC fill:#F3E5F5,stroke:#9C27B0,stroke-width:2px,color:#000
+    style HEALTH fill:#F3E5F5,stroke:#9C27B0,stroke-width:2px,color:#000
+    style REJECT fill:#FFE6E6,stroke:#F44336,stroke-width:2px,color:#000
+</div>
+          <h3>테스트 대시보드의 검증 포인트</h3>
+
+          <p>대시보드에서 확인해야 할 것들을 정리한다.</p>
+
+          <ul>
+            <li><strong>헬스체크</strong> : 4개 서비스 모두 "정상" 상태인지</li>
+            <li><strong>라우팅</strong> : 응답의 <code>X-Gateway-Service</code> 헤더가 올바른 서비스 이름을 가리키는지</li>
+            <li><strong>Rate Limiting</strong> : 스트레스 테스트에서 429 응답이 발생하는지</li>
+            <li><strong>CRUD</strong> : 생성/조회 API가 정상 동작하는지</li>
+          </ul>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">default.conf를 삭제하지 않기</div>
+            <p>Nginx 기본 이미지에 포함된 <code>default.conf</code>도 80번 포트를 사용한다. 이 파일을 삭제하지 않으면 우리 설정과 충돌해서 예상과 다른 동작이 발생한다. Dockerfile에서 <code>RUN rm /etc/nginx/conf.d/default.conf</code>를 반드시 포함해야 한다.</p>
+            <p>[!DANGER] limit_req_zone을 server 블록 안에 넣기</p>
+            <p><code>limit_req_zone</code>은 http 블록 레벨에 위치해야 한다. server나 location 블록 안에 넣으면 Nginx가 설정 오류를 발생시킨다. <code>conf.d/</code> 디렉토리의 파일은 http 블록 안에서 include되므로, 파일 최상위에 쓰면 된다.</p>
+            <p>[!DANGER] 프론트엔드에서 CORS 문제가 생기는 경우</p>
+            <p>대시보드가 Nginx에서 서빙되고 API도 같은 Nginx를 통해 요청하므로, 이 실습에서는 CORS 문제가 발생하지 않는다. 하지만 별도 도메인에서 프론트엔드를 서빙하는 경우 Nginx에 CORS 헤더를 추가해야 한다. 이 점은 운영 환경에서 주의해야 한다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#스프링</span>
+          <span>#Nginx</span>
+          <span>#API_Gateway</span>
+          <span>#Rate_Limiting</span>
+          <span>#Dockerfile</span>
+          <span>#실습</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="nginx-gateway-5-spring-boot.html">&larr; 이전 글</a>
+          <a href="nginx-gateway-7-docker-compose.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

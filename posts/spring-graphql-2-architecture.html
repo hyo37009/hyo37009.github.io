@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Spring GraphQL] 2. Spring GraphQL 아키텍처와 Resolver - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Spring GraphQL] 2. Spring GraphQL 아키텍처와 Resolver</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Spring GraphQL (2/8)</div>
+            <p>이전 편: <a href="spring-graphql-1-concepts.html">[Spring GraphQL] 1. GraphQL 등장 배경과 핵심 개념</a></p>
+            <p>다음 편: <a href="spring-graphql-3-n-plus-one.html">[Spring GraphQL] 3. N+1 문제와 @BatchMapping</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">Spring GraphQL 개념 시리즈</div>
+            <p>1. <a href="spring-graphql-1-concepts.html">GraphQL 등장 배경과 핵심 개념</a></p>
+            <p>2. <a href="spring-graphql-2-architecture.html">Spring GraphQL 아키텍처와 Resolver</a> ← 현재 문서</p>
+            <p>3. <a href="spring-graphql-3-n-plus-one.html">N+1 문제와 @BatchMapping</a></p>
+            <p>4. <a href="spring-graphql-4-subscription.html">Subscription과 예외 처리</a></p>
+          </div>
+
+          <p><a href="spring-graphql-1-concepts.html">1편</a>에서 GraphQL의 개념과 스키마를 살펴봤다. 이번 편에서는 Spring Boot가 GraphQL 요청을 어떻게 받아서 처리하는지, 그 내부 구조를 파헤친다.</p>
+
+          <h2>요청이 처리되는 전체 흐름</h2>
+
+          <p>REST에서는 <code>@GetMapping("/api/books")</code>처럼 URL과 메서드를 직접 매핑한다. Spring GraphQL은 접근 방식이 다르다. <mark>모든 요청이 <code>/graphql</code> 하나의 엔드포인트</mark>로 들어오고, 요청 본문에 담긴 쿼리를 파싱해서 적절한 Resolver 메서드를 찾아간다.</p>
+
+          <p>전체 흐름을 따라가 보자.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant C as 클라이언트
+    participant E as /graphql 엔드포인트
+    participant P as 쿼리 파서
+    participant S as 스키마 매칭
+    participant R as Resolver
+    participant DB
+
+    rect rgb(232, 248, 232)
+        Note over C, S: 라우팅 단계
+        C->>E: POST /graphql (쿼리 문자열)
+        E->>P: 쿼리 파싱
+        P->>S: AST → 스키마 필드 매칭
+        S->>R: 매칭된 Resolver 메서드 호출
+    end
+
+    rect rgb(240, 248, 255)
+        Note over R, DB: 실행 단계
+        R->>DB: 데이터 조회/변경
+        DB-->>R: 결과
+        R-->>C: JSON 응답 (요청한 필드만)
+    end
+</div>
+          <p>초록 영역이 Spring GraphQL의 핵심 역할이다. 쿼리 문자열을 파싱하고, 스키마와 대조해서, 어떤 Resolver 메서드를 호출할지 결정한다. 개발자가 직접 URL 라우팅을 신경 쓸 필요가 없다.</p>
+
+          <p>REST 컨트롤러와 비교하면 차이가 선명하다.</p>
+
+          <table>
+          <thead>
+          <tr><th>구분</th><th>REST</th><th>Spring GraphQL</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>라우팅 기준</td><td>URL + HTTP 메서드</td><td>쿼리 문자열 내 필드명</td></tr>
+          <tr><td>엔드포인트 수</td><td>리소스마다 별도</td><td><code>/graphql</code> 하나</td></tr>
+          <tr><td>응답 직렬화</td><td>전체 객체</td><td>요청된 필드만</td></tr>
+          <tr><td>매핑 어노테이션</td><td><code>@GetMapping</code>, <code>@PostMapping</code></td><td><code>@QueryMapping</code>, <code>@MutationMapping</code></td></tr>
+          </tbody>
+          </table>
+
+          <h2>Resolver란 무엇인가</h2>
+
+          <p>Resolver는 <mark>스키마의 각 필드에 데이터를 채워 넣는 함수</mark>다. 스키마가 "어떤 데이터를 제공할 수 있는지"를 선언한다면, Resolver는 "그 데이터를 실제로 어떻게 가져오는지"를 구현한다.</p>
+
+          <p>Spring GraphQL에서는 <code>@Controller</code> 클래스 안에 Resolver 메서드를 정의한다. REST 컨트롤러와 구조가 비슷하지만, 어노테이션이 다르다.</p>
+
+<pre><code class="language-java">@Controller
+@RequiredArgsConstructor
+public class QueryResolver {
+
+    private final BookService bookService;
+    private final AuthorService authorService;
+
+    @QueryMapping
+    public List&lt;Book&gt; books() {
+        return bookService.getAllBooks();
+    }
+
+    @QueryMapping
+    public Book book(@Argument Long id) {
+        return bookService.getBookById(id);
+    }
+}</code></pre>
+          <p>메서드 이름이 스키마의 필드명과 <mark>정확히 일치</mark>해야 한다. 스키마에 <code>books: [Book!]!</code>라고 정의했으면 메서드 이름도 <code>books()</code>여야 한다.</p>
+
+          <p>이 매칭 규칙을 그림으로 보면 이렇다.</p>
+
+<div class="mermaid">
+flowchart LR
+    subgraph Schema ["schema.graphqls"]
+        direction TB
+        S1["books: [Book!]!"]
+        S2["book(id: ID!): Book"]
+        S3["searchBooks(title: String!): [Book!]!"]
+    end
+
+    subgraph Resolver ["QueryResolver.java"]
+        direction TB
+        R1["@QueryMapping<br/>books()"]
+        R2["@QueryMapping<br/>book(@Argument Long id)"]
+        R3["@QueryMapping<br/>searchBooks(@Argument String title)"]
+    end
+
+    S1 ---|"이름 매칭"| R1
+    S2 ---|"이름 매칭"| R2
+    S3 ---|"이름 매칭"| R3
+
+    style Schema fill:#E8F4F8,stroke:#2196F3,stroke-width:2px
+    style Resolver fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px
+</div>
+          <p>스키마 필드명과 메서드명이 1:1로 연결된다. Spring GraphQL은 이 이름 매칭을 자동으로 처리한다.</p>
+
+          <h2>@QueryMapping — 조회 연산</h2>
+
+          <p><code>@QueryMapping</code>은 스키마의 <code>type Query</code> 안에 정의된 필드를 처리한다. REST의 GET 핸들러와 역할이 같다.</p>
+
+<pre><code class="language-java">@QueryMapping
+public List&lt;Book&gt; books() {
+    return bookService.getAllBooks();
+}
+
+@QueryMapping
+public Book book(@Argument Long id) {
+    return bookService.getBookById(id);
+}
+
+@QueryMapping
+public List&lt;Book&gt; searchBooks(@Argument String title) {
+    return bookService.searchBooks(title);
+}</code></pre>
+          <p><code>@Argument</code>는 GraphQL 쿼리에서 넘어온 인자를 메서드 파라미터로 바인딩한다. <code>book(id: ID!)</code> 스키마의 <code>id</code> 인자가 <code>@Argument Long id</code>로 들어온다.</p>
+
+          <div class="callout callout-info">
+            <div class="callout-title">@Argument의 타입 변환</div>
+            <p>GraphQL의 <code>ID!</code> 타입은 문자열로 전달되지만, Spring GraphQL이 Java의 <code>Long</code>으로 자동 변환해준다. <code>Int</code> → <code>Integer</code>, <code>Float</code> → <code>Double</code>, <code>Boolean</code> → <code>Boolean</code> 변환도 마찬가지다. 개발자가 직접 파싱할 필요가 없다.</p>
+          </div>
+
+          <h2>@MutationMapping — 변경 연산</h2>
+
+          <p><code>@MutationMapping</code>은 스키마의 <code>type Mutation</code> 필드를 처리한다. 데이터를 생성, 수정, 삭제하는 연산이다.</p>
+
+<pre><code class="language-java">@Controller
+@RequiredArgsConstructor
+public class MutationResolver {
+
+    private final BookService bookService;
+    private final AuthorService authorService;
+
+    @MutationMapping
+    public Book createBook(@Argument CreateBookInput input) {
+        return bookService.createBook(input);
+    }
+
+    @MutationMapping
+    public Book updateBook(@Argument Long id, @Argument UpdateBookInput input) {
+        return bookService.updateBook(id, input);
+    }
+
+    @MutationMapping
+    public Boolean deleteBook(@Argument Long id) {
+        return bookService.deleteBook(id);
+    }
+}</code></pre>
+          <p>여기서 주목할 부분은 <code>@Argument CreateBookInput input</code>이다. GraphQL의 <code>input</code> 타입이 Java의 POJO 클래스로 자동 매핑된다.</p>
+
+          <p>스키마의 <code>input CreateBookInput</code>과 Java의 <code>CreateBookInput</code> 클래스가 <mark>필드명이 같으면</mark> 자동으로 바인딩된다.</p>
+
+<pre><code class="language-java">@Getter @Setter @ToString
+public class CreateBookInput {
+    private String title;
+    private String isbn;
+    private Integer publishedYear;
+    private Double price;
+    private Long authorId;
+}</code></pre>
+          <p>Input 클래스는 단순한 POJO면 충분하다. <code>@Getter</code>, <code>@Setter</code>만 있으면 Spring GraphQL이 알아서 값을 채워 넣는다.</p>
+
+          <h2>서비스 계층의 역할</h2>
+
+          <p>Resolver가 직접 Repository를 호출하지 않고 Service를 거치는 이유가 있다. Resolver는 <mark>GraphQL 요청을 Java 메서드로 연결하는 어댑터</mark>일 뿐이고, 비즈니스 로직은 Service에 두는 것이 책임 분리 원칙에 맞다.</p>
+
+<div class="mermaid">
+block-beta
+    columns 3
+
+    block:resolver["Resolver 계층"]:3
+        columns 3
+        QR["QueryResolver"]
+        MR["MutationResolver"]
+        SR["SubscriptionResolver"]
+    end
+
+    block:service["Service 계층"]:3
+        columns 2
+        BS["BookService"]
+        AS["AuthorService"]
+    end
+
+    block:repo["Repository 계층"]:3
+        columns 2
+        BR["BookRepository"]
+        AR["AuthorRepository"]
+    end
+
+    DB[("H2 Database")]:3
+
+    resolver --> service
+    service --> repo
+    repo --> DB
+
+    style resolver fill:#E8F8E8,stroke:#4CAF50
+    style service fill:#FFF3E0,stroke:#FF9800
+    style repo fill:#E8F4F8,stroke:#2196F3
+    style DB fill:#F3E5F5,stroke:#9C27B0,color:#000
+</div>
+          <p>Resolver → Service → Repository → DB. 각 계층이 자기 책임에만 집중한다. Resolver는 요청 매핑, Service는 비즈니스 로직, Repository는 데이터 접근을 담당한다.</p>
+
+          <p>Service 계층에서는 트랜잭션 관리와 비즈니스 검증을 처리한다.</p>
+
+<pre><code class="language-java">@Service
+@RequiredArgsConstructor
+@Transactional(readOnly = true)
+public class BookService {
+
+    private final BookRepository bookRepository;
+    private final AuthorRepository authorRepository;
+
+    @Transactional
+    public Book createBook(CreateBookInput input) {
+        Author author = authorRepository.findById(input.getAuthorId())
+                .orElseThrow(() -&gt; new RuntimeException("작가를 찾을 수 없습니다"));
+
+        Book book = Book.builder()
+                .title(input.getTitle())
+                .isbn(input.getIsbn())
+                .publishedYear(input.getPublishedYear())
+                .price(input.getPrice())
+                .author(author)
+                .build();
+
+        return bookRepository.save(book);
+    }
+}</code></pre>
+          <p>클래스 레벨에 <code>@Transactional(readOnly = true)</code>를 걸어 모든 조회 메서드에 읽기 전용 트랜잭션을 적용하고, 쓰기 메서드에만 <code>@Transactional</code>을 별도로 붙이는 패턴이다.</p>
+
+          <h2>GraphiQL로 테스트하기</h2>
+
+          <p><code>spring-boot-starter-graphql</code>은 <mark>GraphiQL</mark>이라는 웹 기반 IDE를 내장하고 있다. <code>application.yml</code>에서 활성화하면 브라우저에서 바로 쿼리를 테스트할 수 있다.</p>
+
+<pre><code class="language-yaml">spring:
+  graphql:
+    graphiql:
+      enabled: true</code></pre>
+          <p><code>http://localhost:8080/graphiql</code>에 접속하면 왼쪽에 쿼리 에디터, 오른쪽에 결과 창이 나타난다. 스키마를 기반으로 자동완성도 지원한다.</p>
+
+          <p>쿼리 테스트 예시를 보자.</p>
+
+<pre><code class="language-graphql">query {
+  books {
+    id
+    title
+    price
+    author {
+      name
+    }
+  }
+}</code></pre>
+          <p>이 쿼리를 실행하면 모든 책의 id, title, price와 저자의 name만 담긴 JSON이 응답으로 온다. isbn, publishedYear, createdAt 같은 필드는 요청하지 않았으므로 응답에 포함되지 않는다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">개발 환경에서 초기 데이터 넣기</div>
+            <p>테스트하려면 데이터가 있어야 한다. <code>CommandLineRunner</code>를 구현한 <code>DataInitializer</code>를 만들면 애플리케이션 시작 시 자동으로 샘플 데이터를 넣을 수 있다. H2 인메모리 DB를 쓰면 재시작할 때마다 깨끗한 상태에서 시작하니까 부담 없이 실험할 수 있다.</p>
+          </div>
+
+          <h2>GraphQL 타입과 Java 타입 매핑</h2>
+
+          <p>스키마 타입이 Java에서 어떤 타입으로 변환되는지 정리해두면 혼동이 줄어든다.</p>
+
+          <table>
+          <thead>
+          <tr><th>GraphQL 타입</th><th>Java 타입</th><th>비고</th></tr>
+          </thead>
+          <tbody>
+          <tr><td><code>ID</code></td><td><code>Long</code>, <code>String</code></td><td>자동 변환</td></tr>
+          <tr><td><code>String</code></td><td><code>String</code></td><td></td></tr>
+          <tr><td><code>Int</code></td><td><code>Integer</code></td><td></td></tr>
+          <tr><td><code>Float</code></td><td><code>Double</code></td><td></td></tr>
+          <tr><td><code>Boolean</code></td><td><code>Boolean</code></td><td></td></tr>
+          <tr><td><code>[Book!]!</code></td><td><code>List&lt;Book&gt;</code></td><td>Non-Null 리스트</td></tr>
+          <tr><td><code>Book</code></td><td><code>Book</code> (엔티티)</td><td>Nullable</td></tr>
+          <tr><td><code>Book!</code></td><td><code>Book</code></td><td>Non-Null</td></tr>
+          </tbody>
+          </table>
+
+          <p>주의할 점은 GraphQL의 <code>Float</code>가 Java의 <code>Float</code>가 아니라 <mark><code>Double</code></mark>이라는 것이다. GraphQL의 <code>Float</code>는 배정밀도 부동소수점이기 때문이다.</p>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">메서드 이름과 스키마 필드명 불일치</div>
+            <p>스키마에 <code>searchBooks</code>라고 정의했는데 메서드 이름을 <code>findBooks</code>로 지으면 매칭에 실패한다. Spring GraphQL은 <mark>이름 기반 매칭</mark>을 하기 때문에 반드시 스키마 필드명과 메서드명이 동일해야 한다. 불일치하면 런타임에 <code>No DataFetcher</code> 에러가 발생한다.</p>
+            <p>[!DANGER] Resolver에서 비즈니스 로직 직접 구현</p>
+            <p>Resolver에 트랜잭션 관리, 검증, 데이터 가공 로직을 넣으면 테스트가 어려워지고 코드가 비대해진다. Resolver는 <mark>요청을 Service로 위임하는 얇은 계층</mark>으로 유지해야 한다. REST 컨트롤러에 SQL을 직접 쓰지 않는 것과 같은 이유다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Spring</span>
+          <span>#GraphQL</span>
+          <span>#Resolver</span>
+          <span>#QueryMapping</span>
+          <span>#MutationMapping</span>
+          <span>#GraphiQL</span>
+          <span>#아키텍처</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="spring-graphql-1-concepts.html">&larr; 이전 글</a>
+          <a href="spring-graphql-3-n-plus-one.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

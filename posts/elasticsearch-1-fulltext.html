@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[옷장을 부탁해] 1. LIKE 검색의 한계와 역색인 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[옷장을 부탁해] 1. LIKE 검색의 한계와 역색인</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Elasticsearch 도입 (1/3)</div>
+            <p>다음 편: <a href="elasticsearch-2-index-mapping.html">[옷장을 부탁해] 2. 인덱스와 매핑 설계</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">Elasticsearch 도입 — 개념</div>
+            <p>- <a href="elasticsearch-1-fulltext.html">LIKE 검색의 한계와 역색인</a> ← 현재 문서</p>
+            <p>- <a href="elasticsearch-2-index-mapping.html">인덱스와 매핑 설계</a></p>
+            <p>- <a href="elasticsearch-3-query-sync.html">검색 쿼리와 동기화 전략</a></p>
+          </div>
+
+          <p>이 프로젝트의 피드 검색은 <code>feed.content.contains(keyword)</code>로 동작한다. QueryDSL이 이걸 SQL의 <code>LIKE '%keyword%'</code>로 변환한다. 데이터가 수만 건을 넘기 시작하면 이 쿼리가 치명적인 병목이 된다. 왜 느려지는지, 역색인이 어떻게 해결하는지 이해한다.</p>
+
+          <h2>현재 검색 코드 분석</h2>
+
+          <p><code>FeedRepositoryImpl</code>의 <code>keywordLike()</code> 메서드가 피드 검색의 핵심이다.</p>
+
+<pre><code class="language-java">// FeedRepositoryImpl.java
+// TODO : 추후 개선
+private BooleanExpression keywordLike(String keyword) {
+    if (keyword == null)
+        return null;
+    return feed.content.contains(keyword);
+}</code></pre>
+          <p><code>feed.content.contains(keyword)</code>는 QueryDSL이 SQL로 변환할 때 다음과 같은 쿼리를 만든다.</p>
+
+<pre><code class="language-sql">WHERE content LIKE '%keyword%'</code></pre>
+          <p>퍼센트 기호가 양쪽에 붙는다. "keyword가 포함된 모든 content를 찾아라"는 뜻이다. 직관적이고 간단하지만, 이 단순함이 성능 문제의 원인이다.</p>
+
+          <p>이 패턴이 <code>FeedRepositoryImpl</code>만의 문제가 아니다. 프로젝트 전체에 같은 구조가 퍼져 있다.</p>
+
+          <ul>
+            <li><strong>UserRepositoryImpl</strong> — <code>user.email.containsIgnoreCase(emailLike)</code> : 이메일 검색에 대소문자 무시까지 추가된 LIKE 쿼리다.</li>
+            <li><strong>FollowCustomRepositoryImpl</strong> — <code>follow.followee.name.contains(nameLike)</code> : 팔로우 대상의 이름을 LIKE로 검색한다.</li>
+            <li><strong>ClothesAttributeTypeRepositoryImpl</strong> — <code>clothesAttributeType.name.contains(keyword)</code> : 옷 속성 타입의 이름을 LIKE로 검색한다.</li>
+          </ul>
+
+          <p>네 곳 모두 <code>.contains()</code>를 쓰고 있고, 모두 <code>LIKE '%keyword%'</code>로 변환된다. 데이터가 적을 때는 문제없지만, 어느 하나라도 테이블이 커지면 동일한 성능 저하를 겪게 된다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">TODO 주석의 의미</div>
+            <p><code>keywordLike()</code> 위에 <code>// TODO : 추후 개선</code>이라는 주석이 달려 있다. 개발 시점에서 이미 이 방식의 한계를 인지하고 있었다는 뜻이다. 그 "추후 개선"이 바로 Elasticsearch 도입이다.</p>
+          </div>
+
+          <h2>LIKE '%keyword%'가 느린 이유</h2>
+
+          <p>이 쿼리가 느린 이유를 이해하려면 DB 인덱스의 구조부터 알아야 한다. 대부분의 관계형 데이터베이스는 B-Tree 구조로 인덱스를 만든다.</p>
+
+          <h3>B-Tree의 작동 원리</h3>
+
+          <p>B-Tree는 <mark>정렬된 상태</mark>를 유지하는 트리 구조다. 사전처럼 단어가 가나다순으로 정렬되어 있다고 생각하면 된다. "반팔"을 찾고 싶으면 "ㅂ" 섹션으로 바로 이동한 뒤, "반" 다음에 "팔"을 순서대로 따라가면 된다. 이 과정이 B-Tree의 범위 탐색이다.</p>
+
+          <p>B-Tree가 빠르게 찾을 수 있는 건 <mark>시작 지점을 아는 경우</mark>뿐이다. 다음 다이어그램으로 이 구조를 확인할 수 있다.</p>
+
+<div class="mermaid">
+flowchart TD
+    Root["루트 노드<br/>ㄱ | ㅂ | ㅈ"]
+    L1["ㄱ~ㅁ"]
+    L2["ㅂ~ㅇ"]
+    L3["ㅈ~ㅎ"]
+    D1["가디건<br/>긴바지<br/>니트"]
+    D2["반팔<br/>반팔티<br/>블라우스"]
+    D3["자켓<br/>청바지<br/>후드"]
+
+    Root --> L1
+    Root --> L2
+    Root --> L3
+    L1 --> D1
+    L2 --> D2
+    L3 --> D3
+
+    Q1{{"LIKE '반팔%'"}}
+    Q2{{"LIKE '%반팔%'"}}
+
+    Q1 -.->|"ㅂ 섹션으로<br/>바로 이동"| L2
+    Q2 -.->|"시작점을<br/>알 수 없음"| Root
+
+    style Root fill:#E8F4F8,stroke:#2196F3,stroke-width:2px,color:#000
+    style L1 fill:#E8F4F8,stroke:#2196F3,stroke-width:2px,color:#000
+    style L2 fill:#E8F4F8,stroke:#2196F3,stroke-width:2px,color:#000
+    style L3 fill:#E8F4F8,stroke:#2196F3,stroke-width:2px,color:#000
+    style D1 fill:#fff,stroke:#999,color:#000
+    style D2 fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style D3 fill:#fff,stroke:#999,color:#000
+    style Q1 fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style Q2 fill:#FFE6E6,stroke:#F44336,stroke-width:2px,color:#000
+</div>
+          <p>초록 다이아몬드인 <code>LIKE '반팔%'</code>은 "ㅂ 섹션"으로 바로 점프한다. B-Tree의 정렬 구조를 활용할 수 있기 때문이다. 반면 빨간 다이아몬드인 <code>LIKE '%반팔%'</code>은 시작점을 특정할 수 없다. "반팔"이 문자열 중간 어디에든 있을 수 있기 때문에, B-Tree가 어디서부터 찾아야 할지 판단하지 못한다.</p>
+
+          <h3>풀 테이블 스캔의 현실</h3>
+
+          <p>B-Tree로 범위를 좁힐 수 없으면 DB는 <mark>테이블의 모든 행을 처음부터 끝까지 읽는다.</mark> 영어로 Full Table Scan이라고 부르는 동작이다.</p>
+
+          <p>실제로 <code>LIKE '%반팔%'</code> 쿼리가 처리되는 과정을 보면 문제가 체감된다.</p>
+
+<div class="mermaid">
+flowchart TD
+    Q["SQL 실행<br/>WHERE content LIKE '%반팔%'"]
+    IDX{"B-Tree 인덱스<br/>사용 가능?"}
+    SCAN["풀 테이블 스캔 시작"]
+
+    subgraph FS ["풀 스캔 영역"]
+        direction TB
+        R1["행 1: '오늘 날씨 좋아서 반팔 입음'"]
+        R2["행 2: '비 와서 우산 챙김'"]
+        R3["행 3: '반팔티 입기 좋은 날'"]
+        RN["행 100,000: '자켓 추천합니다'"]
+    end
+
+    M1["매칭: 행 1"]
+    M2["매칭: 행 3"]
+    RES["결과 반환<br/>2건"]
+
+    Q --> IDX
+    IDX -->|"불가능"| SCAN
+    SCAN --> FS
+    R1 -->|"포함"| M1
+    R2 -->|"미포함"| R3
+    R3 -->|"포함"| M2
+    RN -->|"미포함"| RES
+    M1 --> RES
+    M2 --> RES
+
+    style Q fill:#E8F4F8,stroke:#2196F3,stroke-width:2px,color:#000
+    style IDX fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#000
+    style SCAN fill:#FFE6E6,stroke:#F44336,stroke-width:2px,color:#000
+    style FS fill:#fff0f0,stroke:#F44336,color:#000
+    style R1 fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style R2 fill:#fff,stroke:#999,color:#000
+    style R3 fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style RN fill:#fff,stroke:#999,color:#000
+    style M1 fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style M2 fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style RES fill:#E8F4F8,stroke:#2196F3,stroke-width:2px,color:#000
+</div>
+          <p>분홍 영역이 풀 스캔 구간이다. 10만 행이면 10만 행을 전부 읽고, 각 행의 content 컬럼에서 "반팔"이 포함되어 있는지 문자열 비교를 수행한다. 결과가 2건이든 2만 건이든, <mark>항상 전체 행을 다 읽어야 한다.</mark> 데이터가 늘어날수록 응답 시간이 선형으로 증가하는 이유다.</p>
+
+          <h2>역색인이란</h2>
+
+          <h3>책의 찾아보기</h3>
+
+          <p>역색인을 이해하는 가장 쉬운 비유는 책 뒷부분의 "찾아보기"다.</p>
+
+          <p>책을 처음부터 끝까지 넘기면서 "반팔"이라는 단어를 찾는 건 풀 테이블 스캔과 같다. 300페이지짜리 책이면 300페이지를 다 넘겨야 한다. 하지만 뒤쪽 찾아보기를 펼치면 "반팔 — p.23, p.87, p.142"라고 바로 나온다. 페이지가 1000페이지로 늘어나도 찾아보기에서 찾는 시간은 거의 같다.</p>
+
+          <p>이 찾아보기가 바로 역색인이다.</p>
+
+          <h3>순방향과 역방향</h3>
+
+          <p>일반적인 DB는 "문서에서 단어를 찾는" 방향으로 저장한다. 이걸 순방향 인덱스라고 한다. 역색인은 이 방향을 뒤집어서 "단어에서 문서를 찾는" 구조를 만든다.</p>
+
+          <p>ASCII 테이블로 비교하면 차이가 명확하다.</p>
+
+          <p><strong>순방향 — 피드에서 단어를 찾는 구조</strong></p>
+
+          <table>
+          <thead>
+          <tr><th>피드 ID</th><th>content</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>feed-001</td><td>오늘 날씨 좋아서 반팔 입음</td></tr>
+          <tr><td>feed-002</td><td>비 와서 우산 챙김</td></tr>
+          <tr><td>feed-003</td><td>오늘은 반팔티 입기 좋은 날</td></tr>
+          </tbody>
+          </table>
+
+          <p>"오늘"이 들어간 피드를 찾으려면? 세 행을 전부 읽어서 "오늘"이 포함되어 있는지 확인해야 한다.</p>
+
+          <p><strong>역색인 — 단어에서 피드를 찾는 구조</strong></p>
+
+          <table>
+          <thead>
+          <tr><th>단어</th><th>피드 ID 목록</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>오늘</td><td>feed-001, feed-003</td></tr>
+          <tr><td>날씨</td><td>feed-001</td></tr>
+          <tr><td>반팔</td><td>feed-001, feed-003</td></tr>
+          <tr><td>비</td><td>feed-002</td></tr>
+          <tr><td>우산</td><td>feed-002</td></tr>
+          </tbody>
+          </table>
+
+          <p>"오늘"로 검색하면? 역색인에서 "오늘" 항목을 찾아 <mark>즉시 feed-001, feed-003을 반환</mark>한다. 피드가 100만 건이어도 역색인에서 "오늘" 항목을 찾는 시간은 동일하다. 전체 피드를 스캔할 필요가 없기 때문이다.</p>
+
+          <p>이 구조의 위력을 검색 흐름으로 확인하면 차이가 극적으로 드러난다.</p>
+
+<div class="mermaid">
+flowchart TD
+    Q["검색어: '오늘'"]
+    IDX[("역색인")]
+    LOOKUP["'오늘' 항목 조회"]
+    RES["feed-001, feed-003<br/>즉시 반환"]
+
+    Q --> IDX
+    IDX --> LOOKUP
+    LOOKUP --> RES
+
+    style Q fill:#E8F4F8,stroke:#2196F3,stroke-width:2px,color:#000
+    style IDX fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style LOOKUP fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style RES fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+</div>
+          <p>초록 노드만으로 흐름이 끝난다. 앞서 본 LIKE 검색의 분홍 풀 스캔 영역과 비교하면 차이가 분명하다. 역색인은 데이터 양과 무관하게 <mark>일정한 속도</mark>를 유지한다. 이것이 Elasticsearch가 수백만 건의 문서에서도 밀리초 단위로 검색 결과를 돌려주는 핵심 원리다.</p>
+
+          <h2>LIKE vs Elasticsearch 비교</h2>
+
+          <p>두 방식을 항목별로 비교하면 각각의 한계와 강점이 뚜렷해진다.</p>
+
+          <table>
+          <thead>
+          <tr><th>항목</th><th>LIKE '%keyword%'</th><th>Elasticsearch</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>검색 방식</td><td>문자열 포함 여부를 행마다 비교</td><td>역색인에서 키워드 → 문서 ID 조회</td></tr>
+          <tr><td>1만 건 성능</td><td>수십~수백 ms</td><td>수 ms</td></tr>
+          <tr><td>100만 건 성능</td><td>수 초 이상</td><td>수~수십 ms</td></tr>
+          <tr><td>인덱스 활용</td><td>불가능 (풀 테이블 스캔)</td><td>역색인 활용</td></tr>
+          <tr><td>한국어 형태소 분석</td><td>불가능</td><td>nori 분석기로 가능</td></tr>
+          <tr><td>유사도 검색</td><td>불가능</td><td>지원 (fuzzy, match)</td></tr>
+          <tr><td>오타 허용 검색</td><td>불가능</td><td>지원 (fuzziness)</td></tr>
+          </tbody>
+          </table>
+
+          <p>이 표에서 특히 주목할 부분은 <mark>한국어 형태소 분석</mark>이다. <code>LIKE '%반팔%'</code>은 정확히 "반팔"이라는 문자열이 포함된 행만 찾는다. "반팔티"라는 단어 안에 "반팔"이 들어 있으니 이건 찾을 수 있다. 하지만 "반팔을", "반팔이랑" 같은 조사가 붙은 형태는? 이것도 문자열에 "반팔"이 포함되어 있으니 LIKE로 찾을 수 있다.</p>
+
+          <p>진짜 문제는 반대 방향이다. 사용자가 "반팔티"로 검색했을 때, "오늘 반팔 입었다"라는 피드를 찾을 수 있을까? <mark>LIKE '%반팔티%'는 "반팔"이 포함된 피드를 찾지 못한다.</mark> "반팔"과 "반팔티"는 서로 다른 문자열이기 때문이다.</p>
+
+          <p>Elasticsearch의 nori 분석기는 한국어 형태소를 분석해서 "반팔티"를 "반팔" + "티"로 분리한다. 역색인에 "반팔"이라는 토큰이 이미 있으므로 "반팔티"로 검색해도 "반팔"이 들어간 피드를 찾아낸다. 검색 키워드와 문서 내용이 정확히 일치하지 않아도 의미적으로 연결되는 결과를 반환하는 것이다.</p>
+
+          <div class="callout callout-info">
+            <div class="callout-title">nori 분석기의 토큰 분리</div>
+            <p>"오늘 날씨 좋아서 반팔티 입었다"라는 문장을 nori가 처리하면 "오늘", "날씨", "좋다", "반팔", "티", "입다"로 분리된다. 동사는 원형으로, 복합어는 구성 요소로 쪼개진다. 이렇게 분리된 토큰 각각이 역색인에 등록된다.</p>
+          </div>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">LIKE 검색에 DB 인덱스를 걸면 빨라진다는 착각</div>
+            <p><code>content</code> 컬럼에 B-Tree 인덱스를 생성해도 <code>LIKE '%keyword%'</code>는 인덱스를 타지 못한다. 앞쪽이 와일드카드이면 B-Tree는 탐색 시작점을 잡을 수 없다. <code>LIKE 'keyword%'</code>처럼 접두사 매칭만 인덱스를 활용할 수 있다. 인덱스를 걸었으니 괜찮겠지 하고 넘어가면, 운영 환경에서 슬로우 쿼리 알림을 받게 된다.</p>
+            <p>[!DANGER] 데이터가 적으니 LIKE로 충분하다는 판단</p>
+            <p>개발 환경에서 수백 건으로 테스트하면 LIKE도 즉시 응답한다. 하지만 데이터는 누적된다. 피드가 하루에 100건씩 쌓이면 1년 뒤에 36,500건이다. 풀 테이블 스캔의 비용은 데이터 양에 정비례하므로, "지금 빠르다"가 "앞으로도 빠르다"를 보장하지 않는다. 검색 기능은 데이터 증가를 반드시 고려해서 설계해야 한다.</p>
+            <p>[!DANGER] Elasticsearch를 도입하면 DB 검색을 완전히 대체할 수 있다는 오해</p>
+            <p>Elasticsearch는 <mark>검색에 특화된 보조 저장소</mark>다. 원본 데이터의 CRUD는 여전히 RDB가 담당한다. ES에 데이터를 넣으려면 RDB와의 동기화 전략이 필요하고, 이 동기화에서 지연이나 불일치가 발생할 수 있다. "ES 넣었으니 끝"이 아니라, 동기화 실패 시 어떻게 복구할지까지 설계해야 완성이다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#옷장을부탁해</span>
+          <span>#Elasticsearch</span>
+          <span>#LIKE검색</span>
+          <span>#역색인</span>
+          <span>#풀테이블스캔</span>
+          <span>#nori</span>
+          <span>#QueryDSL</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+          <a href="elasticsearch-2-index-mapping.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

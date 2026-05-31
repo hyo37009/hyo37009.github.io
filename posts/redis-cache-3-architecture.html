@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[옷장을 부탁해] 3. 프로젝트 캐시 아키텍처 설계 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[옷장을 부탁해] 3. 프로젝트 캐시 아키텍처 설계</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Redis 캐시 도입 (3/3)</div>
+            <p>이전 편: <a href="redis-cache-2-patterns.html">[옷장을 부탁해] 2. 캐시 패턴과 무효화 전략</a></p>
+            <p>이 문서가 시리즈의 마지막 편입니다.</p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">Redis 캐시 도입 — 개념</div>
+            <p>- <a href="redis-cache-1-n-plus-one.html">N+1 쿼리와 성능 병목</a></p>
+            <p>- <a href="redis-cache-2-patterns.html">캐시 패턴과 무효화 전략</a></p>
+            <p>- <a href="redis-cache-3-architecture.html">프로젝트 캐시 아키텍처 설계</a> ← 현재 문서</p>
+          </div>
+
+          <p><a href="redis-cache-1-n-plus-one.html">01 N+1 쿼리와 성능 병목</a>에서 어디가 느린지 파악했고, <a href="redis-cache-2-patterns.html">02 캐시 패턴과 무효화 전략</a>에서 어떤 패턴으로 캐시를 붙이는지 배웠다. 이제 남은 건 <mark>우리 프로젝트에 실제로 어디에, 어떤 TTL로, 어떤 방식으로 캐시를 적용할지</mark> 구체적으로 설계하는 일이다.</p>
+
+          <h2>캐시 적용 포인트 네 가지</h2>
+
+          <p>피드 목록 조회 한 번에 120~140회의 DB 쿼리가 발생하는 구조에서, 캐시로 제거할 수 있는 반복 쿼리 지점은 네 가지다. 전체 아키텍처를 먼저 보면 각 캐시가 어느 레이어에 위치하는지 한눈에 파악된다.</p>
+
+<div class="mermaid">
+block-beta
+    columns 4
+
+    Client["Client"]:4
+
+    block:controller["Controller Layer"]:4
+        columns 2
+        FC["FeedController"]
+        CC["CommentController"]
+    end
+
+    block:service["Service Layer"]:4
+        columns 4
+        FS["FeedService"]
+        CS["CommentService"]
+        LS["LikeService"]
+        S3["S3Service"]
+    end
+
+    block:cache["Redis Cache"]:4
+        columns 4
+        CLike["feedLikeCount"]
+        CComment["feedCommentCount"]
+        CUrl["presignedUrl"]
+        CWeather["weathers"]
+    end
+
+    block:infra["Infrastructure"]:4
+        columns 3
+        DB[("PostgreSQL")]
+        S3Bucket>"S3 Bucket"]
+        API>"날씨 API"]
+    end
+
+    Client --> controller
+    controller --> service
+    FS --> CLike
+    FS --> CComment
+    S3 --> CUrl
+    FS --> CWeather
+    CLike --> DB
+    CComment --> DB
+    CUrl --> S3Bucket
+    CWeather --> API
+
+    style Client fill:#E8F4F8,stroke:#2196F3,color:#000
+    style CLike fill:#E8F8E8,stroke:#4CAF50,color:#000
+    style CComment fill:#E8F8E8,stroke:#4CAF50,color:#000
+    style CUrl fill:#FFF3E0,stroke:#FF9800,color:#000
+    style CWeather fill:#F3E5F5,stroke:#9C27B0,color:#000
+    style DB fill:#E8F4F8,stroke:#2196F3,color:#000
+    style S3Bucket fill:#FFF3E0,stroke:#FF9800,color:#000
+    style API fill:#F3E5F5,stroke:#9C27B0,color:#000
+</div>
+          <p>초록 블록은 DB COUNT 쿼리를 대체하는 캐시, 주황 블록은 네트워크 I/O를 대체하는 캐시, 보라 블록은 외부 API 호출을 대체하는 캐시다. 각각의 특성이 다르기 때문에 TTL과 무효화 전략도 달라진다.</p>
+
+          <h3>좋아요 수 캐싱</h3>
+
+          <p>피드 하나를 DTO로 변환할 때마다 <code>feedLikeRepository.countByFeed(feed)</code>가 호출된다. 피드 20개를 조회하면 <mark>좋아요 COUNT 쿼리만 20번</mark>이 날아가는 구조다.</p>
+
+          <p>캐시 이름은 <code>feedLikeCount</code>, 키는 피드 ID다. <code>@Cacheable</code>을 적용하면 같은 피드의 좋아요 수를 반복 조회할 때 DB를 거치지 않는다. 사용자가 좋아요를 누르거나 취소하면 <code>@CacheEvict</code>로 해당 피드의 캐시만 무효화한다.</p>
+
+          <p>TTL은 30분이다. 좋아요 수는 실시간 정확성보다 대략적인 수치가 중요하고, 무효화도 명시적으로 걸려 있기 때문에 TTL은 안전망 역할이다.</p>
+
+          <h3>댓글 수 캐싱</h3>
+
+          <p>좋아요 수와 동일한 패턴이다. <code>commentRepository.countByFeed(feed)</code>가 피드마다 한 번씩 호출되므로, 피드 20개 조회 시 <mark>댓글 COUNT 쿼리도 20번</mark> 발생한다.</p>
+
+          <p>캐시 이름은 <code>feedCommentCount</code>, 키는 피드 ID다. 댓글이 생성되거나 삭제될 때 <code>@CacheEvict</code>로 해당 피드의 캐시를 무효화한다. TTL은 좋아요 수와 마찬가지로 30분이다.</p>
+
+          <h3>Presigned URL 캐싱</h3>
+
+          <p>피드에 이미지가 포함되어 있으면 <code>S3Service.getUrl(key)</code>가 호출된다. 이 메서드는 내부적으로 <mark>S3 Presigner에 네트워크 요청</mark>을 보내서 서명된 URL을 생성한다. 피드 하나에 이미지가 3장이면 3번, 20개 피드면 최대 60번의 네트워크 I/O가 발생할 수 있다.</p>
+
+          <p>캐시 이름은 <code>presignedUrl</code>, 키는 S3 오브젝트 키다. 같은 이미지 키에 대해서는 캐시된 URL을 바로 반환한다.</p>
+
+          <p>TTL은 8분이다. 프로젝트에서 Presigned URL의 만료 시간이 <code>s3Properties.presignedUrlExpirationTime()</code>으로 설정되어 있는데, 보통 1000초 정도다. <mark>캐시 TTL이 URL 만료 시간보다 길면 만료된 URL을 반환</mark>하는 사고가 발생하므로, 넉넉한 마진을 두고 8분으로 잡는다.</p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">Presigned URL TTL의 함정</div>
+            <p>캐시 TTL을 URL 만료 시간과 같거나 길게 설정하면, 캐시에서 꺼낸 URL이 이미 만료된 상태일 수 있다. 반드시 URL 만료보다 짧게 설정해야 한다.</p>
+          </div>
+
+          <h3>날씨 데이터 캐싱</h3>
+
+          <p><code>WeatherServiceImpl.create()</code> 메서드에는 이미 <code>@Cacheable</code> 어노테이션이 주석 처리되어 있다. 설계는 끝나 있고, 주석만 해제하면 된다.</p>
+
+          <p>캐시 이름은 <code>weathers</code>, 키는 <code>위도:경도</code> 조합이다. 같은 위치의 날씨를 반복 조회할 때 외부 API 호출을 생략한다. TTL은 10분이다. 날씨 데이터는 시간 단위로 갱신되므로 10분이면 충분히 신선하다. <code>WeatherScheduler</code>와 <code>WeatherUpdateTasklet</code>에 이미 <code>@CacheEvict(allEntries = true)</code>가 걸려 있어서, 배치가 돌면 전체 캐시가 비워진다.</p>
+
+          <h2>캐시별 TTL 설계</h2>
+
+          <p>네 가지 캐시가 모두 같은 TTL을 쓰면 안 된다. 데이터의 성격이 다르기 때문이다. <code>RedisCacheManager</code>의 <code>withCacheConfiguration()</code> 메서드를 활용하면 <mark>캐시 이름별로 TTL을 차등 설정</mark>할 수 있다.</p>
+
+          <p>CacheManager가 캐시 이름을 보고 어떤 TTL을 적용할지 결정하는 흐름을 시각화하면 이렇다.</p>
+
+<div class="mermaid">
+flowchart TD
+    REQ{{"캐시 요청"}} --> NAME{"캐시 이름?"}
+
+    NAME -->|"feedLikeCount"| LIKE["TTL 30분"]
+    NAME -->|"feedCommentCount"| COMMENT["TTL 30분"]
+    NAME -->|"presignedUrl"| URL["TTL 8분"]
+    NAME -->|"weathers"| WEATHER["TTL 10분"]
+    NAME -->|"그 외"| DEFAULT["기본 TTL 10분"]
+
+    LIKE --> REDIS[("Redis")]
+    COMMENT --> REDIS
+    URL --> REDIS
+    WEATHER --> REDIS
+    DEFAULT --> REDIS
+
+    style REQ fill:#E8F4F8,stroke:#2196F3,stroke-width:2px,color:#000
+    style NAME fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#000
+    style LIKE fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style COMMENT fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style URL fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#000
+    style WEATHER fill:#F3E5F5,stroke:#9C27B0,stroke-width:2px,color:#000
+    style DEFAULT fill:#E8F4F8,stroke:#2196F3,stroke-width:2px,color:#000
+    style REDIS fill:#FFE6E6,stroke:#F44336,stroke-width:2px,color:#000
+</div>
+          <p>분기의 핵심은 <code>withCacheConfiguration("캐시이름", config)</code> 호출이다. 지정하지 않은 캐시 이름은 <code>cacheDefaults()</code>에 설정한 기본 TTL을 따른다.</p>
+
+          <table>
+          <thead>
+          <tr><th>캐시 이름</th><th>TTL</th><th>이유</th></tr>
+          </thead>
+          <tbody>
+          <tr><td><code>feedLikeCount</code></td><td>30분</td><td>명시적 <code>@CacheEvict</code>가 있으므로 TTL은 안전망. 정확성보다 조회 빈도가 높아 캐시 효과 극대화</td></tr>
+          <tr><td><code>feedCommentCount</code></td><td>30분</td><td>좋아요 수와 동일한 패턴. 댓글 생성/삭제 시 무효화</td></tr>
+          <tr><td><code>presignedUrl</code></td><td>8분</td><td>URL 만료 시간보다 반드시 짧아야 한다. 1000초 만료 기준 약 50% 마진</td></tr>
+          <tr><td><code>weathers</code></td><td>10분</td><td>기본 TTL과 동일. 배치 스케줄러가 전체 캐시를 비우므로 TTL은 보조 수단</td></tr>
+          </tbody>
+          </table>
+
+          <p>코드로 보면 <code>RedisCacheManager.builder()</code>에서 <code>cacheDefaults()</code>로 기본 설정을 잡고, 각 캐시별로 <code>withCacheConfiguration()</code>을 체이닝하는 구조다.</p>
+
+<pre><code class="language-java">return RedisCacheManager.builder(connectionFactory)
+        .cacheDefaults(defaultConfig)
+        .withCacheConfiguration("feedLikeCount",
+                defaultConfig.entryTtl(Duration.ofMinutes(30)))
+        .withCacheConfiguration("feedCommentCount",
+                defaultConfig.entryTtl(Duration.ofMinutes(30)))
+        .withCacheConfiguration("presignedUrl",
+                defaultConfig.entryTtl(Duration.ofMinutes(8)))
+        .build();</code></pre>
+          <p><code>weathers</code>는 기본 TTL이 10분이므로 별도로 지정할 필요가 없다. 기본값에 의존하는 게 코드도 깔끔하다.</p>
+
+          <h2>캐시 적용 전후 비교</h2>
+
+          <p>캐시를 적용한 후 피드 조회 흐름이 어떻게 달라지는지 보면, 왜 이 설계가 효과적인지 체감할 수 있다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant C as Client
+    participant FS as FeedService
+    participant R as Redis Cache
+    participant DB as PostgreSQL
+    participant S3 as S3 Presigner
+
+    C->>FS: 피드 20개 조회
+
+    rect rgb(232, 248, 232)
+        Note over FS, R: 캐시 히트 구간
+        loop 피드마다
+            FS->>R: feedLikeCount 조회
+            R-->>FS: 캐시 히트
+            FS->>R: feedCommentCount 조회
+            R-->>FS: 캐시 히트
+        end
+
+        loop 이미지마다
+            FS->>R: presignedUrl 조회
+            R-->>FS: 캐시 히트
+        end
+    end
+
+    rect rgb(255, 243, 224)
+        Note over FS, DB: DB 조회 구간
+        FS->>DB: 피드 목록 쿼리
+        DB-->>FS: 피드 20개
+        FS->>DB: 피드별 옷 정보
+        DB-->>FS: 옷 데이터
+    end
+
+    FS-->>C: 피드 목록 응답
+</div>
+          <p>초록 영역이 Redis에서 즉시 응답하는 구간이다. 이전에는 이 모든 요청이 주황 영역처럼 DB와 S3를 직접 때렸다. 캐시 히트가 일어나면 네트워크 왕복이 Redis 로컬 조회로 대체되므로 응답 시간이 극적으로 줄어든다.</p>
+
+          <p>수치로 비교하면 이렇다.</p>
+
+          <table>
+          <thead>
+          <tr><th>항목</th><th>캐시 적용 전</th><th>캐시 적용 후</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>DB 쿼리 수</td><td>120~140회</td><td>40~60회</td></tr>
+          <tr><td>Redis 조회 수</td><td>0회</td><td>60~80회</td></tr>
+          <tr><td>예상 응답 시간</td><td>200~500ms</td><td>50~100ms</td></tr>
+          </tbody>
+          </table>
+
+          <p>DB 쿼리가 줄어든 만큼 Redis 조회가 늘어나지만, <mark>Redis 조회는 DB 쿼리보다 10~100배 빠르다</mark>. 메모리 기반이고, 네트워크 홉도 같은 인프라 내에서 한 번이기 때문이다. 전체적으로 보면 무거운 I/O가 가벼운 I/O로 대체되는 구조다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">남은 40~60회의 DB 쿼리</div>
+            <p>캐시로 제거할 수 없는 쿼리도 있다. 피드 목록 자체 조회, 피드별 옷 정보 조회, <code>likedByMe</code> 여부 확인 등이다. 이런 쿼리는 fetch join이나 batch size 조정으로 최적화하는 영역이지, 캐시의 영역이 아니다.</p>
+          </div>
+
+          <h2>Redis 확장 활용</h2>
+
+          <p>Spring Cache 추상화만으로는 해결할 수 없는 영역이 있다. <code>@Cacheable</code>은 <mark>메서드 단위의 결과 캐싱</mark>에 특화되어 있기 때문에, 토큰 저장소나 실시간 카운터처럼 세밀한 제어가 필요한 경우에는 <code>RedisTemplate</code>을 직접 사용해야 한다.</p>
+
+          <h3>InMemoryAuthTokenStore를 Redis로 전환</h3>
+
+          <p>현재 <code>InMemoryAuthTokenStore</code>는 <code>ConcurrentHashMap</code>으로 토큰을 관리한다. 이 방식에는 두 가지 치명적인 문제가 있다.</p>
+
+          <ul>
+            <li><strong>서버 재시작 시 모든 토큰이 사라진다</strong> — 배포할 때마다 모든 사용자가 강제 로그아웃된다.</li>
+            <li><strong>서버가 여러 대면 토큰을 공유할 수 없다</strong> — A 서버에서 발급한 토큰을 B 서버에서 검증하지 못한다.</li>
+          </ul>
+
+          <p>두 문제를 동시에 해결하는 방법이 Redis 전환이다.</p>
+
+          <p>전환 전후의 차이를 비교하면 이렇다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant C as Client
+    participant A as Server A
+    participant B as Server B
+    participant Mem as ConcurrentHashMap
+
+    rect rgb(255, 230, 230)
+        Note over C, Mem: InMemory 방식의 문제
+        C->>A: 로그인 요청
+        A->>Mem: 토큰 저장
+        Mem-->>A: 저장 완료
+        A-->>C: 토큰 발급
+
+        C->>B: API 요청
+        B->>Mem: 토큰 검증
+        Note right of Mem: Server B의 Map에는<br/>토큰이 없다
+        Mem--xB: 검증 실패
+        B--xC: 401 Unauthorized
+    end
+</div>
+          <p>Server A에서 저장한 토큰이 Server B의 메모리에는 존재하지 않아 인증이 실패한다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant C as Client
+    participant A as Server A
+    participant B as Server B
+    participant R as Redis
+
+    rect rgb(232, 248, 232)
+        Note over C, R: Redis 방식으로 해결
+        C->>A: 로그인 요청
+        A->>R: 토큰 저장
+        R-->>A: 저장 완료
+        A-->>C: 토큰 발급
+
+        C->>B: API 요청
+        B->>R: 토큰 검증
+        Note right of R: 공유 저장소이므로<br/>토큰이 존재한다
+        R-->>B: 검증 성공
+        B-->>C: 200 OK
+    end
+</div>
+          <p>초록 영역에서 보이듯, Redis를 공유 저장소로 사용하면 어떤 서버가 발급한 토큰이든 다른 서버에서 검증할 수 있다. <code>RedisTemplate</code>의 <code>opsForValue()</code>로 토큰을 저장하고, TTL을 토큰 만료 시간과 맞추면 만료된 토큰은 자동으로 삭제된다.</p>
+
+          <h3>Redis INCR 카운터로 좋아요 수 관리</h3>
+
+          <p>앞서 설계한 <code>feedLikeCount</code> 캐시는 Cache-Aside 패턴이다. DB에서 COUNT 결과를 캐싱하고, 변경이 생기면 캐시를 지운다. 안전하지만, 무효화 직후에는 반드시 DB를 한 번 조회해야 한다.</p>
+
+          <p>더 적극적인 전략이 있다. Redis의 <code>INCR</code> / <code>DECR</code> 명령으로 <mark>캐시 자체를 실시간 카운터</mark>로 쓰는 것이다.</p>
+
+          <ul>
+            <li>좋아요를 누르면 <code>RedisTemplate.opsForValue().increment(key)</code></li>
+            <li>좋아요를 취소하면 <code>RedisTemplate.opsForValue().decrement(key)</code></li>
+            <li>조회 시 Redis에서 바로 숫자를 읽는다</li>
+          </ul>
+
+          <p>이 방식의 장점은 무효화가 필요 없다는 것이다. 캐시가 항상 최신 값을 가지고 있기 때문이다. 단점은 <mark>Redis와 DB 사이의 정합성을 직접 관리</mark>해야 한다는 것이다. Redis가 죽으면 카운터가 사라지므로, 주기적으로 DB에 동기화하는 배치가 필요하다.</p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">두 전략의 선택 기준</div>
+            <p>Cache-Aside는 구현이 간단하고 DB가 항상 정답이다. INCR 카운터는 성능은 더 좋지만 동기화 로직이 추가된다. 프로젝트 초기에는 Cache-Aside로 시작하고, 트래픽이 늘어나면 INCR 전략을 검토하는 게 현실적이다.</p>
+          </div>
+
+          <h2>면접 대비 Q&A</h2>
+
+          <div class="callout callout-question">
+            <div class="callout-title">캐시 스탬피드가 뭐고 어떻게 방지하나?</div>
+            <p>캐시가 만료되는 순간 다수의 요청이 동시에 DB로 몰리는 현상이다. 인기 피드의 좋아요 수 캐시가 만료되면 수백 개의 요청이 한꺼번에 COUNT 쿼리를 날릴 수 있다. 방지 방법은 여러 가지가 있다. TTL에 랜덤 지터를 추가해서 캐시 만료 시점을 분산시키거나, 분산 락으로 첫 번째 요청만 DB를 조회하고 나머지는 대기시키거나, 만료 전에 미리 갱신하는 방식이 있다. 우리 프로젝트에서는 <code>@CacheEvict</code>로 명시적 무효화를 쓰기 때문에 TTL 만료 스탬피드 가능성은 낮지만, TTL이 동시에 만료되는 상황은 여전히 가능하다.</p>
+            <p>[!QUESTION] 캐시 일관성을 100% 보장할 수 있나?</p>
+            <p>보장할 수 없다. Cache-Aside 패턴에서 DB 업데이트와 캐시 무효화 사이에는 항상 시간 차이가 존재한다. DB에 좋아요가 추가된 후 <code>@CacheEvict</code>가 실행되기 전에 다른 요청이 들어오면 이전 값을 보게 된다. 이걸 완전히 없애려면 분산 트랜잭션이 필요한데, 캐시에 분산 트랜잭션을 거는 건 배보다 배꼽이 크다. 좋아요 수, 댓글 수처럼 "약간의 오차가 허용되는 데이터"에 캐시를 적용하는 게 올바른 판단이다.</p>
+            <p>[!QUESTION] Redis가 죽으면 어떻게 되나?</p>
+            <p>Spring Cache 추상화의 장점이 여기서 드러난다. Redis 연결이 끊기면 <code>@Cacheable</code>은 예외를 던지지 않고, 캐시를 건너뛰고 원래 메서드를 실행한다. 즉, <mark>Redis가 죽어도 서비스는 계속 동작한다</mark>. 다만 모든 요청이 DB로 직접 가기 때문에 응답 시간이 캐시 적용 전 수준으로 돌아간다. 이걸 graceful degradation이라고 한다. INCR 카운터 방식을 쓰고 있었다면 Redis 복구 후 DB에서 카운터를 다시 초기화해야 한다.</p>
+            <p>[!QUESTION] @Cacheable을 같은 클래스 내부에서 호출하면 왜 안 되나?</p>
+            <p><code>@Cacheable</code>은 <mark>Spring AOP 프록시</mark>를 통해 동작한다. 외부에서 호출하면 프록시를 거치기 때문에 캐시 로직이 실행되지만, 같은 클래스 내부에서 <code>this.메서드()</code>로 호출하면 프록시를 우회하기 때문에 캐시가 동작하지 않는다. 이건 <code>@Transactional</code>과 완전히 같은 원리다. 해결 방법은 캐시 메서드를 별도 클래스로 분리하거나, <code>self-injection</code> 패턴을 사용하는 것이다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Redis</span>
+          <span>#캐시</span>
+          <span>#아키텍처</span>
+          <span>#TTL</span>
+          <span>#옷장을부탁해</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="redis-cache-2-patterns.html">&larr; 이전 글</a>
+          <a href="../pages/nbuntu.html">목록으로 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

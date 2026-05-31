@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[JPA] 4. RIGHT OUTER JOIN - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[JPA] 4. RIGHT OUTER JOIN</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">JPA JOIN 시리즈 (4/5)</div>
+            <p>이전 편: <a href="jpa-join-3-left-outer.html">[JPA] 3. LEFT OUTER JOIN</a></p>
+            <p>다음 편: <a href="jpa-join-5-fetch-join.html">[JPA] 5. JPA fetch join</a></p>
+          </div>
+
+
+
+          <p>RIGHT OUTER JOIN은 <mark>오른쪽 테이블의 모든 행</mark>을 결과에 포함시킨다. LEFT OUTER JOIN과 방향만 반대다. 왼쪽에 매칭되는 행이 없으면 왼쪽 컬럼은 NULL로 채운다.</p>
+
+          <div class="callout callout-info">
+            <div class="callout-title">시리즈 안내</div>
+            <p>- <a href="jpa-join-1-overview.html">JOIN 유형 개요</a></p>
+            <p>- <a href="jpa-join-2-inner.html">INNER JOIN</a></p>
+            <p>- <a href="jpa-join-3-left-outer.html">LEFT OUTER JOIN</a></p>
+            <p>- <a href="jpa-join-4-right-outer.html">RIGHT OUTER JOIN</a> ← 현재 문서</p>
+            <p>- <a href="jpa-join-5-fetch-join.html">JPA fetch join</a></p>
+          </div>
+
+          <h2>동작 원리</h2>
+
+          <p>피드 목록을 조회하는데, 작성자(User)가 없는 피드도 포함시켜야 하는 상황이다.</p>
+
+<pre><code class="language-sql">SELECT u.*, f.*
+FROM user u
+RIGHT OUTER JOIN feed f ON u.id = f.author_id</code></pre>
+          <p><code>feed</code> 기준으로 전체를 보여준다. <code>feed.author_id</code>에 대응하는 User가 없으면 user 컬럼이 NULL로 채워진다.</p>
+
+          <div class="callout callout-info">
+            <div class="callout-title">다이어그램 추가 예정</div>
+            <p>여기에 RIGHT JOIN의 집합 관계(오른쪽 전체 + 교집합)를 보여주는 다이어그램 필요.</p>
+          </div>
+
+          <h2>LEFT JOIN으로 대체 가능</h2>
+
+          <p>RIGHT JOIN은 테이블 순서를 바꾸면 LEFT JOIN과 동일한 결과가 나온다.</p>
+
+<pre><code class="language-sql">-- RIGHT JOIN
+SELECT u.*, f.*
+FROM user u
+RIGHT OUTER JOIN feed f ON u.id = f.author_id
+
+-- 위와 동일한 결과
+SELECT u.*, f.*
+FROM feed f
+LEFT OUTER JOIN user u ON f.author_id = u.id</code></pre>
+          <p>테이블 순서를 <code>feed</code>를 왼쪽으로 바꾸고 LEFT JOIN을 쓰면 같다. 이 때문에 실무에서는 RIGHT JOIN을 거의 쓰지 않는다. LEFT JOIN으로 통일하면 쿼리를 읽을 때 기준 테이블이 항상 왼쪽이라 가독성이 좋다.</p>
+
+          <h2>JPA에서의 RIGHT JOIN</h2>
+
+          <p>JPQL도 <code>RIGHT JOIN</code>을 지원한다.</p>
+
+<pre><code class="language-java">@Query("SELECT f FROM Feed f RIGHT JOIN f.author a")
+List&lt;Feed&gt; findAllRightJoined();</code></pre>
+          <p>하지만 위에서 설명한 이유로 실무에서는 테이블 순서를 바꾸고 LEFT JOIN으로 쓰는 게 일반적이다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">RIGHT JOIN보다 LEFT JOIN 권장</div>
+            <p>팀 코드에서 LEFT JOIN으로 통일하면 "왼쪽이 기준"이라는 일관된 읽기 방식이 만들어진다. RIGHT JOIN을 섞으면 기준 테이블을 파악하는 데 인지 비용이 올라간다.</p>
+          </div>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">RIGHT JOIN과 LEFT JOIN을 혼용</div>
+            <p>같은 팀 코드에서 RIGHT JOIN과 LEFT JOIN을 섞어 쓰면 가독성이 떨어진다. 기준 테이블이 왼쪽인지 오른쪽인지 매번 확인해야 하기 때문이다. LEFT JOIN으로 통일하는 것이 관례다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#JPA</span>
+          <span>#JOIN</span>
+          <span>#RIGHTJOIN</span>
+          <span>#RIGHTOUTERJOIN</span>
+          <span>#JPQL</span>
+          <span>#SQL</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="jpa-join-3-left-outer.html">&larr; 이전 글</a>
+          <a href="jpa-join-5-fetch-join.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

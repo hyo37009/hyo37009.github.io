@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[코프링] 5. Spring Security + Kotlin 심화 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[코프링] 5. Spring Security + Kotlin 심화</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">코프링 실전 (5/5)</div>
+            <p>이전 편: <a href="kopring-4-config-profile.html">[코프링] 4. 설정 관리와 프로파일 전략</a></p>
+            <p>이 문서가 시리즈의 마지막 편입니다.</p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">코프링 실전 시리즈 (5/5)</div>
+            <p>이전 편: <a href="kopring-4-config-profile.html">4 설정 관리와 프로파일 전략</a></p>
+          </div>
+
+          <p>Spring Security는 Spring 생태계에서 가장 복잡한 모듈 중 하나다. Java에서도 설정이 장황한데, Kotlin으로 오면 DSL 덕분에 간결해지는 부분이 있고, 어노테이션 use-site target 때문에 주의해야 하는 부분도 있다.</p>
+
+          <p>이 문서에서는 Kotlin + Spring Security 6.x (Spring Boot 3.x)의 설정 패턴, JWT 인증 구현, 메서드 보안, 그리고 테스트 전략을 다룬다.</p>
+
+          <h2>Security DSL 설정</h2>
+
+          <p>Spring Security 6.x에서는 Kotlin DSL로 보안 설정을 작성한다. <a href="dsl-설계.html">DSL의 원리</a>를 이해하고 있다면, 이 설정이 내부적으로 어떻게 동작하는지 감이 올 것이다.</p>
+
+<pre><code class="language-kotlin">@Configuration
+@EnableWebSecurity
+class SecurityConfig {
+
+    @Bean
+    fun securityFilterChain(http: HttpSecurity): SecurityFilterChain {
+        http {
+            csrf { disable() }
+            sessionManagement {
+                sessionCreationPolicy = SessionCreationPolicy.STATELESS
+            }
+            authorizeHttpRequests {
+                authorize("/api/auth/**", permitAll)
+                authorize("/api/posts", permitAll)
+                authorize("/api/posts/{id}", permitAll)
+                authorize("/api/admin/**", hasRole("ADMIN"))
+                authorize(anyRequest, authenticated)
+            }
+            exceptionHandling {
+                authenticationEntryPoint = CustomAuthenticationEntryPoint()
+                accessDeniedHandler = CustomAccessDeniedHandler()
+            }
+        }
+        return http.build()
+    }
+}</code></pre>
+          <p>각 블록의 역할을 정리하면 이렇다.</p>
+
+          <ul>
+            <li><code>csrf { disable() }</code> — REST API는 보통 CSRF 보호가 필요 없다. 세션이 아닌 JWT 토큰 기반 인증을 사용하기 때문이다.</li>
+            <li><code>sessionManagement</code> — <code>STATELESS</code>로 설정하면 서버가 세션을 생성하지 않는다. JWT 인증에서 필수적인 설정이다.</li>
+            <li><code>authorizeHttpRequests</code> — URL 패턴별 접근 권한을 설정한다. 위에서 아래로 순서대로 매칭되므로, <strong>구체적인 규칙을 먼저</strong> 배치해야 한다.</li>
+            <li><code>exceptionHandling</code> — 인증/인가 실패 시 반환할 응답을 커스터마이즈한다.</li>
+          </ul>
+
+          <p>Java의 메서드 체이닝과 비교하면 가독성이 훨씬 좋다. 중괄호의 들여쓰기가 설정의 계층 구조를 그대로 반영한다.</p>
+
+          <hr>
+
+          <h2>JWT 인증 구현</h2>
+
+          <p>블로그 프로젝트에서 가장 일반적인 인증 방식인 JWT를 구현해보자. 전체 흐름은 이렇다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    participant C as Client
+    participant F as JwtFilter
+    participant S as Security Context
+    participant A as Controller
+
+    C->>F: 요청 + Authorization: Bearer {token}
+    F->>F: 토큰 추출 & 검증
+    F->>S: Authentication 저장
+    S->>A: 인증된 요청 전달
+    A->>C: 응답
+</div>
+          <h3>JwtProvider — 토큰 생성과 검증</h3>
+
+          <p>핵심 기능은 토큰 생성, 클레임 추출, 검증 세 가지다. 먼저 시크릿 키 초기화와 토큰 생성 부분을 보자.</p>
+
+<pre><code class="language-kotlin">@Component
+class JwtProvider(
+    private val securityProperties: SecurityProperties
+) {
+    private val secretKey: SecretKey by lazy {
+        Keys.hmacShaKeyFor(securityProperties.jwtSecret.toByteArray())
+    }
+
+    fun createToken(userId: Long, role: String): String {
+        val now = Date()
+        val expiration = Date(now.time + securityProperties.jwtExpirationMs)
+
+        return Jwts.builder()
+            .subject(userId.toString())
+            .claim("role", role)
+            .issuedAt(now)
+            .expiration(expiration)
+            .signWith(secretKey)
+            .compact()
+    }</code></pre>
+          <ul>
+            <li><code>by lazy</code> — <code>secretKey</code>를 최초 사용 시에 한 번만 생성한다. 프로퍼티가 주입된 후에 키를 생성해야 하므로 지연 초기화가 필요하다.</li>
+            <li><code>createToken</code> — 사용자 ID와 역할을 클레임에 넣고 JWT를 생성한다. <code>subject</code>에 userId를, <code>claim</code>에 역할을 저장한다.</li>
+          </ul>
+
+          <p>토큰 검증과 클레임 추출 부분이다.</p>
+
+<pre><code class="language-kotlin">    fun getUserId(token: String): Long {
+        return getClaims(token).subject.toLong()
+    }
+
+    fun getRole(token: String): String {
+        return getClaims(token)["role"] as String
+    }
+
+    fun validateToken(token: String): Boolean {
+        return try {
+            getClaims(token)
+            true
+        } catch (e: JwtException) {
+            false
+        }
+    }
+
+    private fun getClaims(token: String): Claims {
+        return Jwts.parser()
+            .verifyWith(secretKey)
+            .build()
+            .parseSignedClaims(token)
+            .payload
+    }
+}</code></pre>
+          <ul>
+            <li><code>validateToken</code> — 토큰 파싱을 시도하고, 실패하면(만료, 서명 불일치 등) <code>JwtException</code>이 발생해서 <code>false</code>를 반환한다. Kotlin의 <code>try</code> 표현식을 활용해 간결하게 작성할 수 있다.</li>
+            <li><code>getClaims</code> — 모든 추출/검증 메서드가 공유하는 내부 함수. 한 번만 정의하면 된다.</li>
+          </ul>
+
+          <hr>
+
+          <h3>JwtAuthenticationFilter — 필터 구현</h3>
+
+          <p>모든 요청에서 JWT 토큰을 추출하고, 유효하면 <code>SecurityContext</code>에 인증 정보를 설정하는 필터다.</p>
+
+<pre><code class="language-kotlin">@Component
+class JwtAuthenticationFilter(
+    private val jwtProvider: JwtProvider
+) : OncePerRequestFilter() {
+
+    override fun doFilterInternal(
+        request: HttpServletRequest,
+        response: HttpServletResponse,
+        filterChain: FilterChain
+    ) {
+        val token = resolveToken(request)
+
+        if (token != null &amp;&amp; jwtProvider.validateToken(token)) {
+            val userId = jwtProvider.getUserId(token)
+            val role = jwtProvider.getRole(token)
+
+            val authentication = UsernamePasswordAuthenticationToken(
+                userId,                              // principal
+                null,                                // credentials
+                listOf(SimpleGrantedAuthority("ROLE_$role"))  // authorities
+            )
+            SecurityContextHolder.getContext().authentication = authentication
+        }
+
+        filterChain.doFilter(request, response)
+    }
+
+    private fun resolveToken(request: HttpServletRequest): String? {
+        val bearer = request.getHeader("Authorization") ?: return null
+        return bearer.takeIf { it.startsWith("Bearer ") }?.substring(7)
+    }
+}</code></pre>
+          <ul>
+            <li><code>OncePerRequestFilter</code> — 요청당 한 번만 실행되는 것을 보장하는 필터. Forward나 Include가 있어도 중복 실행되지 않는다.</li>
+            <li><code>resolveToken</code> — <code>Authorization: Bearer {token}</code> 헤더에서 토큰 부분만 추출한다. Kotlin의 <code>?.</code> 체이닝과 <code>takeIf</code>로 null 안전하게 처리한다.</li>
+            <li><code>SecurityContextHolder</code> — 현재 스레드의 보안 컨텍스트에 인증 정보를 저장한다. 이후 컨트롤러에서 이 정보를 꺼내 쓸 수 있다.</li>
+          </ul>
+
+          <p>필터를 Security 설정에 등록해야 한다.</p>
+
+<pre><code class="language-kotlin">@Bean
+fun securityFilterChain(
+    http: HttpSecurity,
+    jwtFilter: JwtAuthenticationFilter
+): SecurityFilterChain {
+    http {
+        // ... 기존 설정 ...
+        addFilterBefore&lt;UsernamePasswordAuthenticationFilter&gt;(jwtFilter)
+    }
+    return http.build()
+}</code></pre>
+          <p><code>addFilterBefore</code>는 지정한 필터 앞에 JWT 필터를 배치한다. <code>UsernamePasswordAuthenticationFilter</code> 앞에 넣으면, Spring Security의 기본 인증 처리보다 JWT 인증이 먼저 실행된다.</p>
+
+          <hr>
+
+          <h2>인증/인가 예외 처리</h2>
+
+          <p>Security의 예외 처리는 <a href="kopring-2-exception-validation.html">GlobalExceptionHandler</a>와 별도로 동작한다. Security 필터 체인에서 발생하는 예외는 <code>@ControllerAdvice</code>에 도달하지 않기 때문이다.</p>
+
+<pre><code class="language-kotlin">class CustomAuthenticationEntryPoint : AuthenticationEntryPoint {
+    private val objectMapper = ObjectMapper()
+
+    override fun commence(
+        request: HttpServletRequest,
+        response: HttpServletResponse,
+        authException: AuthenticationException
+    ) {
+        response.status = HttpStatus.UNAUTHORIZED.value()
+        response.contentType = MediaType.APPLICATION_JSON_VALUE
+        response.characterEncoding = "UTF-8"
+
+        val errorResponse = ErrorResponse(
+            code = "UNAUTHORIZED",
+            message = "인증이 필요합니다"
+        )
+        response.writer.write(objectMapper.writeValueAsString(errorResponse))
+    }
+}</code></pre>
+          <p><code>AuthenticationEntryPoint</code>는 인증되지 않은 요청(401)을 처리한다. 토큰이 없거나 유효하지 않을 때 호출된다. 인가 실패(권한 부족)는 별도의 <code>AccessDeniedHandler</code>가 담당한다.</p>
+
+<pre><code class="language-kotlin">class CustomAccessDeniedHandler : AccessDeniedHandler {
+    private val objectMapper = ObjectMapper()
+
+    override fun handle(
+        request: HttpServletRequest,
+        response: HttpServletResponse,
+        accessDeniedException: AccessDeniedException
+    ) {
+        response.status = HttpStatus.FORBIDDEN.value()
+        response.contentType = MediaType.APPLICATION_JSON_VALUE
+        response.characterEncoding = "UTF-8"
+
+        val errorResponse = ErrorResponse(
+            code = "FORBIDDEN",
+            message = "접근 권한이 없습니다"
+        )
+        response.writer.write(objectMapper.writeValueAsString(errorResponse))
+    }
+}</code></pre>
+          <p><code>AccessDeniedHandler</code>는 인가되지 않은 요청(403)을 처리한다. 인증은 됐지만 권한이 부족할 때 호출된다. 두 핸들러 모두 응답을 직접 <code>HttpServletResponse</code>에 쓰는 방식이다. 커스텀 핸들러 없이 기본 동작을 쓰면 HTML 에러 페이지가 반환되므로, REST API에서는 반드시 커스텀 핸들러를 만들어야 한다.</p>
+
+          <hr>
+
+          <h2>컨트롤러에서 인증 정보 사용</h2>
+
+          <p>인증이 완료된 후 컨트롤러에서 현재 사용자 정보를 가져오는 방법이 여러 가지 있다.</p>
+
+          <h4>@AuthenticationPrincipal</h4>
+
+          <p>가장 직접적인 방법이다.</p>
+
+<pre><code class="language-kotlin">@GetMapping("/api/me")
+fun getMyInfo(
+    @AuthenticationPrincipal userId: Long
+): ResponseEntity&lt;UserResponse&gt; {
+    val user = userService.findById(userId)
+    return ResponseEntity.ok(UserResponse.from(user))
+}</code></pre>
+          <p><code>@AuthenticationPrincipal</code>은 <code>SecurityContext</code>에서 <code>principal</code> 객체를 꺼내준다. 앞에서 JWT 필터에서 <code>userId</code>를 <code>principal</code>에 넣었으므로, 여기서 <code>Long</code>으로 받을 수 있다.</p>
+
+          <hr>
+
+          <h4>커스텀 어노테이션</h4>
+
+          <p>매번 <code>@AuthenticationPrincipal</code>을 쓰는 것이 번거로우면, 커스텀 어노테이션을 만들 수 있다.</p>
+
+<pre><code class="language-kotlin">@Target(AnnotationTarget.VALUE_PARAMETER)
+@Retention(AnnotationRetention.RUNTIME)
+@AuthenticationPrincipal
+annotation class CurrentUser</code></pre>
+          <p><code>@CurrentUser</code>는 <code>@AuthenticationPrincipal</code>을 감싼 메타 어노테이션이다. 컨트롤러에서 이렇게 사용한다.</p>
+
+<pre><code class="language-kotlin">@GetMapping("/api/me")
+fun getMyInfo(@CurrentUser userId: Long): ResponseEntity&lt;UserResponse&gt; {
+    // ...
+}</code></pre>
+          <p>의미가 명확해지고, 나중에 principal 타입이 바뀔 때 <code>@CurrentUser</code> 정의만 수정하면 모든 컨트롤러에 반영된다.</p>
+
+          <hr>
+
+          <h2>메서드 보안</h2>
+
+          <p>URL 패턴 기반 보안 외에, 메서드 레벨에서 권한을 검사할 수 있다.</p>
+
+<pre><code class="language-kotlin">@Configuration
+@EnableMethodSecurity
+class MethodSecurityConfig</code></pre>
+          <p><code>@EnableMethodSecurity</code>를 추가하면 <code>@PreAuthorize</code>, <code>@PostAuthorize</code> 등의 어노테이션을 사용할 수 있다.</p>
+
+<pre><code class="language-kotlin">@Service
+class PostService(
+    private val postRepository: PostRepository
+) {
+    @PreAuthorize("hasRole('ADMIN')")
+    fun deletePost(id: Long) {
+        postRepository.deleteById(id)
+    }
+
+    @PreAuthorize("#authorId == authentication.principal")
+    fun updatePost(authorId: Long, request: UpdatePostRequest): Post {
+        // 작성자 본인만 수정 가능
+        val post = postRepository.findByIdOrNull(authorId)
+            ?: throw EntityNotFoundException("Post", authorId)
+        post.update(request.title, request.content)
+        return post
+    }
+}</code></pre>
+          <ul>
+            <li><code>hasRole('ADMIN')</code> — ADMIN 역할을 가진 사용자만 호출할 수 있다.</li>
+            <li><code>#authorId == authentication.principal</code> — 메서드 파라미터 <code>authorId</code>가 현재 인증된 사용자의 ID와 같은지 확인한다. SpEL(Spring Expression Language) 표현식이다.</li>
+          </ul>
+
+          <p>메서드 보안은 URL 패턴으로 표현하기 어려운 세밀한 권한 제어에 유용하다. 다만 SpEL 표현식이 문자열이므로 타입 안전하지 않다는 점은 주의해야 한다.</p>
+
+          <hr>
+
+          <h2>PasswordEncoder 설정</h2>
+
+          <p>사용자 비밀번호를 저장할 때는 반드시 해시해야 한다. Spring Security의 <code>BCryptPasswordEncoder</code>를 빈으로 등록한다.</p>
+
+<pre><code class="language-kotlin">@Bean
+fun passwordEncoder(): PasswordEncoder = BCryptPasswordEncoder()</code></pre>
+          <p>회원가입과 로그인에서 사용하는 패턴은 이렇다.</p>
+
+<pre><code class="language-kotlin">@Service
+class AuthService(
+    private val userRepository: UserRepository,
+    private val passwordEncoder: PasswordEncoder,
+    private val jwtProvider: JwtProvider
+) {
+    @Transactional
+    fun register(request: RegisterRequest): User {
+        if (userRepository.existsByEmail(request.email)) {
+            throw DuplicateException("이메일", request.email)
+        }
+        val user = User(
+            email = request.email,
+            password = passwordEncoder.encode(request.password),
+            name = request.name
+        )
+        return userRepository.save(user)
+    }
+
+    fun login(request: LoginRequest): TokenResponse {
+        val user = userRepository.findByEmail(request.email)
+            ?: throw EntityNotFoundException("User", request.email)
+
+        if (!passwordEncoder.matches(request.password, user.password)) {
+            throw BusinessException(ErrorCode.INVALID_STATE, "비밀번호가 일치하지 않습니다")
+        }
+
+        val token = jwtProvider.createToken(user.id, user.role.name)
+        return TokenResponse(token)
+    }
+}</code></pre>
+          <ul>
+            <li><code>passwordEncoder.encode()</code> — 비밀번호를 BCrypt 해시로 변환. 같은 비밀번호라도 매번 다른 해시값이 생성된다(salt 포함).</li>
+            <li><code>passwordEncoder.matches()</code> — 입력된 비밀번호와 저장된 해시를 비교. 직접 해시를 비교하는 것이 아니라 BCrypt의 검증 로직을 사용한다.</li>
+          </ul>
+
+          <hr>
+
+          <h2>Security 테스트</h2>
+
+          <p>Security가 적용된 API를 테스트하려면 인증 정보를 설정해야 한다.</p>
+
+          <h4>@WithMockUser</h4>
+
+          <p>가장 간단한 방법이다. 가짜 인증 정보를 주입한다.</p>
+
+<pre><code class="language-kotlin">@WebMvcTest(PostController::class)
+class PostControllerTest {
+
+    @Autowired
+    lateinit var mockMvc: MockMvc
+
+    @Test
+    fun `인증 없이 공개 API 호출 가능`() {
+        mockMvc.get("/api/posts")
+            .andExpect { status { isOk() } }
+    }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `ADMIN 역할로 삭제 가능`() {
+        mockMvc.delete("/api/admin/posts/1")
+            .andExpect { status { isOk() } }
+    }
+
+    @Test
+    @WithMockUser(roles = ["USER"])
+    fun `USER 역할로 삭제 불가`() {
+        mockMvc.delete("/api/admin/posts/1")
+            .andExpect { status { isForbidden() } }
+    }
+}</code></pre>
+          <p><code>@WithMockUser</code>는 테스트 실행 시 <code>SecurityContext</code>에 가짜 <code>Authentication</code>을 설정한다. <code>roles</code> 파라미터로 역할을 지정할 수 있다.</p>
+
+          <hr>
+
+          <h4>커스텀 SecurityContext로 테스트</h4>
+
+          <p>JWT 기반 인증에서 <code>principal</code>이 <code>userId(Long)</code>인 경우, <code>@WithMockUser</code>만으로는 부족할 수 있다. 커스텀 <code>SecurityContext</code>를 설정하는 유틸리티를 만들면 편하다.</p>
+
+<pre><code class="language-kotlin">fun MockMvc.getWithAuth(url: String, userId: Long = 1L, role: String = "USER") =
+    get(url) {
+        with(SecurityMockMvcRequestPostProcessors.user(userId.toString()).roles(role))
+    }</code></pre>
+          <p>또는 테스트용 JWT 토큰을 직접 생성해서 헤더에 넣는 방법도 있다.</p>
+
+<pre><code class="language-kotlin">@SpringBootTest
+@AutoConfigureMockMvc
+class PostIntegrationTest {
+
+    @Autowired
+    lateinit var mockMvc: MockMvc
+
+    @Autowired
+    lateinit var jwtProvider: JwtProvider
+
+    @Test
+    fun `JWT 토큰으로 인증`() {
+        val token = jwtProvider.createToken(userId = 1L, role = "USER")
+
+        mockMvc.get("/api/me") {
+            header("Authorization", "Bearer $token")
+        }.andExpect {
+            status { isOk() }
+        }
+    }
+}</code></pre>
+          <p>통합 테스트에서는 실제 JWT를 사용하는 것이 더 현실적인 테스트가 된다.</p>
+
+          <hr>
+
+          <h2>심화 분석</h2>
+
+          <h4>CORS 설정</h4>
+
+          <p>프론트엔드와 백엔드가 다른 도메인에서 동작하면 CORS(Cross-Origin Resource Sharing) 설정이 필요하다.</p>
+
+<pre><code class="language-kotlin">http {
+    cors {
+        configurationSource = UrlBasedCorsConfigurationSource().apply {
+            registerCorsConfiguration("/**", CorsConfiguration().apply {
+                allowedOrigins = listOf("https://myblog.com", "http://localhost:3000")
+                allowedMethods = listOf("GET", "POST", "PUT", "DELETE", "OPTIONS")
+                allowedHeaders = listOf("*")
+                allowCredentials = true
+                maxAge = 3600
+            })
+        }
+    }
+}</code></pre>
+          <p>Kotlin의 <code>apply</code> 스코프 함수 덕분에 CORS 설정이 선언적으로 읽힌다. Java의 빌더 패턴보다 들여쓰기가 곧 구조라서 이해하기 쉽다.</p>
+
+          <p>로컬 개발 환경(<code>http://localhost:3000</code>)과 운영 환경(<code>https://myblog.com</code>)의 도메인이 다르므로, <a href="kopring-4-config-profile.html">설정 파일</a>에서 프로파일별로 관리하는 것이 좋다.</p>
+
+          <h4>필터 체인의 순서</h4>
+
+          <p>Spring Security의 필터 체인은 정해진 순서대로 실행된다. JWT 필터의 위치가 중요하다.</p>
+
+<div class="mermaid">
+graph LR
+    A[CorsFilter] --> B[CsrfFilter] --> C[JwtFilter] --> D[AuthorizationFilter] --> E[Controller]
+
+    style C fill:#e8f5e9
+</div>
+          <p><code>addFilterBefore&lt;UsernamePasswordAuthenticationFilter&gt;</code>로 JWT 필터를 등록하면, 기본 인증 필터보다 앞에서 JWT를 처리한다. 토큰이 유효하면 <code>SecurityContext</code>에 인증 정보가 설정되고, 이후 <code>AuthorizationFilter</code>에서 URL 기반 권한 검사가 수행된다.</p>
+
+          <h4>Role과 Authority의 차이</h4>
+
+          <p>Spring Security에서 <code>ROLE_ADMIN</code>과 <code>ADMIN</code>은 다르다.</p>
+
+          <ul>
+            <li><code>hasRole("ADMIN")</code> — 내부적으로 <code>ROLE_</code> 접두사를 붙여서 <code>ROLE_ADMIN</code> 권한을 찾는다.</li>
+            <li><code>hasAuthority("ADMIN")</code> — 정확히 <code>ADMIN</code> 권한을 찾는다.</li>
+          </ul>
+
+          <p>JWT 필터에서 <code>SimpleGrantedAuthority("ROLE_$role")</code>로 설정했으므로 <code>hasRole("ADMIN")</code>이 매칭된다. <code>ROLE_</code> 접두사를 빼먹으면 권한이 맞지 않아 403이 반환된다.</p>
+
+          <hr>
+
+          <h2>자주 하는 실수</h2>
+
+          <h4>Security 필터에서 발생한 예외를 @ControllerAdvice가 못 잡음</h4>
+
+<pre><code class="language-kotlin">// @ControllerAdvice에서 AuthenticationException을 잡으려 해도 안 잡힌다
+@ExceptionHandler(AuthenticationException::class)
+fun handleAuth(e: AuthenticationException) = /* ... */</code></pre>
+          <p>Security 필터는 Spring MVC의 <code>DispatcherServlet</code>보다 앞에서 실행된다. <code>@ControllerAdvice</code>는 <code>DispatcherServlet</code> 이후에 동작하므로, 필터에서 발생한 예외는 도달하지 않는다. <code>AuthenticationEntryPoint</code>와 <code>AccessDeniedHandler</code>로 처리해야 한다.</p>
+
+          <h4>JWT 시크릿을 코드에 하드코딩</h4>
+
+<pre><code class="language-kotlin">// 나쁜 예
+private val secretKey = Keys.hmacShaKeyFor("my-super-secret-key-1234567890".toByteArray())
+
+// 좋은 예 — 설정에서 주입
+private val secretKey: SecretKey by lazy {
+    Keys.hmacShaKeyFor(securityProperties.jwtSecret.toByteArray())
+}</code></pre>
+          <p>JWT 시크릿이 코드에 있으면 Git에 올라가고, 유출 시 모든 토큰이 위조될 수 있다. 반드시 <a href="kopring-4-config-profile.html">환경 변수</a>로 관리해야 한다.</p>
+
+          <h4>permitAll 순서 실수</h4>
+
+<pre><code class="language-kotlin">authorizeHttpRequests {
+    authorize(anyRequest, authenticated)     // 모든 요청에 인증 필요
+    authorize("/api/auth/**", permitAll)     // 이 규칙은 도달하지 않음!
+}</code></pre>
+          <p><code>authorizeHttpRequests</code>의 규칙은 <strong>위에서 아래로</strong> 매칭된다. <code>anyRequest</code>가 먼저 있으면 모든 요청이 여기서 잡히고, 아래의 <code>permitAll</code> 규칙은 무의미해진다. <mark>구체적인 규칙을 위에, 포괄적인 규칙을 아래에</mark> 배치해야 한다.</p>
+
+          <hr>
+
+          <div class="callout callout-question">
+            <div class="callout-title">면접 Q&A</div>
+            <p><strong>Q. Kotlin + Spring Boot 프로젝트에서 반드시 적용해야 하는 컴파일러 플러그인은?</strong></p>
+            <p><code>kotlin-jpa</code>와 <code>kotlin-spring</code>이다. <code>kotlin-jpa</code>는 JPA 엔티티에 기본 생성자를 자동 생성하고, <code>kotlin-spring</code>은 Spring 어노테이션이 붙은 클래스에 <code>open</code>을 자동 추가한다. Kotlin 클래스는 기본이 <code>final</code>이라 프록시 생성이 불가능한데, 이 플러그인이 해결한다.</p>
+            <p><strong>Q. JPA 엔티티에 data class를 쓰면 안 되는 이유는?</strong></p>
+            <p><code>data class</code>의 <code>equals</code>/<code>hashCode</code>는 모든 프로퍼티를 비교하지만, JPA 엔티티의 동등성은 ID로 판단해야 한다. <code>toString</code>은 지연 로딩된 연관관계를 트리거하고, <code>copy</code>는 영속성 컨텍스트와 충돌한다. <code>@Embeddable</code> 값 객체에는 <code>data class</code>가 적합하지만, <code>@Entity</code>에는 일반 <code>class</code>를 써야 한다.</p>
+            <p><strong>Q. Kotlin에서 Bean Validation 어노테이션 사용 시 @field: 접두사가 필요한 이유는?</strong></p>
+            <p>Kotlin 생성자 프로퍼티에 어노테이션을 붙이면 기본적으로 생성자 파라미터에 적용된다. Bean Validation은 필드의 어노테이션을 읽으므로, <code>@field:NotBlank</code>처럼 명시해야 Validation이 동작한다. 빼먹으면 에러 없이 검증이 무시되어 발견하기 어렵다.</p>
+            <p><strong>Q. @ConfigurationProperties에서 data class를 쓸 수 있는 이유는?</strong></p>
+            <p>설정 객체는 JPA 엔티티와 달리 영속성 컨텍스트에 관리되지 않는다. <code>data class</code>의 <code>equals</code>/<code>hashCode</code>/<code>copy</code>가 문제를 일으키지 않으며, 불변 설정 객체를 만드는 데 오히려 적합하다. Spring Boot 3.x에서는 생성자 바인딩이 기본이므로 <code>val</code> 프로퍼티에 직접 바인딩된다.</p>
+            <p><strong>Q. Spring Security 필터에서 발생한 예외를 @ControllerAdvice에서 처리할 수 없는 이유는?</strong></p>
+            <p>Security 필터 체인은 Spring MVC의 <code>DispatcherServlet</code>보다 앞에서 실행된다. <code>@ControllerAdvice</code>는 <code>DispatcherServlet</code> 이후에 동작하므로, 필터에서 발생한 예외는 도달하지 않는다. <code>AuthenticationEntryPoint</code>(401)와 <code>AccessDeniedHandler</code>(403)로 별도 처리해야 한다.</p>
+            <p><strong>Q. QueryDSL에서 동적 쿼리를 처리하는 핵심 패턴은?</strong></p>
+            <p>조건별로 <code>BooleanExpression?</code>을 반환하는 메서드를 만들고, <code>where</code>에 넘긴다. QueryDSL은 <code>where</code>에 <code>null</code>이 들어오면 해당 조건을 무시하므로, 파라미터가 없으면 <code>null</code>을 반환하고 있으면 조건을 반환하는 패턴으로 동적 쿼리를 깔끔하게 구현할 수 있다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Kotlin</span>
+          <span>#Spring</span>
+          <span>#Security</span>
+          <span>#JWT</span>
+          <span>#코프링</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="kopring-4-config-profile.html">&larr; 이전 글</a>
+          <a href="../pages/nbuntu.html">목록으로 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

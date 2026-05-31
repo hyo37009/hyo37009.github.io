@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[코딩테스트] 3. HashSet과 HashMap 선택 기준 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[코딩테스트] 3. HashSet과 HashMap 선택 기준</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">HashSet 가이드 (3/3)</div>
+            <p>이전 편: <a href="algo-hashset-2-patterns.html">[코딩테스트] 2. HashSet 활용 패턴</a></p>
+            <p>이 문서가 시리즈의 마지막 편입니다.</p>
+          </div>
+
+
+
+          <p><code>HashSet</code>과 <code>HashMap</code>은 둘 다 해시 기반 자료구조다. 차이는 저장하는 정보다.</p>
+
+          <table>
+          <thead>
+          <tr><th>자료구조</th><th>저장하는 것</th><th>질문</th></tr>
+          </thead>
+          <tbody>
+          <tr><td><code>HashSet&lt;T&gt;</code></td><td>값 자체</td><td>이 값이 있는가</td></tr>
+          <tr><td><code>HashMap&lt;K, V&gt;</code></td><td>키와 값</td><td>이 키에 대응되는 정보가 무엇인가</td></tr>
+          </tbody>
+          </table>
+
+          <h2>존재 여부면 HashSet</h2>
+
+          <p>값이 한 번이라도 등장했는지만 필요하면 <code>HashSet</code>이 맞다.</p>
+
+<pre><code class="language-java">Set&lt;String&gt; set = new HashSet&lt;&gt;();
+
+for (String word : words) {
+    set.add(word);
+}
+
+return set.contains(target);</code></pre>
+          <p>예시:</p>
+
+          <ul>
+            <li>문자열 집합에 포함되는지 확인</li>
+            <li>서로 다른 종류의 개수 세기</li>
+            <li>이미 방문한 좌표인지 확인</li>
+          </ul>
+
+          <h2>개수면 HashMap</h2>
+
+          <p>같은 값이 몇 번 등장했는지 필요하면 <code>HashMap&lt;T, Integer&gt;</code>가 맞다.</p>
+
+<pre><code class="language-java">Map&lt;String, Integer&gt; count = new HashMap&lt;&gt;();
+
+for (String name : participant) {
+    count.put(name, count.getOrDefault(name, 0) + 1);
+}</code></pre>
+          <p>예시:</p>
+
+          <ul>
+            <li>동명이인 처리</li>
+            <li>문자 빈도 비교</li>
+            <li>숫자 등장 횟수 세기</li>
+            <li>두 배열의 원소 구성이 같은지 비교</li>
+          </ul>
+
+          <h2>완주하지 못한 선수에 적용하기</h2>
+
+          <p>이 문제는 해시 문제지만 <code>HashSet</code>만으로는 부족하다. 이유는 동명이인 때문이다.</p>
+
+<pre><code class="language-text">participant = ["mislav", "stanko", "mislav", "ana"]
+completion  = ["stanko", "ana", "mislav"]</code></pre>
+          <p><code>HashSet</code>으로 바꾸면 참가자 쪽도 완주자 쪽도 <code>"mislav"</code>가 있다는 사실만 남는다. 참가자에 <code>"mislav"</code>가 2명이라는 정보가 사라진다.</p>
+
+          <p>그래서 이 문제는 다음처럼 봐야 한다.</p>
+
+          <table>
+          <thead>
+          <tr><th>필요한 정보</th><th>자료구조</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>이름이 있는가</td><td><code>HashSet</code></td></tr>
+          <tr><td>이름이 몇 명인가</td><td><code>HashMap&lt;String, Integer&gt;</code></td></tr>
+          </tbody>
+          </table>
+
+          <p>정답에 필요한 것은 "몇 명인가"이므로 <code>HashMap</code>을 쓴다.</p>
+
+          <h2>선택 기준 표</h2>
+
+          <table>
+          <thead>
+          <tr><th>문제 문장</th><th>떠올릴 구조</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>"서로 다른", "종류 수", "중복 제거"</td><td><code>HashSet</code></td></tr>
+          <tr><td>"존재하는지", "포함되는지"</td><td><code>HashSet</code></td></tr>
+          <tr><td>"몇 번", "개수", "빈도"</td><td><code>HashMap&lt;T, Integer&gt;</code></td></tr>
+          <tr><td>"이름별 점수", "키별 상태"</td><td><code>HashMap&lt;K, V&gt;</code></td></tr>
+          <tr><td>"순서대로 출력"</td><td><code>List</code>, 정렬, <code>LinkedHashSet</code></td></tr>
+          <tr><td>"정렬된 상태 유지"</td><td><code>TreeSet</code>, <code>TreeMap</code></td></tr>
+          </tbody>
+          </table>
+
+          <h2>외우는 법</h2>
+
+          <p><code>Set</code>은 값만 기억한다. 그래서 답할 수 있는 질문이 단순하다.</p>
+
+<pre><code class="language-text">Set: 너 있었어?
+Map: 너 몇 번 있었어? 너의 값은 뭐야?</code></pre>
+          <p>문제에서 답이 존재 여부로 끝나면 <code>HashSet</code>이다. 존재 여부를 넘어 개수나 상태가 붙으면 <code>HashMap</code>이다.</p>
+
+          <h2>HashMap 카운팅 기본형</h2>
+
+<pre><code class="language-java">Map&lt;String, Integer&gt; count = new HashMap&lt;&gt;();
+
+for (String key : arr) {
+    count.put(key, count.getOrDefault(key, 0) + 1);
+}</code></pre>
+          <p>감소까지 필요하면 다음처럼 쓴다.</p>
+
+<pre><code class="language-java">for (String key : arr2) {
+    count.put(key, count.get(key) - 1);
+}</code></pre>
+          <p>마지막에 0이 아닌 값을 찾으면 차이를 알 수 있다.</p>
+
+<pre><code class="language-java">for (String key : count.keySet()) {
+    if (count.get(key) != 0) {
+        return key;
+    }
+}</code></pre>
+          <h2>관련 문서</h2>
+
+          <ul>
+            <li><a href="algo-hashset-1-principles.html">HashSet 기본 원리와 시간복잡도</a></li>
+            <li><a href="algo-hashset-2-patterns.html">HashSet 활용 패턴</a></li>
+            <li><a href="코딩테스트문제-풀이프로그래머스pg42576-완주하지-못한-선수풀이-접근.html">PG42576 풀이 접근</a></li>
+            <li><a href="set-map.html">Set Map</a></li>
+          </ul>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#코딩테스트</span>
+          <span>#HashSet</span>
+          <span>#HashMap</span>
+          <span>#해시</span>
+          <span>#빈도계산</span>
+          <span>#자료구조</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="algo-hashset-2-patterns.html">&larr; 이전 글</a>
+          <a href="../pages/nbuntu.html">목록으로 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

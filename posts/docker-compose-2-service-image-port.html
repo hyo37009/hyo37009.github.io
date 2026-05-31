@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>2. 02 서비스 이미지 컨테이너 포트의 관계 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">2. 02 서비스 이미지 컨테이너 포트의 관계</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Docker Compose 정리 (2/9)</div>
+            <p>이전 편: <a href="docker-compose-1-env-concept.html">1. 01 Compose 파일이 표현하는 실행 환경</a></p>
+            <p>다음 편: <a href="docker-compose-3-network-volume.html">3. 03 네트워크와 볼륨이 상태를 만드는 방식</a></p>
+          </div>
+
+
+
+          <p>﻿# [Docker Compose 개념] 서비스 이미지 컨테이너 포트의 관계</p>
+
+          <div class="callout callout-info">
+            <div class="callout-title">Docker Compose 개념편</div>
+            <p>- <a href="docker-compose-1-env-concept.html">Compose 파일이 표현하는 실행 환경</a></p>
+            <p>- <mark>서비스 이미지 컨테이너 포트의 관계</mark> ← 현재 문서</p>
+            <p>- <a href="docker-compose-3-network-volume.html">네트워크와 볼륨이 상태를 만드는 방식</a></p>
+            <p>- <a href="docker-compose-4-env-vars-order.html">환경 변수와 시작 순서 설계</a></p>
+          </div>
+
+          <p>Compose를 처음 볼 때 헷갈리는 이유는 비슷한 말이 한꺼번에 나오기 때문이다. 서비스, 이미지, 컨테이너, 포트, 빌드가 모두 연결되어 있지만 같은 개념은 아니다.</p>
+
+          <p>예시 프로젝트의 <code>app</code> 서비스는 프로젝트 소스코드로 이미지를 빌드한 뒤 컨테이너를 실행한다. 반대로 <code>db</code> 서비스는 이미 만들어진 PostgreSQL 이미지를 받아와 컨테이너를 실행한다. 이 차이를 이해하면 <code>build</code>와 <code>image</code>를 언제 쓰는지 감이 잡힌다.</p>
+
+          <h2>서비스는 실행 역할이다</h2>
+
+          <p>현재 Compose 파일의 두 서비스는 역할이 다르다.</p>
+
+          <table>
+          <thead>
+          <tr><th>서비스</th><th>역할</th><th>이미지 준비 방식</th></tr>
+          </thead>
+          <tbody>
+          <tr><td><code>app</code></td><td>Spring Boot API 서버 실행</td><td>현재 프로젝트의 <code>Dockerfile</code>로 직접 빌드</td></tr>
+          <tr><td><code>db</code></td><td>PostgreSQL 서버 실행</td><td>Docker Hub의 <code>postgres:15-alpine</code> 이미지 사용</td></tr>
+          </tbody>
+          </table>
+
+          <p><code>app</code>은 내가 만든 코드이므로 <code>build: .</code>가 필요하다. <code>db</code>는 공식 PostgreSQL 이미지가 이미 있으므로 <code>image: postgres:15-alpine</code>이면 충분하다.</p>
+
+<pre><code class="language-yaml">services:
+  app:
+    build: .
+
+  db:
+    image: postgres:15-alpine</code></pre>
+          <p><code>build</code>는 "이미지를 어떻게 만들 것인가"이고, <code>image</code>는 "어떤 이미지를 실행할 것인가"다. 직접 만든 앱은 빌드가 필요하고, 이미 배포된 DB나 Redis 같은 인프라 이미지는 보통 <code>image</code>를 사용한다.</p>
+
+          <h2>Dockerfile은 앱 이미지의 조립법이다</h2>
+
+          <p>현재 프로젝트의 <code>Dockerfile</code>은 Java 17 이미지를 기반으로 Gradle 빌드를 실행하고, 생성된 JAR을 실행한다.</p>
+
+<pre><code class="language-dockerfile">FROM amazoncorretto:17
+
+WORKDIR /app
+
+COPY gradlew .
+COPY gradle gradle
+COPY build.gradle .
+COPY settings.gradle .
+
+RUN chmod +x gradlew
+RUN ./gradlew dependencies --no-daemon || true
+
+COPY src src
+RUN ./gradlew clean build -x test --no-daemon
+
+EXPOSE 80
+
+ENV PROJECT_NAME=discodeit
+ENV PROJECT_VERSION=0.0.1-SNAPSHOT
+ENV JVM_OPTS=""
+
+ENTRYPOINT ["sh", "-c", "java $JVM_OPTS -jar build/libs/${PROJECT_NAME}-${PROJECT_VERSION}.jar"]</code></pre>
+          <p>이 파일은 "이미지를 만드는 과정"과 "컨테이너 시작 시 실행할 명령"을 함께 정의한다. Compose의 <code>app.build: .</code>는 이 Dockerfile을 사용해 이미지를 만든다.</p>
+
+          <p>다만 현재 프로젝트에서는 점검할 지점이 있다. <code>build.gradle</code>의 버전은 <code>2.0-M9</code>이고, <code>settings.gradle</code>의 프로젝트 이름은 <code>discodeit</code>이다. 기본 JAR 이름은 보통 <code>discodeit-2.0-M9.jar</code> 형태가 된다. 그런데 Dockerfile의 <code>ENTRYPOINT</code>는 <code>discodeit-0.0.1-SNAPSHOT.jar</code>를 실행하려고 한다.</p>
+
+          <p>이 이름이 맞지 않으면 이미지는 빌드되어도 컨테이너 시작 시 JAR 파일을 찾지 못한다. 실습편에서 이 부분을 <code>app.jar</code>로 고정하는 방식으로 정리한다.</p>
+
+          <h2>컨테이너 포트와 호스트 포트는 다르다</h2>
+
+          <p>현재 Compose 파일에는 다음 포트 매핑이 있다.</p>
+
+<pre><code class="language-yaml">ports:
+  - "8081:80"</code></pre>
+          <p>왼쪽 <code>8081</code>은 호스트 포트다. 내 컴퓨터의 브라우저나 HTTP 클라이언트가 접근하는 포트다. 오른쪽 <code>80</code>은 컨테이너 내부 포트다. Spring Boot 앱이 컨테이너 안에서 실제로 열고 있는 포트다.</p>
+
+          <p>즉 이 설정은 다음 의미다.</p>
+
+<pre><code class="language-text">내 컴퓨터 localhost:8081
+  -&gt; app 컨테이너 내부 80번 포트</code></pre>
+          <p><code>application-prod.yml</code>에는 <code>server.port: 80</code>이 있으므로, 앱 컨테이너 내부 포트가 80인 것은 자연스럽다. 호스트에서 이미 80번 포트를 쓰고 있을 수 있으니 바깥쪽은 8081로 열어둔 것이다.</p>
+
+          <h2>EXPOSE는 문서화이고 ports는 실제 연결이다</h2>
+
+          <p>Dockerfile에도 포트 관련 줄이 있다.</p>
+
+<pre><code class="language-dockerfile">EXPOSE 80</code></pre>
+          <p><code>EXPOSE</code>는 이 이미지가 80번 포트를 사용할 의도가 있다는 문서화에 가깝다. 이것만으로 호스트에서 접근할 수 있게 되는 것은 아니다. 실제로 호스트 포트를 열려면 Compose의 <code>ports</code>가 필요하다.</p>
+
+          <table>
+          <thead>
+          <tr><th>설정</th><th>위치</th><th>의미</th></tr>
+          </thead>
+          <tbody>
+          <tr><td><code>EXPOSE 80</code></td><td>Dockerfile</td><td>이미지가 80번 포트를 사용한다는 힌트</td></tr>
+          <tr><td><code>ports: "8081:80"</code></td><td>Compose</td><td>호스트 8081을 컨테이너 80에 실제 연결</td></tr>
+          </tbody>
+          </table>
+
+          <p>그래서 <code>EXPOSE</code>가 없어도 <code>ports</code>가 있으면 접근할 수 있고, <code>EXPOSE</code>가 있어도 <code>ports</code>가 없으면 호스트에서 직접 접근할 수 없다.</p>
+
+          <h2>db 서비스의 포트는 꼭 열어야 하는가</h2>
+
+          <p>현재 DB 서비스는 다음처럼 호스트 5432를 컨테이너 5432에 연결한다.</p>
+
+<pre><code class="language-yaml">db:
+  ports:
+    - "5432:5432"</code></pre>
+          <p>이 설정이 있으면 내 컴퓨터의 DB 클라이언트에서 <code>localhost:5432</code>로 접속할 수 있다. 로컬 개발에서는 편하다.</p>
+
+          <p>하지만 앱 컨테이너가 DB에 접속하기 위해 이 포트 매핑이 필요한 것은 아니다. 앱과 DB는 같은 Compose 네트워크 안에 있으므로 <code>db:5432</code>로 통신할 수 있다. 즉 <code>ports</code>는 외부 도구가 DB에 접속해야 할 때만 필요하다.</p>
+
+          <p>로컬에서 DBeaver나 IntelliJ Database 탭으로 접속할 일이 많다면 유지해도 된다. 포트 충돌이 자주 나거나 외부 노출을 줄이고 싶다면 제거해도 앱과 DB의 내부 통신은 유지된다.</p>
+
+          <h2>이 문서의 핵심</h2>
+
+          <p>Compose에서 헷갈리는 이름들을 한 번에 정리하면 다음과 같다.</p>
+
+          <table>
+          <thead>
+          <tr><th>개념</th><th>질문</th><th>예시</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>서비스</td><td>어떤 역할을 실행하는가</td><td><code>app</code>, <code>db</code></td></tr>
+          <tr><td>이미지</td><td>컨테이너의 실행 파일 묶음은 무엇인가</td><td>앱 이미지, <code>postgres:15-alpine</code></td></tr>
+          <tr><td>Dockerfile</td><td>앱 이미지를 어떻게 만들 것인가</td><td>Gradle 빌드 후 JAR 실행</td></tr>
+          <tr><td>컨테이너</td><td>이미지로 실제 실행된 프로세스 격리 공간</td><td><code>app</code> 컨테이너, <code>db</code> 컨테이너</td></tr>
+          <tr><td>컨테이너 포트</td><td>컨테이너 안에서 열린 포트는 무엇인가</td><td>앱 <code>80</code>, DB <code>5432</code></td></tr>
+          <tr><td>호스트 포트</td><td>내 컴퓨터에서 접근하는 포트는 무엇인가</td><td>앱 <code>8081</code>, DB <code>5432</code></td></tr>
+          </tbody>
+          </table>
+
+          <p>Compose 파일을 읽을 때는 이 질문을 붙이면 된다. "이 줄은 이미지를 만드는 줄인가, 컨테이너를 실행하는 줄인가, 외부에서 들어오는 문을 여는 줄인가." 그 구분이 되면 설정이 훨씬 덜 무섭다.</p>
+
+          <h2>참고한 공식 문서</h2>
+
+          <ul>
+            <li><a href="https://docs.docker.com/reference/compose-file/build/">Compose Build Specification</a></li>
+            <li><a href="https://docs.docker.com/reference/compose-file/services/">Compose services reference</a></li>
+            <li><a href="https://docs.docker.com/compose/intro/compose-application-model/">Docker Compose application model</a></li>
+          </ul>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Dockerfile</span>
+          <span>#Docker_Compose</span>
+          <span>#포트</span>
+          <span>#SpringBoot</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="docker-compose-1-env-concept.html">&larr; 이전 글</a>
+          <a href="docker-compose-3-network-volume.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

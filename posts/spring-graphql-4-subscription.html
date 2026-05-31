@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Spring GraphQL] 4. Subscription과 예외 처리 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Spring GraphQL] 4. Subscription과 예외 처리</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Spring GraphQL (4/8)</div>
+            <p>이전 편: <a href="spring-graphql-3-n-plus-one.html">[Spring GraphQL] 3. N+1 문제와 @BatchMapping</a></p>
+            <p>다음 편: <a href="spring-graphql-5-setup.html">[Spring GraphQL] 5. 프로젝트 세팅과 스키마 작성</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">Spring GraphQL 개념 시리즈</div>
+            <p>1. <a href="spring-graphql-1-concepts.html">GraphQL 등장 배경과 핵심 개념</a></p>
+            <p>2. <a href="spring-graphql-2-architecture.html">Spring GraphQL 아키텍처와 Resolver</a></p>
+            <p>3. <a href="spring-graphql-3-n-plus-one.html">N+1 문제와 @BatchMapping</a></p>
+            <p>4. <a href="spring-graphql-4-subscription.html">Subscription과 예외 처리</a> ← 현재 문서</p>
+          </div>
+
+          <p>Query와 Mutation은 요청-응답 구조다. 클라이언트가 물어봐야 답이 온다. 하지만 "새 책이 등록되면 즉시 알려줘"처럼 <mark>서버가 먼저 데이터를 밀어주는</mark> 상황이 필요할 때가 있다. Subscription이 이 역할을 한다. 이번 편에서는 Subscription의 동작 원리와 함께, GraphQL의 에러 응답 구조도 살펴본다.</p>
+
+          <h2>Subscription이 필요한 이유</h2>
+
+          <p>Query와 Mutation은 HTTP 요청-응답 모델을 따른다. 클라이언트가 요청을 보내야만 서버가 응답한다. 이 구조에서 "실시간 알림"을 구현하려면 폴링을 돌려야 한다. 주기적으로 "새 데이터 있어?" 하고 묻는 방식이다.</p>
+
+          <p>폴링의 문제는 명확하다. 데이터가 없어도 계속 요청이 가고, 데이터가 생겨도 다음 폴링 주기까지 기다려야 한다. <mark>낭비와 지연이 동시에 발생</mark>한다.</p>
+
+          <p>Subscription은 이 문제를 해결한다. 클라이언트가 한 번 구독하면, 서버에서 이벤트가 발생할 때마다 즉시 데이터를 받을 수 있다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant C1 as 구독자 (클라이언트 A)
+    participant S as GraphQL 서버
+    participant C2 as 작성자 (클라이언트 B)
+
+    rect rgb(232, 248, 232)
+        Note over C1, S: 구독 연결
+        C1->>S: subscription { bookAdded { title } }
+        Note right of S: WebSocket 연결 유지
+    end
+
+    rect rgb(240, 248, 255)
+        Note over C2, S: 이벤트 발생
+        C2->>S: mutation { createBook(...) }
+        S-->>C2: { createBook: { id: 3 } }
+    end
+
+    rect rgb(232, 248, 232)
+        Note over C1, S: 실시간 푸시
+        S--)C1: { bookAdded: { title: "새 책" } }
+    end
+</div>
+          <p>초록 영역에서 구독자가 연결을 맺고, 파란 영역에서 다른 클라이언트가 책을 생성하면, 서버가 자동으로 구독자에게 데이터를 푸시한다.</p>
+
+          <h2>WebSocket 기반 통신</h2>
+
+          <p>Subscription은 <mark>WebSocket</mark> 위에서 동작한다. HTTP는 요청이 있어야 응답이 오는 단방향 구조지만, WebSocket은 한 번 연결되면 양쪽에서 자유롭게 메시지를 보낼 수 있는 양방향 구조다.</p>
+
+          <p>Spring GraphQL에서 WebSocket을 사용하려면 두 가지가 필요하다.</p>
+
+          <p>의존성 추가:</p>
+
+<pre><code class="language-gradle">implementation 'org.springframework.boot:spring-boot-starter-websocket'</code></pre>
+          <p>WebSocket 경로 설정:</p>
+
+<pre><code class="language-yaml">spring:
+  graphql:
+    websocket:
+      path: /graphql</code></pre>
+          <p>이렇게 설정하면 <code>/graphql</code> 경로로 HTTP 요청과 WebSocket 요청을 모두 받을 수 있다.</p>
+
+          <h2>Reactive Streams — Flux와 Sinks</h2>
+
+          <p>Subscription을 이해하려면 Reactive Streams의 두 가지 개념을 알아야 한다.</p>
+
+          <h3>Flux — 데이터 스트림</h3>
+
+          <p><code>Flux</code>는 <mark>0개 이상의 데이터가 시간에 걸쳐 흘러오는 스트림</mark>이다. Java의 <code>List</code>가 데이터를 한 번에 담고 있다면, <code>Flux</code>는 데이터가 하나씩 도착하는 파이프라인이다.</p>
+
+          <p>Subscription에서 <code>Flux&lt;Book&gt;</code>을 반환하면, "Book 데이터가 생길 때마다 하나씩 내려보내겠다"는 뜻이 된다.</p>
+
+          <h3>Sinks — 이벤트 발행기</h3>
+
+          <p><code>Sinks</code>는 <mark>Flux에 데이터를 밀어 넣는 입구</mark>다. 라디오 방송국에 비유하면 이해하기 쉽다.</p>
+
+          <ul>
+            <li><code>Sinks</code> = 방송국의 마이크. 여기에 대고 말하면 전파를 탄다.</li>
+            <li><code>Flux</code> = 라디오 주파수. 청취자(구독자)가 이 주파수에 맞추면 방송이 들린다.</li>
+            <li><code>tryEmitNext()</code> = 마이크에 대고 말하는 행위. 모든 청취자에게 동시에 전달된다.</li>
+          </ul>
+
+<div class="mermaid">
+flowchart LR
+    subgraph Publish ["이벤트 발행"]
+        direction TB
+        MR["MutationResolver<br/>createBook()"]
+        SINK["Sinks.Many&lt;Book&gt;<br/>(마이크)"]
+    end
+
+    subgraph Stream ["데이터 스트림"]
+        direction TB
+        FLUX["Flux&lt;Book&gt;<br/>(주파수)"]
+    end
+
+    subgraph Subscribe ["구독자"]
+        direction TB
+        C1["클라이언트 A"]
+        C2["클라이언트 B"]
+        C3["클라이언트 C"]
+    end
+
+    MR -->|"tryEmitNext(book)"| SINK
+    SINK -->|"asFlux()"| FLUX
+    FLUX -->|"WebSocket"| C1
+    FLUX -->|"WebSocket"| C2
+    FLUX -->|"WebSocket"| C3
+
+    style Publish fill:#FFF3E0,stroke:#FF9800
+    style Stream fill:#E8F4F8,stroke:#2196F3
+    style Subscribe fill:#E8F8E8,stroke:#4CAF50
+</div>
+          <p>왼쪽에서 Mutation이 데이터를 Sinks에 넣으면, 중간의 Flux를 타고, 오른쪽의 모든 구독자에게 전달된다.</p>
+
+          <h2>@SubscriptionMapping 구현</h2>
+
+          <p>실제 코드를 보자. Subscription Resolver는 Sinks와 Flux를 조합해서 만든다.</p>
+
+<pre><code class="language-java">@Controller
+public class BookSubscriptionResolver {
+
+    private final Sinks.Many&lt;Book&gt; bookSink =
+            Sinks.many().multicast().onBackpressureBuffer();
+
+    @SubscriptionMapping
+    public Flux&lt;Book&gt; bookAdded() {
+        return bookSink.asFlux();
+    }
+
+    public void publishBookAdded(Book book) {
+        bookSink.tryEmitNext(book);
+    }
+}</code></pre>
+          <p><code>Sinks.many().multicast().onBackpressureBuffer()</code>가 하는 일을 분해하면 이렇다.</p>
+
+          <ul>
+            <li><code>many()</code> : 여러 개의 데이터를 발행할 수 있다 (1회성이 아님)</li>
+            <li><code>multicast()</code> : 여러 구독자에게 동시에 전달한다 (브로드캐스트)</li>
+            <li><code>onBackpressureBuffer()</code> : 구독자가 처리하지 못한 데이터를 버퍼에 쌓아둔다</li>
+          </ul>
+
+          <p>이 Resolver를 Mutation과 연결하면 실시간 알림이 완성된다.</p>
+
+<pre><code class="language-java">@MutationMapping
+public Book createBook(@Argument CreateBookInput input) {
+    Book book = bookService.createBook(input);
+    subscriptionResolver.publishBookAdded(book);  // 이벤트 발행
+    return book;
+}</code></pre>
+          <p><code>createBook</code> Mutation이 실행될 때마다 <code>publishBookAdded()</code>가 호출되고, 구독 중인 모든 클라이언트에게 새 책 정보가 전달된다.</p>
+
+          <div class="callout callout-info">
+            <div class="callout-title">Subscription의 라이프사이클</div>
+            <p>클라이언트가 구독을 시작하면 WebSocket 연결이 유지되고, <code>Flux</code>가 데이터를 내려보낸다. 클라이언트가 연결을 끊으면 해당 구독이 자동으로 해제된다. 서버 측에서 별도로 구독자를 관리할 필요가 없다.</p>
+          </div>
+
+          <h2>GraphQL 예외 처리</h2>
+
+          <p>REST에서는 HTTP 상태 코드(404, 500 등)로 에러를 구분한다. GraphQL은 다르다. <mark>HTTP 응답은 항상 200 OK</mark>이고, 에러 정보는 응답 본문의 <code>errors</code> 필드에 담긴다.</p>
+
+<pre><code class="language-json">{
+  "data": null,
+  "errors": [
+    {
+      "message": "도서를 찾을 수 없습니다: ID=999",
+      "extensions": {
+        "classification": "NOT_FOUND"
+      }
+    }
+  ]
+}</code></pre>
+          <p>이 구조를 이해하지 못하면 에러 처리에서 혼란이 생긴다. GraphQL에서는 "데이터 일부만 성공하고 일부만 실패"하는 부분 에러도 가능하기 때문에, HTTP 상태 코드 하나로 결과를 표현할 수 없다.</p>
+
+          <h2>커스텀 예외 만들기</h2>
+
+          <p>Spring에서 하던 것처럼 도메인 전용 예외를 만든다.</p>
+
+<pre><code class="language-java">public class BookNotFoundException extends RuntimeException {
+    public BookNotFoundException(Long id) {
+        super("도서를 찾을 수 없습니다: ID=" + id);
+    }
+}</code></pre>
+          <p>Service에서 이 예외를 던진다.</p>
+
+<pre><code class="language-java">public Book getBookById(Long id) {
+    return bookRepository.findById(id)
+            .orElseThrow(() -&gt; new BookNotFoundException(id));
+}</code></pre>
+          <h2>@GraphQlExceptionHandler로 전역 처리</h2>
+
+          <p>REST에서 <code>@ExceptionHandler</code>를 사용하듯, GraphQL에서는 <code>@GraphQlExceptionHandler</code>로 예외를 잡아 GraphQL 에러 응답으로 변환한다.</p>
+
+<pre><code class="language-java">@ControllerAdvice
+public class GraphQLExceptionHandler {
+
+    @GraphQlExceptionHandler
+    public GraphQLError handleNotFoundException(BookNotFoundException e) {
+        return GraphQLError.newError()
+                .message(e.getMessage())
+                .errorType(ErrorType.NOT_FOUND)
+                .extensions(Map.of(
+                        "errorCode", "ERR-BOOK-001",
+                        "httpStatus", "404"
+                ))
+                .build();
+    }
+}</code></pre>
+          <p>이 핸들러가 하는 일을 시퀀스로 보면 이렇다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant C as 클라이언트
+    participant R as Resolver
+    participant S as BookService
+    participant H as ExceptionHandler
+
+    C->>R: { book(id: 999) { title } }
+    R->>S: getBookById(999)
+
+    rect rgb(255, 230, 230)
+        Note over S, H: 예외 발생 및 처리
+        S--xR: BookNotFoundException 발생
+        R->>H: 예외 전달
+        H-->>R: GraphQLError 반환
+    end
+
+    R-->>C: { data: null, errors: [{message, extensions}] }
+</div>
+          <p>분홍 영역에서 Service가 예외를 던지면, ExceptionHandler가 잡아서 GraphQLError로 변환한다. 클라이언트는 구조화된 에러 응답을 받는다.</p>
+
+          <h2>ErrorType과 extensions</h2>
+
+          <p><code>GraphQLError</code>를 구성하는 두 가지 핵심 요소가 있다.</p>
+
+          <h3>ErrorType — 에러 분류</h3>
+
+          <p>Spring GraphQL이 제공하는 <code>ErrorType</code> enum이다.</p>
+
+          <table>
+          <thead>
+          <tr><th>ErrorType</th><th>의미</th><th>REST 대응</th></tr>
+          </thead>
+          <tbody>
+          <tr><td><code>NOT_FOUND</code></td><td>리소스 없음</td><td>404</td></tr>
+          <tr><td><code>BAD_REQUEST</code></td><td>잘못된 요청</td><td>400</td></tr>
+          <tr><td><code>UNAUTHORIZED</code></td><td>인증 필요</td><td>401</td></tr>
+          <tr><td><code>FORBIDDEN</code></td><td>권한 없음</td><td>403</td></tr>
+          <tr><td><code>INTERNAL_ERROR</code></td><td>서버 에러</td><td>500</td></tr>
+          </tbody>
+          </table>
+
+          <h3>extensions — 추가 메타데이터</h3>
+
+          <p><code>extensions</code>에 에러 코드, HTTP 상태, 추가 정보를 담을 수 있다. 클라이언트가 에러를 프로그래밍적으로 처리할 때 유용하다.</p>
+
+<pre><code class="language-java">.extensions(Map.of(
+    "errorCode", "ERR-BOOK-001",
+    "httpStatus", "404"
+))</code></pre>
+          <p>응답에 이렇게 포함된다.</p>
+
+<pre><code class="language-json">{
+  "errors": [{
+    "message": "도서를 찾을 수 없습니다: ID=999",
+    "extensions": {
+      "errorCode": "ERR-BOOK-001",
+      "httpStatus": "404",
+      "classification": "NOT_FOUND"
+    }
+  }]
+}</code></pre>
+          <p><code>classification</code>은 <code>ErrorType</code>에서 자동으로 추가된다.</p>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">예외를 처리하지 않고 그냥 던지는 것</div>
+            <p><code>@GraphQlExceptionHandler</code>가 없으면 모든 예외가 <code>INTERNAL_ERROR</code>로 처리되고, 예외 메시지가 클라이언트에 <mark>그대로 노출</mark>된다. 내부 구현이 드러나는 보안 문제가 생길 수 있다. 도메인 예외는 반드시 핸들러에서 잡아 적절한 메시지로 변환해야 한다.</p>
+            <p>[!DANGER] Subscription에서 에러 발생 시 스트림이 끊기는 것</p>
+            <p>Flux 스트림에서 에러가 발생하면 해당 스트림은 종료된다. 구독자의 WebSocket 연결이 끊어지는 것이다. <code>publishBookAdded()</code> 내부에서 예외가 발생하지 않도록 방어 코드를 넣거나, <code>onErrorResume()</code>으로 에러를 흡수해야 한다.</p>
+          </div>
+
+          <h2>면접 Q&A</h2>
+
+          <div class="callout callout-question">
+            <div class="callout-title">GraphQL에서 HTTP 상태 코드가 항상 200인 이유는?</div>
+            <p>GraphQL은 하나의 요청에 여러 필드를 조회할 수 있고, 일부 필드만 실패하는 "부분 에러"가 가능하다. 이때 HTTP 상태 코드로는 "부분 성공"을 표현할 수 없기 때문에, 항상 200을 반환하고 <mark>에러 정보는 응답 본문에 넣는</mark> 구조를 택한 것이다.</p>
+            <p>[!QUESTION] @BatchMapping과 DataLoader의 차이는?</p>
+            <p>둘 다 N+1을 해결하는 배치 로딩 메커니즘이다. DataLoader는 GraphQL Java 라이브러리가 제공하는 저수준 API로, <code>DataLoaderRegistry</code>에 직접 등록해야 한다. <code>@BatchMapping</code>은 Spring GraphQL이 제공하는 <mark>어노테이션 기반 추상화</mark>로, 내부적으로 DataLoader를 사용하지만 보일러플레이트 없이 선언적으로 사용할 수 있다.</p>
+            <p>[!QUESTION] (함정) GraphQL Subscription은 SSE로 구현할 수 있나?</p>
+            <p>기술적으로는 가능하지만, GraphQL 표준 프로토콜은 Subscription 전송에 <mark>WebSocket</mark>을 사용하도록 정의하고 있다. SSE는 서버→클라이언트 단방향이라 구독 해제 같은 양방향 제어가 어렵다. Spring GraphQL도 Subscription은 WebSocket만 지원한다.</p>
+            <p>[!QUESTION] (함정) @BatchMapping이 항상 성능이 좋은가?</p>
+            <p>아니다. 단건 조회(<code>book(id: 1)</code>)에서 author를 가져올 때는 <code>@BatchMapping</code>이 필요 없다. 리스트 1개짜리 배치 호출이 되어 오히려 코드가 복잡해질 뿐이다. <mark>목록 조회에서 관계 필드를 포함할 때</mark>만 의미가 있다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Spring</span>
+          <span>#GraphQL</span>
+          <span>#Subscription</span>
+          <span>#WebSocket</span>
+          <span>#Flux</span>
+          <span>#Sinks</span>
+          <span>#예외처리</span>
+          <span>#GraphQlExceptionHandler</span>
+          <span>#면접</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="spring-graphql-3-n-plus-one.html">&larr; 이전 글</a>
+          <a href="spring-graphql-5-setup.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

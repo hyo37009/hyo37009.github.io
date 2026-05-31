@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[데이터베이스] 2. PostgreSQL JSONB - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[데이터베이스] 2. PostgreSQL JSONB</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">스냅샷 패턴 (2/3)</div>
+            <p>이전 편: <a href="db-snapshot-1-concept.html">[데이터베이스] 1. 스냅샷 패턴의 개념</a></p>
+            <p>다음 편: <a href="db-snapshot-3-design.html">[데이터베이스] 3. 스냅샷 설계 원칙</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">스냅샷 패턴 시리즈</div>
+            <p>- <a href="db-snapshot-1-concept.html">스냅샷 패턴의 개념</a></p>
+            <p>- <a href="db-snapshot-2-jsonb.html">PostgreSQL JSONB</a> ← 현재 문서</p>
+            <p>- <a href="db-snapshot-3-design.html">스냅샷 설계 원칙</a></p>
+          </div>
+
+          <p><a href="db-snapshot-1-concept.html">01 스냅샷 패턴의 개념</a>에서 스냅샷을 저장하는 방식 중 하나로 JSON 컬럼을 다뤘다. PostgreSQL은 JSON 데이터를 저장하고 검색하는 <mark>JSONB</mark>라는 강력한 타입을 제공한다. 이 문서에서는 JSONB의 동작 원리와 스냅샷 저장에 어떻게 활용하는지를 다룬다.</p>
+
+          <h2>JSON vs JSONB — 무엇이 다른가</h2>
+
+          <p>PostgreSQL은 JSON 데이터를 저장하는 두 가지 타입을 제공한다. 이름이 비슷하지만 내부 동작이 완전히 다르다.</p>
+
+          <h3>JSON 타입</h3>
+
+          <p>입력된 JSON 문자열을 <mark>텍스트 그대로</mark> 저장한다.</p>
+
+<pre><code class="language-sql">CREATE TABLE example (data JSON);
+INSERT INTO example VALUES ('{"name": "패딩", "color": "검정"}');</code></pre>
+          <h4>왜 텍스트 그대로 저장하는가</h4>
+
+          <p>JSON 타입은 입력 검증만 한다. "이게 유효한 JSON 문자열인가?"만 확인하고, 파싱하지 않고 그냥 저장한다. 키 순서, 공백, 중복 키가 전부 보존된다.</p>
+
+          <h4>이 방식의 문제</h4>
+
+          <p>조회할 때마다 <mark>매번 파싱</mark>해야 한다. <code>data-&gt;&gt;'name'</code>으로 값을 꺼낼 때 PostgreSQL이 문자열을 처음부터 파싱한다. 같은 데이터를 10번 읽으면 10번 파싱한다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant App as 애플리케이션
+    participant PG as PostgreSQL
+
+    App->>PG: SELECT data->>'name' FROM example
+    Note right of PG: 저장된 텍스트를<br/>처음부터 파싱
+    PG-->>App: "패딩"
+
+    App->>PG: SELECT data->>'color' FROM example
+    Note right of PG: 또 처음부터 파싱
+    PG-->>App: "검정"
+</div>
+          <h3>JSONB 타입</h3>
+
+          <p>입력된 JSON 문자열을 <mark>바이너리 형태로 변환</mark>해서 저장한다.</p>
+
+<pre><code class="language-sql">CREATE TABLE example (data JSONB);
+INSERT INTO example VALUES ('{"name": "패딩", "color": "검정"}');</code></pre>
+          <h4>왜 바이너리로 변환하는가</h4>
+
+          <p>바이너리는 이미 구조가 파싱된 상태다. 조회 시 문자열을 파싱할 필요 없이, <mark>바로 원하는 키의 위치로 점프</mark>할 수 있다. 읽기가 훨씬 빠르다.</p>
+
+          <h4>왜 쓰기가 약간 느린가</h4>
+
+          <p>저장할 때 JSON 문자열 → 바이너리 변환이 필요하다. 이 과정에서 키가 정렬되고, 중복 키가 제거되고, 공백이 사라진다. 원본 문자열의 형태가 보존되지 않는다.</p>
+
+<div class="mermaid">
+flowchart LR
+    subgraph JSON ["JSON 타입"]
+        direction TB
+        In1["입력: 텍스트"]
+        Store1["저장: 텍스트 그대로"]
+        Read1["조회: 매번 파싱"]
+        In1 --> Store1 --> Read1
+    end
+
+    JSON ~~~ JSONB
+
+    subgraph JSONB ["JSONB 타입"]
+        direction TB
+        In2["입력: 텍스트"]
+        Store2["저장: 바이너리 변환"]
+        Read2["조회: 파싱 불필요"]
+        In2 --> Store2 --> Read2
+    end
+
+    style JSON fill:#FFF3E0,stroke:#FF9800
+    style JSONB fill:#E8F8E8,stroke:#4CAF50
+    style In1 fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#000
+    style Store1 fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#000
+    style Read1 fill:#FFEBEE,stroke:#F44336,stroke-width:2px,color:#000
+    style In2 fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style Store2 fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#000
+    style Read2 fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+</div>
+          <h3>비교 요약</h3>
+
+          <table>
+          <thead>
+          <tr><th>기준</th><th>JSON</th><th>JSONB</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>저장 형태</td><td>텍스트</td><td>바이너리</td></tr>
+          <tr><td>쓰기 속도</td><td>빠름 (변환 없음)</td><td>약간 느림 (변환 필요)</td></tr>
+          <tr><td>읽기 속도</td><td>느림 (매번 파싱)</td><td><mark>빠름 (파싱 불필요)</mark></td></tr>
+          <tr><td>키 순서</td><td>보존</td><td>정렬됨</td></tr>
+          <tr><td>중복 키</td><td>보존</td><td>마지막 값만 유지</td></tr>
+          <tr><td>인덱스</td><td>불가</td><td><mark>GIN 인덱스 가능</mark></td></tr>
+          </tbody>
+          </table>
+
+          <h4>왜 스냅샷에는 JSONB가 맞는가</h4>
+
+          <p>스냅샷은 피드 생성 시 <mark>1번 쓰고</mark>, 피드가 조회될 때마다 <mark>여러 번 읽는다.</mark> 읽기가 압도적으로 많은 패턴이다. 쓰기가 약간 느린 대신 읽기가 빠른 JSONB가 적합하다.</p>
+
+          <h2>JSONB 연산자</h2>
+
+          <p>JSONB는 SQL 안에서 JSON 내부 필드를 조회하고 필터링하는 연산자를 제공한다.</p>
+
+          <h3><code>-&gt;</code> — JSON 객체를 꺼낸다</h3>
+
+<pre><code class="language-sql">SELECT data-&gt;'temperature' FROM feeds;
+-- 결과: {"current": 15, "min": 10, "max": 20}  (JSON 타입)</code></pre>
+          <h4>이게 뭔가</h4>
+
+          <p>키 이름으로 JSON 내부의 <mark>하위 객체</mark>를 꺼낸다. 반환 타입은 JSONB다. 중첩된 객체 안에 또 <code>-&gt;</code> 를 쓸 수 있다.</p>
+
+          <h4>왜 반환 타입이 JSONB인가</h4>
+
+          <p>중첩 접근을 가능하게 하기 위해서다. <code>data-&gt;'temperature'-&gt;'current'</code>처럼 체이닝할 수 있다.</p>
+
+          <h3><code>-&gt;&gt;</code> — 텍스트 값을 꺼낸다</h3>
+
+<pre><code class="language-sql">SELECT data-&gt;&gt;'skyStatus' FROM feeds;
+-- 결과: 'CLEAR'  (TEXT 타입)</code></pre>
+          <h4>이게 뭔가</h4>
+
+          <p>키 이름으로 JSON 내부의 <mark>텍스트 값</mark>을 꺼낸다. 반환 타입은 TEXT다.</p>
+
+          <h4><code>-&gt;</code> 와 뭐가 다른가</h4>
+
+          <p><code>-&gt;</code>는 JSON 타입으로 반환하고, <code>-&gt;&gt;</code>는 TEXT로 반환한다. WHERE 조건에서 문자열 비교를 할 때는 <code>-&gt;&gt;</code>를 써야 한다.</p>
+
+<pre><code class="language-sql">-- 올바른 사용
+WHERE data-&gt;&gt;'skyStatus' = 'CLEAR'
+
+-- 잘못된 사용 — JSON과 TEXT를 비교하게 됨
+WHERE data-&gt;'skyStatus' = 'CLEAR'</code></pre>
+          <h3><code>@&gt;</code> — 포함 여부를 검사한다</h3>
+
+<pre><code class="language-sql">SELECT * FROM feeds
+WHERE data @&gt; '{"skyStatus": "CLEAR"}';</code></pre>
+          <h4>이게 뭔가</h4>
+
+          <p>왼쪽 JSONB가 오른쪽 JSONB를 <mark>포함하는지</mark> 검사한다. 부분 일치 검색에 쓴다.</p>
+
+          <h4>왜 <code>-&gt;&gt;</code> 대신 이걸 쓰는가</h4>
+
+          <p><code>@&gt;</code> 연산자는 <mark>GIN 인덱스를 활용</mark>할 수 있다. <code>-&gt;&gt;</code> + <code>=</code> 조합은 일반적으로 인덱스를 타지 않는다. 대량 데이터에서 필터링 성능 차이가 크다.</p>
+
+          <h3><code>?</code> — 키 존재 여부를 검사한다</h3>
+
+<pre><code class="language-sql">SELECT * FROM feeds
+WHERE data ? 'precipitation';</code></pre>
+          <h4>이게 뭔가</h4>
+
+          <p>JSONB 안에 특정 <mark>키가 존재하는지</mark> 확인한다. 값이 뭔지는 상관없다.</p>
+
+          <h4>왜 필요한가</h4>
+
+          <p>스냅샷 스키마가 시간이 지나면서 변할 수 있다. 초기 스냅샷에는 <code>precipitation</code> 키가 없고, 나중에 추가된 스냅샷에는 있다면, 이 연산자로 구분할 수 있다.</p>
+
+          <h2>GIN 인덱스</h2>
+
+          <p>JSONB의 핵심 강점 중 하나가 <mark>인덱스</mark>다. JSON 타입에는 인덱스를 걸 수 없지만, JSONB에는 GIN 인덱스를 걸 수 있다.</p>
+
+          <h3>도서관의 색인 카드</h3>
+
+          <p>도서관에서 책을 찾는 상황을 떠올려 보자.</p>
+
+          <p>색인 카드가 없는 도서관에서는 책을 찾으려면 서가를 처음부터 끝까지 훑어야 한다. 책이 1만 권이면 1만 권을 전부 확인해야 한다.</p>
+
+          <p>색인 카드가 있으면 "저자: 김영하"로 카드를 찾고, 카드에 적힌 서가 번호로 바로 간다. 1만 권을 훑을 필요 없이 <mark>몇 장의 카드만 뒤지면</mark> 된다.</p>
+
+<div class="mermaid">
+flowchart LR
+    subgraph NoIndex ["색인 카드 없음"]
+        direction TB
+        Search1["1만 권 전부 확인"]
+    end
+
+    NoIndex ~~~ WithIndex
+
+    subgraph WithIndex ["색인 카드 있음"]
+        direction TB
+        Card["카드 검색"]
+        Book["해당 서가로 이동"]
+        Card --> Book
+    end
+
+    style NoIndex fill:#FFEBEE,stroke:#F44336
+    style WithIndex fill:#E8F8E8,stroke:#4CAF50
+    style Search1 fill:#FFEBEE,stroke:#F44336,stroke-width:2px,color:#000
+    style Card fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style Book fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+</div>
+          <p>이 색인 카드가 데이터베이스에서의 <strong>GIN 인덱스</strong>다.</p>
+
+          <h3>GIN 인덱스 생성</h3>
+
+<pre><code class="language-sql">CREATE INDEX idx_feeds_weather_snapshot
+    ON feeds USING GIN (weather_snapshot);</code></pre>
+          <h4><code>USING GIN</code> — 왜 GIN인가</h4>
+
+          <p>GIN은 Generalized Inverted Index의 약자다. "역 색인"이라고도 부른다. JSONB 안의 각 키-값 쌍을 색인화해서, <mark>특정 키-값을 포함하는 행</mark>을 빠르게 찾을 수 있다.</p>
+
+          <p>B-Tree 인덱스는 단일 값의 크기 비교에 최적화되어 있다. JSONB처럼 내부에 여러 키-값이 있는 구조에는 GIN이 적합하다.</p>
+
+          <h4>안 쓰면 뭐가 문제인가</h4>
+
+          <p>GIN 인덱스 없이 <code>@&gt;</code> 연산자를 쓰면, PostgreSQL이 <mark>테이블 전체를 스캔</mark>한다. 피드가 100만 건이면 100만 건의 JSONB를 전부 열어서 확인한다.</p>
+
+          <h4>주의할 점</h4>
+
+          <p>GIN 인덱스는 쓰기 시 오버헤드가 있다. INSERT/UPDATE마다 인덱스가 갱신된다. 스냅샷은 생성 후 변경이 없으므로 이 오버헤드가 최소화된다.</p>
+
+          <h3>특정 키에만 인덱스를 거는 방법</h3>
+
+          <p>전체 JSONB에 인덱스를 걸 필요 없이, <mark>필터링에 실제로 쓰는 키</mark>에만 인덱스를 걸 수 있다.</p>
+
+<pre><code class="language-sql">-- precipitationType으로만 필터링한다면
+CREATE INDEX idx_feeds_precip_type
+    ON feeds ((weather_snapshot-&gt;&gt;'precipitationType'));</code></pre>
+          <h4>왜 이렇게 하는가</h4>
+
+          <p>GIN 인덱스는 JSONB 전체를 색인화하므로 저장 공간이 크다. 필터링에 쓰는 키가 1~2개뿐이라면, 해당 키에 대한 <mark>표현식 인덱스</mark>가 더 효율적이다.</p>
+
+          <h4>괄호가 이중인 이유</h4>
+
+          <p><code>(weather_snapshot-&gt;&gt;'precipitationType')</code>처럼 표현식을 인덱스 컬럼으로 쓸 때, PostgreSQL 문법상 바깥에 괄호를 한 번 더 감싸야 한다.</p>
+
+          <h2>Hibernate 6에서 JSONB 매핑</h2>
+
+          <p>Spring Boot 3.x는 Hibernate 6을 사용한다. Hibernate 6부터 JSONB 매핑이 내장됐다.</p>
+
+          <h3><code>@JdbcTypeCode(SqlTypes.JSON)</code></h3>
+
+<pre><code class="language-java">@JdbcTypeCode(SqlTypes.JSON)
+@Column(columnDefinition = "jsonb", nullable = false)
+private WeatherSnapshot weatherSnapshot;</code></pre>
+          <h4><code>@JdbcTypeCode</code> — 이게 뭔가</h4>
+
+          <p>Hibernate에게 "이 필드를 DB에 저장할 때 <mark>JSON 타입으로 직렬화</mark>하라"고 알려주는 어노테이션이다.</p>
+
+          <h4><code>SqlTypes.JSON</code> — 왜 이 값인가</h4>
+
+          <p><code>SqlTypes</code>는 Hibernate 6에서 제공하는 SQL 타입 상수 모음이다. <code>SqlTypes.JSON</code>은 "이 필드는 JSON 계열 타입"이라는 의미다. Hibernate가 DB 벤더에 맞게 <code>json</code> 또는 <code>jsonb</code>로 매핑한다.</p>
+
+          <h4>안 쓰면 뭐가 문제인가</h4>
+
+          <p>Hibernate가 <code>WeatherSnapshot</code> 객체를 어떻게 직렬화할지 모른다. 기본적으로 <code>VARBINARY</code>나 <code>TEXT</code>로 매핑하려고 시도하고, 실패하면 예외가 발생한다.</p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">Hibernate 5와의 차이</div>
+            <p>Hibernate 5에서는 <code>@JdbcTypeCode</code>가 없었다. 대신 <code>hypersistence-utils</code> 같은 외부 라이브러리의 <code>@Type(JsonType.class)</code>을 사용해야 했다. Spring Boot 3.x (Hibernate 6)를 쓰고 있다면 외부 라이브러리 없이 <code>@JdbcTypeCode(SqlTypes.JSON)</code>만으로 충분하다.</p>
+          </div>
+
+          <h3><code>columnDefinition = "jsonb"</code></h3>
+
+          <h4>이게 뭔가</h4>
+
+          <p>JPA가 DDL을 자동 생성할 때 이 컬럼의 <mark>DB 타입을 직접 지정</mark>한다.</p>
+
+          <h4>왜 명시하는가</h4>
+
+          <p><code>@JdbcTypeCode(SqlTypes.JSON)</code>만으로는 PostgreSQL이 <code>json</code>과 <code>jsonb</code> 중 어떤 타입으로 생성할지 보장되지 않는다. <code>columnDefinition</code>으로 <code>jsonb</code>를 명시하면 <mark>항상 JSONB 타입으로 생성</mark>된다.</p>
+
+          <h4>안 쓰면 뭐가 문제인가</h4>
+
+          <p><code>json</code> 타입으로 생성될 수 있다. <code>json</code>은 GIN 인덱스를 지원하지 않고, <code>@&gt;</code> 연산자를 쓸 수 없다. 개발 환경에서는 동작하지만, 프로덕션에서 필터링 성능이 떨어지는 원인이 된다.</p>
+
+          <h3>Java record로 스냅샷 매핑</h3>
+
+<pre><code class="language-java">public record WeatherSnapshot(
+    String skyStatus,
+    String precipitationType,
+    double temperatureCurrent,
+    double temperatureMin,
+    double temperatureMax
+) {}</code></pre>
+          <h4>왜 record인가</h4>
+
+          <p>스냅샷은 <mark>불변 값 객체</mark>다. 한 번 생성된 스냅샷의 필드가 바뀔 이유가 없다. Java <code>record</code>는 불변성이 보장되고, <code>equals()</code>, <code>hashCode()</code>, <code>toString()</code>이 자동 생성된다.</p>
+
+          <h4>왜 엔티티가 아닌가</h4>
+
+          <p>스냅샷은 <mark>자체 생명주기가 없다.</mark> Feed가 생성될 때 함께 생기고, Feed가 삭제될 때 함께 사라진다. 독립적인 ID도 필요 없다. 엔티티의 조건 (독립 생명주기, 고유 식별자)을 만족하지 않으므로 값 객체가 맞다.</p>
+
+          <h4>Jackson 직렬화/역직렬화</h4>
+
+          <p>Hibernate의 <code>@JdbcTypeCode(SqlTypes.JSON)</code>은 내부적으로 Jackson을 사용한다. <code>record</code>는 Jackson이 자동으로 직렬화/역직렬화할 수 있다. 별도 설정이 필요 없다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant App as 애플리케이션
+    participant Hib as Hibernate
+    participant Jack as Jackson
+    participant PG as PostgreSQL
+
+    rect rgb(232, 248, 232)
+        Note over App, PG: 저장 (INSERT)
+        App->>Hib: feed.save()
+        Hib->>Jack: WeatherSnapshot → JSON 문자열
+        Jack-->>Hib: {"skyStatus":"CLEAR",...}
+        Hib->>PG: INSERT INTO feeds (..., weather_snapshot)
+        Note right of PG: JSON → JSONB 바이너리 변환
+    end
+
+    rect rgb(232, 240, 255)
+        Note over App, PG: 조회 (SELECT)
+        App->>Hib: feed.getWeatherSnapshot()
+        Hib->>PG: SELECT weather_snapshot FROM feeds
+        PG-->>Hib: JSONB 바이너리
+        Note right of Hib: JSONB → JSON 문자열 변환
+        Hib->>Jack: JSON 문자열 → WeatherSnapshot
+        Jack-->>Hib: WeatherSnapshot 객체
+        Hib-->>App: weatherSnapshot
+    end
+</div>
+          <h2>JSONB의 한계</h2>
+
+          <p>JSONB가 만능은 아니다. 쓰면 안 되는 상황을 알아야 한다.</p>
+
+          <h4>FK 제약이 불가능하다</h4>
+
+          <p>JSONB 안의 값으로 외래 키를 설정할 수 없다. <code>weatherSnapshot.skyStatus</code>가 <code>SkyStatus</code> enum의 유효한 값인지 DB 레벨에서 검증할 방법이 없다. 애플리케이션에서 직접 검증해야 한다.</p>
+
+          <h4>복잡한 집계가 느리다</h4>
+
+          <p><code>GROUP BY weather_snapshot-&gt;&gt;'skyStatus'</code>처럼 JSONB 필드로 집계하면, 일반 컬럼 집계보다 느리다. JSONB 내부 값 추출 + 집계가 동시에 일어나기 때문이다. 집계가 빈번한 필드는 일반 컬럼으로 빼는 것이 낫다.</p>
+
+          <h4>부분 업데이트가 비효율적이다</h4>
+
+          <p>JSONB 컬럼의 특정 키만 바꾸려면 <code>jsonb_set()</code> 함수를 써야 한다. 내부적으로는 <mark>전체 JSONB를 다시 쓴다.</mark> 빈번한 부분 업데이트가 필요한 데이터에는 적합하지 않다. 스냅샷은 한 번 쓰고 변경하지 않으므로 이 문제가 없다.</p>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">JSON 타입을 쓰는 실수</div>
+            <p><code>json</code>과 <code>jsonb</code>의 차이를 모르고 <code>json</code>을 사용하면, GIN 인덱스와 <code>@&gt;</code> 연산자를 쓸 수 없다. 특별한 이유가 없으면 항상 <code>jsonb</code>를 쓴다. PostgreSQL 공식 문서도 "대부분의 경우 JSONB를 쓰라"고 권장한다.</p>
+            <p>[!BUG] GIN 인덱스를 빼먹는 실수</p>
+            <p>JSONB 컬럼을 만들고 <code>@&gt;</code> 연산자로 필터링하면서 GIN 인덱스를 안 거는 경우. 데이터가 적을 때는 차이가 없지만, 수만 건 이상에서는 조회 시간이 급격히 늘어난다. <mark>JSONB 필터링을 쓸 거면 GIN 인덱스는 필수</mark>다.</p>
+            <p>[!BUG] JSONB에 대용량 데이터를 넣는 실수</p>
+            <p>JSONB 컬럼 하나에 수 KB 이상의 데이터를 넣으면 행 크기가 커진다. PostgreSQL의 TOAST 메커니즘이 큰 값을 별도 저장하므로 동작은 하지만, 조회 성능이 떨어진다. 스냅샷은 <mark>필요한 필드만 최소로</mark> 넣는 것이 원칙이다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#데이터베이스</span>
+          <span>#PostgreSQL</span>
+          <span>#JSONB</span>
+          <span>#인덱스</span>
+          <span>#Hibernate</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="db-snapshot-1-concept.html">&larr; 이전 글</a>
+          <a href="db-snapshot-3-design.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[데이터베이스] 1. 스냅샷 패턴의 개념 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[데이터베이스] 1. 스냅샷 패턴의 개념</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">스냅샷 패턴 (1/3)</div>
+            <p>다음 편: <a href="db-snapshot-2-jsonb.html">[데이터베이스] 2. PostgreSQL JSONB</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">스냅샷 패턴 시리즈</div>
+            <p>- <a href="db-snapshot-1-concept.html">스냅샷 패턴의 개념</a> ← 현재 문서</p>
+            <p>- <a href="db-snapshot-2-jsonb.html">PostgreSQL JSONB</a></p>
+            <p>- <a href="db-snapshot-3-design.html">스냅샷 설계 원칙</a></p>
+          </div>
+
+          <p>데이터를 저장하는 방식은 "원본을 가리키는 것"과 "원본을 복사해두는 것"으로 나뉜다. 이 두 방식은 각각 다른 문제를 해결한다. <mark>어떤 데이터가 스냅샷이 필요한지</mark> 판단하는 기준을 잡는 것이 이 문서의 목표다.</p>
+
+          <h2>FK 참조 — 원본을 가리키는 방식</h2>
+
+          <p>관계형 데이터베이스의 기본 설계 원칙은 <mark>데이터를 한 곳에만 저장</mark>하는 것이다. 다른 테이블에서 그 데이터가 필요하면, 원본을 복사하는 게 아니라 원본의 ID를 저장해서 가리킨다. 이걸 외래 키 참조라고 한다.</p>
+
+<pre><code class="language-sql">-- 주문 테이블이 상품의 ID를 참조
+CREATE TABLE orders (
+    id UUID PRIMARY KEY,
+    product_id UUID REFERENCES products(id),  -- 원본을 가리킴
+    quantity INT
+);</code></pre>
+          <p>이 구조에서 <code>orders</code>는 상품의 이름, 가격, 설명 같은 정보를 저장하지 않는다. <code>product_id</code>로 <code>products</code> 테이블을 <mark>JOIN</mark>해서 읽어온다.</p>
+
+          <h4>왜 이렇게 설계하는가</h4>
+
+          <p>데이터 중복을 없애기 위해서다. 상품 가격이 바뀌면 <code>products</code> 테이블 하나만 수정하면 된다. 모든 주문이 같은 원본을 참조하고 있으므로, 수정이 자동으로 반영된다.</p>
+
+          <p>이 원칙을 <mark>정규화</mark>라고 부른다. 정규화의 핵심 가정은 "원본이 바뀌면 참조하는 쪽도 바뀐 값을 봐야 한다"는 것이다.</p>
+
+          <h4>언제 이 가정이 맞는가</h4>
+
+          <ul>
+            <li>사용자 프로필 → 닉네임이 바뀌면 모든 게시글에 새 닉네임이 보여야 한다</li>
+            <li>카테고리 → 카테고리 이름이 바뀌면 해당 카테고리의 모든 상품에 반영돼야 한다</li>
+            <li>권한 → 관리자가 권한을 변경하면 즉시 적용돼야 한다</li>
+          </ul>
+
+          <p>이런 데이터는 FK 참조가 맞다. <mark>항상 최신 상태를 보여줘야 하는 데이터</mark>다.</p>
+
+          <h2>스냅샷 — 원본을 복사해두는 방식</h2>
+
+          <p>그런데 "원본이 바뀌더라도 과거 시점의 값을 보존해야 하는" 경우가 있다.</p>
+
+          <p>주문을 생각해 보자. 고객이 상품을 10,000원에 주문했다. 다음 날 상품 가격이 12,000원으로 올랐다. 주문 내역에 12,000원이 표시되면? 고객은 "나는 10,000원에 샀는데 왜 12,000원이지?"라고 항의한다.</p>
+
+          <p>이 문제를 해결하는 방법이 <mark>스냅샷</mark>이다. 주문 시점의 상품 정보를 주문 테이블에 복사해서 저장한다.</p>
+
+<pre><code class="language-sql">-- 스냅샷 방식 — 주문 시점의 가격을 직접 저장
+CREATE TABLE orders (
+    id UUID PRIMARY KEY,
+    product_id UUID,           -- 원본 추적용 (FK 아님)
+    product_name VARCHAR,      -- 주문 시점의 상품 이름
+    product_price INT,         -- 주문 시점의 가격
+    quantity INT
+);</code></pre>
+          <p>원본 상품의 가격이 바뀌어도, 주문에 기록된 10,000원은 변하지 않는다.</p>
+
+          <h3>사진 앨범과 화상 통화</h3>
+
+          <p>이 차이를 일상에서 떠올려 보자.</p>
+
+          <p>사진 앨범에 친구의 사진을 넣어둔다. 10년 후 앨범을 펼치면 그때의 모습이 그대로 있다. 친구의 외모가 바뀌어도 사진은 바뀌지 않는다. 사진은 <mark>찍는 순간을 고정</mark>한다.</p>
+
+          <p>화상 통화는 다르다. 친구의 현재 모습이 실시간으로 보인다. 머리를 자르면 즉시 반영된다. 화상 통화는 <mark>현재 상태를 실시간으로 보여준다.</mark></p>
+
+<div class="mermaid">
+flowchart LR
+    subgraph Photo ["사진 앨범"]
+        direction TB
+        P1["10년 전 모습"]
+        P2["그대로 보존"]
+        P1 --> P2
+    end
+
+    Photo ~~~ Video
+
+    subgraph Video ["화상 통화"]
+        direction TB
+        V1["현재 모습"]
+        V2["실시간 반영"]
+        V1 --> V2
+    end
+
+    style Photo fill:#E8F8E8,stroke:#4CAF50
+    style Video fill:#E3F2FD,stroke:#2196F3
+    style P1 fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style P2 fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style V1 fill:#E3F2FD,stroke:#2196F3,stroke-width:2px,color:#000
+    style V2 fill:#E3F2FD,stroke:#2196F3,stroke-width:2px,color:#000
+</div>
+          <p>이 사진 앨범이 데이터베이스에서의 <strong>스냅샷</strong>이다. 화상 통화가 <strong>FK 참조</strong>다.</p>
+
+          <h2>스냅샷이 필요한 순간을 판별하는 기준</h2>
+
+          <p>모든 데이터를 스냅샷할 필요는 없다. 기준은 두 가지 질문으로 귀결된다.</p>
+
+          <h3>질문 1 — 이 데이터는 시점 기록인가, 실시간 뷰인가</h3>
+
+<div class="mermaid">
+flowchart TD
+    Q{이 데이터는?}
+    PointInTime["시점 기록<br/>'그때 어땠는가'"]
+    Realtime["실시간 뷰<br/>'지금 어떤가'"]
+    Snap["스냅샷"]
+    FK["FK 참조"]
+
+    Q -->|과거 상태 보존| PointInTime
+    Q -->|현재 상태 반영| Realtime
+    PointInTime --> Snap
+    Realtime --> FK
+
+    style Q fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#000
+    style PointInTime fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style Realtime fill:#E3F2FD,stroke:#2196F3,stroke-width:2px,color:#000
+    style Snap fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style FK fill:#E3F2FD,stroke:#2196F3,stroke-width:2px,color:#000
+</div>
+          <h4>시점 기록의 예시</h4>
+
+          <ul>
+            <li><strong>주문 내역</strong> — "2024년 3월에 이 상품을 10,000원에 샀다"</li>
+            <li><strong>계약서</strong> — "이 조건으로 계약했다"</li>
+            <li><strong>감사 로그</strong> — "이 시점에 이 사용자가 이 권한을 가지고 있었다"</li>
+            <li><strong>SNS 피드</strong> — "이 날씨에 이 옷을 입었다"</li>
+          </ul>
+
+          <h4>실시간 뷰의 예시</h4>
+
+          <ul>
+            <li><strong>사용자 프로필</strong> — 닉네임 변경이 즉시 반영돼야 한다</li>
+            <li><strong>상품 재고</strong> — 현재 재고 수량이 보여야 한다</li>
+            <li><strong>권한</strong> — 관리자가 변경하면 즉시 적용돼야 한다</li>
+          </ul>
+
+          <h4>왜 이 구분이 중요한가</h4>
+
+          <p>시점 기록에 FK 참조를 쓰면, 원본이 변경될 때 <mark>과거 기록이 소급 변경</mark>된다. "10,000원에 샀다"는 기록이 "12,000원에 샀다"로 바뀌는 것이다. 이건 데이터 무결성 위반이다.</p>
+
+          <p>반대로 실시간 뷰에 스냅샷을 쓰면, 원본이 변경돼도 <mark>오래된 값이 계속 표시</mark>된다. 닉네임을 바꿨는데 예전 닉네임이 남아 있는 것이다. 이건 사용자 경험 문제다.</p>
+
+          <h3>질문 2 — 원본이 삭제되면 이 기록도 사라져야 하는가</h3>
+
+<div class="mermaid">
+flowchart TD
+    Q{원본이 삭제되면?}
+    Together["함께 사라져야 한다"]
+    Survive["기록은 남아야 한다"]
+    FK["FK 참조<br/>+ ON DELETE CASCADE"]
+    Snap["스냅샷"]
+
+    Q -->|생명주기가 같다| Together
+    Q -->|기록은 독립적이다| Survive
+    Together --> FK
+    Survive --> Snap
+
+    style Q fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#000
+    style Together fill:#E3F2FD,stroke:#2196F3,stroke-width:2px,color:#000
+    style Survive fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style FK fill:#E3F2FD,stroke:#2196F3,stroke-width:2px,color:#000
+    style Snap fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+</div>
+          <h4>기록이 남아야 하는 예시</h4>
+
+          <ul>
+            <li>옷을 삭제해도, "이 옷을 입었다"는 피드 기록은 남아야 한다</li>
+            <li>상품이 단종돼도, "이 상품을 주문했다"는 주문 기록은 남아야 한다</li>
+            <li>직원이 퇴사해도, "이 직원이 이 결재를 승인했다"는 감사 로그는 남아야 한다</li>
+          </ul>
+
+          <h4>함께 사라져도 되는 예시</h4>
+
+          <ul>
+            <li>게시글이 삭제되면 댓글도 함께 삭제된다</li>
+            <li>채팅방이 삭제되면 메시지도 함께 삭제된다</li>
+          </ul>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">두 질문 중 하나라도 "스냅샷"이면 스냅샷이다</div>
+            <p>질문 1에서 "시점 기록"이거나, 질문 2에서 "기록은 남아야 한다"면 스냅샷을 써야 한다. 둘 다 "FK 참조"일 때만 FK 참조를 쓴다.</p>
+          </div>
+
+          <h2>FK 참조 vs 스냅샷 — 트레이드오프</h2>
+
+          <p>어떤 방식이든 공짜가 아니다. 각각의 비용을 이해해야 한다.</p>
+
+          <h3>FK 참조의 비용</h3>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant App as 애플리케이션
+    participant Orders as orders 테이블
+    participant Products as products 테이블
+
+    App->>Orders: SELECT * FROM orders WHERE id = ?
+    Orders-->>App: order (product_id만 있음)
+    App->>Products: SELECT * FROM products WHERE id = ?
+    Products-->>App: product (이름, 가격 등)
+    Note right of App: 두 테이블을 합쳐서<br/>주문 상세 구성
+</div>
+          <ul>
+            <li><strong>조회 비용</strong> — 관련 데이터를 읽으려면 JOIN이 필요하다. 참조가 깊어질수록 JOIN이 늘어난다.</li>
+            <li><strong>삭제 제약</strong> — 원본을 삭제하려면 참조하는 모든 레코드를 먼저 처리해야 한다. CASCADE를 설정하면 연쇄 삭제가 일어나서 의도치 않은 데이터 손실이 발생할 수 있다.</li>
+            <li><strong>원본 변경 전파</strong> — 원본이 바뀌면 참조하는 모든 곳에 자동으로 반영된다. 이것이 장점이자 <mark>위험</mark>이다.</li>
+          </ul>
+
+          <h3>스냅샷의 비용</h3>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant App as 애플리케이션
+    participant Orders as orders 테이블
+
+    App->>Orders: SELECT * FROM orders WHERE id = ?
+    Orders-->>App: order (이름, 가격 등 포함)
+    Note right of App: JOIN 없이 바로 사용
+</div>
+          <ul>
+            <li><strong>저장 공간</strong> — 같은 데이터가 여러 곳에 복사된다. 상품 1개를 1000명이 주문하면 상품 정보가 1000번 저장된다.</li>
+            <li><strong>일관성 포기</strong> — 원본이 바뀌어도 스냅샷은 바뀌지 않는다. 이것이 목적이지만, "원본과 스냅샷이 다르다"는 사실을 항상 인지해야 한다.</li>
+            <li><strong>생성 비용</strong> — 스냅샷을 만들 때 원본에서 필요한 필드를 추출하는 작업이 필요하다. FK 참조는 ID 하나만 저장하면 되지만, 스냅샷은 여러 필드를 복사한다.</li>
+          </ul>
+
+          <h3>비교 요약</h3>
+
+          <table>
+          <thead>
+          <tr><th>기준</th><th>FK 참조</th><th>스냅샷</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>데이터 중복</td><td>없음</td><td>있음 (의도적)</td></tr>
+          <tr><td>조회 비용</td><td>JOIN 필요</td><td>JOIN 불필요</td></tr>
+          <tr><td>원본 변경 반영</td><td>자동 반영</td><td>반영 안 됨 (의도적)</td></tr>
+          <tr><td>원본 삭제 시</td><td>제약 위반 또는 CASCADE</td><td>영향 없음</td></tr>
+          <tr><td>저장 공간</td><td>적음</td><td>많음</td></tr>
+          <tr><td>적합한 데이터</td><td>실시간 뷰</td><td>시점 기록</td></tr>
+          </tbody>
+          </table>
+
+          <h2>스냅샷의 저장 형태</h2>
+
+          <p>스냅샷 데이터를 실제로 어떻게 저장하는지는 몇 가지 방식이 있다.</p>
+
+          <h3>플랫 컬럼</h3>
+
+          <p>가장 단순한 방식. 스냅샷 필드를 일반 컬럼으로 추가한다.</p>
+
+<pre><code class="language-sql">CREATE TABLE orders (
+    id UUID PRIMARY KEY,
+    product_name VARCHAR,
+    product_price INT,
+    quantity INT
+);</code></pre>
+          <h4>왜 이 방식을 쓰는가</h4>
+
+          <p>스냅샷 필드가 2~3개로 적을 때 적합하다. 일반 컬럼이므로 인덱스, WHERE 조건, 정렬이 자연스럽다.</p>
+
+          <h4>안 쓰면 뭐가 문제인가</h4>
+
+          <p>스냅샷 필드가 10개 이상으로 늘어나면 테이블이 비대해진다. 스냅샷 구조가 바뀔 때마다 <code>ALTER TABLE</code>이 필요하다.</p>
+
+          <h3>JSON 컬럼</h3>
+
+          <p>스냅샷 데이터를 JSON으로 묶어서 하나의 컬럼에 저장한다.</p>
+
+<pre><code class="language-sql">CREATE TABLE orders (
+    id UUID PRIMARY KEY,
+    product_snapshot JSONB,
+    quantity INT
+);</code></pre>
+          <h4>왜 이 방식을 쓰는가</h4>
+
+          <p>스냅샷 필드가 많거나, 중첩 구조가 있을 때 적합하다. 컬럼 하나로 복잡한 구조를 담을 수 있다. 필드 추가/변경 시 스키마 마이그레이션이 필요 없다.</p>
+
+          <h4>안 쓰면 뭐가 문제인가</h4>
+
+          <p>JSON 내부 필드에 대한 FK 제약이 불가능하다. DB 레벨의 타입 검증이 없으므로 애플리케이션에서 직접 검증해야 한다. 복잡한 집계 쿼리에서는 일반 컬럼보다 느릴 수 있다.</p>
+
+          <div class="callout callout-info">
+            <div class="callout-title">PostgreSQL JSONB의 상세한 동작 원리와 인덱싱은 <a href="db-snapshot-2-jsonb.html">02 PostgreSQL JSONB</a>에서 다룬다.</div>
+          </div>
+
+          <h3>별도 스냅샷 테이블</h3>
+
+          <p>스냅샷 전용 테이블을 만든다.</p>
+
+<pre><code class="language-sql">CREATE TABLE order_product_snapshots (
+    order_id UUID PRIMARY KEY REFERENCES orders(id),
+    product_name VARCHAR,
+    product_price INT,
+    product_image_url TEXT
+);</code></pre>
+          <h4>왜 이 방식을 쓰는가</h4>
+
+          <p>스냅샷 데이터의 스키마를 DB 레벨에서 관리하고 싶을 때. 일반 컬럼이므로 인덱스와 제약이 자유롭다.</p>
+
+          <h4>안 쓰면 뭐가 문제인가</h4>
+
+          <p>조회 시 JOIN이 필요하다. 테이블 수가 늘어나고, 스냅샷 테이블 관리 비용이 추가된다.</p>
+
+          <h3>방식 선택 기준</h3>
+
+<div class="mermaid">
+flowchart TD
+    Q1{스냅샷 필드가<br/>몇 개인가?}
+    Few["2~3개"]
+    Many["4개 이상 또는<br/>중첩 구조"]
+    Q2{JSON 내부<br/>필드로 검색이<br/>필요한가?}
+
+    Flat["플랫 컬럼"]
+    JSON["JSON 컬럼"]
+    Table["별도 테이블"]
+
+    Q1 -->|적다| Few --> Flat
+    Q1 -->|많다| Many --> Q2
+    Q2 -->|간단한 필터만| JSON
+    Q2 -->|복잡한 집계/정렬| Table
+
+    style Q1 fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#000
+    style Q2 fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#000
+    style Few fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style Many fill:#E3F2FD,stroke:#2196F3,stroke-width:2px,color:#000
+    style Flat fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style JSON fill:#E3F2FD,stroke:#2196F3,stroke-width:2px,color:#000
+    style Table fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#000
+</div>
+          <h2>스냅샷과 혼동하기 쉬운 패턴들</h2>
+
+          <p>비슷해 보이지만 목적이 다른 패턴들이 있다. 차이를 짚어둔다.</p>
+
+          <h3>비정규화 — 성능을 위한 복사</h3>
+
+<pre><code class="language-sql">-- 비정규화: 좋아요 수를 피드에 직접 저장
+ALTER TABLE feeds ADD COLUMN like_count INT DEFAULT 0;</code></pre>
+          <p>비정규화도 데이터를 복사한다. 하지만 목적이 다르다.</p>
+
+          <ul>
+            <li><strong>스냅샷</strong> — 시점을 고정한다. 원본이 바뀌어도 <mark>의도적으로 반영하지 않는다.</mark></li>
+            <li><strong>비정규화</strong> — 조회 성능을 높인다. 원본이 바뀌면 <mark>함께 갱신해야 한다.</mark></li>
+          </ul>
+
+          <p><code>like_count</code>는 좋아요가 추가될 때마다 +1 해야 한다. "작성 시점의 좋아요 수를 고정"하려는 게 아니라, JOIN 없이 빠르게 읽으려는 것이다.</p>
+
+          <h4>구분 기준</h4>
+
+          <p>원본이 바뀔 때 복사본도 갱신하는가?</p>
+
+          <ul>
+            <li><strong>예</strong> → 비정규화 (성능 최적화)</li>
+            <li><strong>아니오</strong> → 스냅샷 (시점 보존)</li>
+          </ul>
+
+          <h3>이벤트 소싱 — 모든 변경을 기록</h3>
+
+<pre><code>이벤트 1: 상품 생성 { name: "티셔츠", price: 10000 }
+이벤트 2: 가격 변경 { price: 12000 }
+이벤트 3: 이름 변경 { name: "프리미엄 티셔츠" }</code></pre>
+          <p>이벤트 소싱은 데이터의 <mark>모든 변경 이력</mark>을 저장한다. 스냅샷은 특정 시점의 <mark>최종 상태</mark>만 저장한다.</p>
+
+          <table>
+          <thead>
+          <tr><th>기준</th><th>스냅샷</th><th>이벤트 소싱</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>저장 내용</td><td>특정 시점의 상태</td><td>모든 변경 이벤트</td></tr>
+          <tr><td>과거 상태 조회</td><td>저장된 시점만</td><td>임의 시점 재구성 가능</td></tr>
+          <tr><td>저장 공간</td><td>적음</td><td>많음</td></tr>
+          <tr><td>구현 복잡도</td><td>낮음</td><td>높음</td></tr>
+          <tr><td>적합한 상황</td><td>"그때 어땠는지"만 알면 됨</td><td>변경 이력 전체가 필요</td></tr>
+          </tbody>
+          </table>
+
+          <p>대부분의 경우 스냅샷으로 충분하다. "주문 시점의 가격이 얼마였는가"만 알면 되지, "가격이 언제 몇 번 바뀌었는가"까지 추적할 필요는 없다. 이벤트 소싱은 금융, 감사 시스템 등 <mark>모든 변경 이력이 법적으로 필요한 경우</mark>에 쓴다.</p>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">"일단 FK로 만들고 나중에 스냅샷으로 바꾸면 된다"는 판단</div>
+            <p>FK에서 스냅샷으로 전환하려면 기존 데이터를 마이그레이션해야 한다. 문제는 FK로 운영하는 동안 원본이 이미 변경/삭제됐을 수 있다는 것이다. 주문이 <code>product_id = 42</code>를 참조하는데 상품 42가 이미 삭제됐다면, 스냅샷으로 전환할 때 복사할 원본이 없다. <mark>설계 단계에서 스냅샷 필요성을 판단</mark>하는 것이 가장 안전하다.</p>
+            <p>[!BUG] 스냅샷에 원본의 모든 필드를 복사하는 실수</p>
+            <p>원본 테이블에 20개 필드가 있어도, 스냅샷에는 <mark>실제로 사용하는 필드만</mark> 넣어야 한다. 불필요한 필드까지 복사하면 저장 공간이 낭비되고, JSON 직렬화/역직렬화 비용이 늘어난다. "이 스냅샷을 읽는 곳에서 어떤 필드를 쓰는가"를 먼저 파악한다.</p>
+            <p>[!BUG] 스냅샷의 원본 ID를 FK로 설정하는 실수</p>
+            <p>스냅샷에 <code>originalProductId</code>를 저장할 때, 이걸 FK로 설정하면 안 된다. 원본이 삭제됐을 때 FK 제약 위반이 발생한다. 스냅샷의 원본 ID는 <mark>참조가 아닌 메타데이터</mark>다. "이 스냅샷이 어디서 왔는지" 추적하는 용도일 뿐, DB 레벨에서 무결성을 보장할 필요가 없다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#데이터베이스</span>
+          <span>#스냅샷</span>
+          <span>#설계패턴</span>
+          <span>#정규화</span>
+          <span>#비정규화</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+          <a href="db-snapshot-2-jsonb.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

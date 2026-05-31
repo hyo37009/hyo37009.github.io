@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[스프링] 5. 동적 정렬과 필터링 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[스프링] 5. 동적 정렬과 필터링</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">커서 기반 페이지네이션 (5/6)</div>
+            <p>이전 편: <a href="cursor-pagination-4-querydsl.html">[스프링] 4. QueryDSL 커서 조회 구현</a></p>
+            <p>다음 편: <a href="cursor-pagination-6-api-interview.html">[스프링] 6. API 통합과 면접 대비</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">시리즈</div>
+            <p>1. <a href="cursor-pagination-2-offset-limit.html">Offset의 한계와 Cursor의 등장</a></p>
+            <p>2. <a href="cursor-pagination-3-design.html">커서 설계 전략</a></p>
+            <p>3. <a href="cursor-pagination-4-querydsl.html">QueryDSL 커서 조회 구현</a></p>
+            <p>4. <a href="cursor-pagination-5-sort-filter.html">동적 정렬과 필터링</a> ← 현재 편</p>
+            <p>5. <a href="cursor-pagination-6-api-interview.html">API 통합과 면접 대비</a></p>
+          </div>
+
+          <p>실제 API에서는 "최신순", "좋아요순" 같은 정렬 옵션과 "맑음 필터", "키워드 검색" 같은 필터가 함께 들어온다. 커서 조회에 이런 동적 조건을 어떻게 결합하는지 다룬다.</p>
+
+          <h2>SortBy Enum 설계</h2>
+
+          <p>정렬 기준을 문자열로 받으면 오타나 잘못된 값이 들어올 수 있다. Enum으로 정의하면 컴파일 타임에 안전하게 관리할 수 있다.</p>
+
+<pre><code class="language-java">@Getter
+@RequiredArgsConstructor
+public enum SortBy {
+    CREATED_AT("createdAt"),
+    LIKE_COUNT("likeCount");
+
+    private final String value;
+}</code></pre>
+          <p>각 enum 상수에 실제 엔티티 필드명을 매핑해둔다. QueryDSL에서 동적 정렬을 만들 때 이 값을 사용한다.</p>
+
+<div class="mermaid">
+classDiagram
+    direction LR
+    class SortBy {
+        <<enumeration>>
+        CREATED_AT
+        LIKE_COUNT
+        +getValue() String
+    }
+    class FeedEntity {
+        +createdAt Instant
+        +likeCount Long
+        +id UUID
+    }
+    SortBy ..> FeedEntity : "Maps to Field"
+</div>
+          <p><code>SortDirection</code>은 단순히 방향만 나타내면 된다.</p>
+
+<pre><code class="language-java">public enum SortDirection {
+    ASCENDING,
+    DESCENDING
+}</code></pre>
+          <h2>동적 OrderSpecifier 생성</h2>
+
+          <p>QueryDSL의 <code>orderBy</code>는 <code>OrderSpecifier</code>를 받는다. 클라이언트가 보낸 <code>SortBy</code>와 <code>SortDirection</code>에 따라 런타임에 정렬 조건을 만들어야 한다.</p>
+
+<pre><code class="language-java">private OrderSpecifier&lt;?&gt; createOrderSpecifier(
+        SortBy sortBy, SortDirection direction) {
+
+    Order order = direction == SortDirection.ASCENDING
+            ? Order.ASC : Order.DESC;
+
+    return switch (sortBy) {
+        case CREATED_AT -&gt; new OrderSpecifier&lt;&gt;(order, feed.createdAt);
+        case LIKE_COUNT -&gt; new OrderSpecifier&lt;&gt;(order, feed.likeCount);
+    };
+}</code></pre>
+          <p>switch 표현식으로 enum 값마다 Q클래스의 경로를 매핑한다. 새로운 정렬 기준이 추가되면 enum 상수와 case만 추가하면 된다.</p>
+
+          <p>실제 쿼리에서는 보조 정렬을 항상 함께 건다.</p>
+
+<pre><code class="language-java">return queryFactory
+        .selectFrom(feed)
+        .where(/* ... */)
+        .orderBy(
+                createOrderSpecifier(condition.sortBy(), condition.sortDirection()),
+                new OrderSpecifier&lt;&gt;(Order.DESC, feed.id)
+        )
+        .limit(condition.limit() + 1)
+        .fetch();</code></pre>
+          <p>보조 정렬로 <code>id</code>를 추가하는 이유는 1차 정렬 값이 동일한 행이 있을 때 순서를 보장하기 위해서다.</p>
+
+<div class="mermaid">
+flowchart TD
+    Start([정렬 조건 생성]) --> Params[SortBy & SortDirection 수신]
+    Params --> Primary[1차 정렬: OrderSpecifier 생성<br>Enum 매핑 필드 적용]
+    Primary --> Secondary[2차 정렬: 고유 ID 보조 정렬<br>feed.id DESC 고정]
+    Secondary --> Final[OrderBy 절에 순차적으로 적용]
+</div>
+          <h2>커서 조건과 정렬의 연동</h2>
+
+          <p>정렬 기준이 바뀌면 <mark>커서 조건도 함께 바뀌어야</mark> 한다. <code>created_at</code> 기준 정렬이면 커서도 <code>created_at</code>으로, <code>like_count</code> 기준이면 커서도 <code>like_count</code>로 비교해야 한다.</p>
+
+<pre><code class="language-java">private BooleanExpression cursorCondition(
+        SortBy sortBy, SortDirection direction,
+        String cursor, UUID idAfter) {
+
+    if (cursor == null || idAfter == null) {
+        return null;
+    }
+
+    return switch (sortBy) {
+        case CREATED_AT -&gt; timeCursorCondition(
+                Instant.parse(cursor), idAfter, direction);
+        case LIKE_COUNT -&gt; countCursorCondition(
+                Long.parseLong(cursor), idAfter, direction);
+    };
+}</code></pre>
+          <p>각 정렬 기준별로 커서 조건 메서드를 분리하면 가독성이 좋아진다.</p>
+
+<pre><code class="language-java">private BooleanExpression timeCursorCondition(
+        Instant cursor, UUID idAfter, SortDirection direction) {
+
+    if (direction == SortDirection.DESCENDING) {
+        return feed.createdAt.lt(cursor)
+                .or(feed.createdAt.eq(cursor)
+                        .and(feed.id.lt(idAfter)));
+    }
+    return feed.createdAt.gt(cursor)
+            .or(feed.createdAt.eq(cursor)
+                    .and(feed.id.gt(idAfter)));
+}</code></pre>
+          <p>정렬 방향에 따라 비교 연산자가 바뀌는 것에 주의하자. <code>DESC</code>면 <code>lt</code>, <code>ASC</code>면 <code>gt</code>다.</p>
+
+<div class="mermaid">
+flowchart TD
+    Start{커서 데이터 비교} --> Main{1차 기준 비교<br>createdAt/likeCount}
+    Main -- "기준값 미만 (lt)" --> Accept([데이터 포함])
+    Main -- "기준값 동일 (eq)" --> Sub{2차 기준 비교<br>feed.id}
+    Sub -- "ID 미만 (lt)" --> Accept
+    Sub -- "ID 이상 (ge)" --> Reject([데이터 제외])
+    Main -- "기준값 초과 (gt)" --> Reject
+</div>
+          <div class="callout callout-warning">
+            <div class="callout-title">정렬 기준과 커서 조건은 반드시 짝을 이뤄야 한다</div>
+            <p><code>like_count</code>로 정렬하면서 커서 조건은 <code>created_at</code>으로 거는 실수가 흔하다. 정렬 기준이 바뀌면 커서 조건의 비교 대상도 반드시 바꿔야 한다.</p>
+          </div>
+
+          <h2>동적 필터 조건</h2>
+
+          <p>필터는 <code>BooleanExpression</code>을 반환하는 메서드로 각각 분리한다. 값이 null이면 <code>null</code>을 반환해서 조건을 무시한다.</p>
+
+<pre><code class="language-java">private BooleanExpression keywordLike(String keyword) {
+    if (keyword == null || keyword.isBlank()) {
+        return null;
+    }
+    return feed.content.containsIgnoreCase(keyword);
+}
+
+private BooleanExpression skyStatusEqual(SkyStatus skyStatus) {
+    if (skyStatus == null) {
+        return null;
+    }
+    return feed.weather.skyStatus.eq(skyStatus);
+}
+
+private BooleanExpression precipitationTypeEqual(PrecipitationType type) {
+    if (type == null) {
+        return null;
+    }
+    return feed.weather.precipitationType.eq(type);
+}
+
+private BooleanExpression authorIdEqual(UUID authorId) {
+    if (authorId == null) {
+        return null;
+    }
+    return feed.author.id.eq(authorId);
+}</code></pre>
+          <p>QueryDSL의 <code>where</code>에 이 메서드들을 나열하면 null인 조건은 자동으로 제외된다.</p>
+
+<pre><code class="language-java">.where(
+        cursorCondition(condition.sortBy(), condition.sortDirection(),
+                        condition.cursor(), condition.idAfter()),
+        keywordLike(condition.keywordLike()),
+        skyStatusEqual(condition.skyStatusEqual()),
+        precipitationTypeEqual(condition.precipitationTypeEqual()),
+        authorIdEqual(condition.authorIdEqual())
+)</code></pre>
+          <p>이 패턴이 QueryDSL의 가장 큰 장점이다. 필터가 추가될 때마다 메서드 하나만 만들고 <code>where</code>에 추가하면 된다. if-else 체인으로 쿼리를 조립할 필요가 없다.</p>
+
+          <div class="callout callout-info">
+            <div class="callout-title">null 무시 원리</div>
+            <p>QueryDSL의 <code>where(Predicate... conditions)</code>는 가변 인자를 받는다. 배열 안에 null이 있으면 해당 조건을 건너뛴다. 이 동작 덕분에 "값이 없으면 null 반환" 패턴이 자연스럽게 동작한다.</p>
+          </div>
+
+          <h2>전체 쿼리 조립</h2>
+
+          <p>지금까지 만든 조각들을 합치면 완성된 Repository 메서드가 된다.</p>
+
+<pre><code class="language-java">@Override
+public List&lt;Feed&gt; searchFeeds(FeedSearchCondition condition) {
+    return queryFactory
+            .selectFrom(feed)
+            .join(feed.author, user).fetchJoin()
+            .join(feed.weather, weather).fetchJoin()
+            .where(
+                    cursorCondition(condition.sortBy(), condition.sortDirection(),
+                                    condition.cursor(), condition.idAfter()),
+                    keywordLike(condition.keywordLike()),
+                    skyStatusEqual(condition.skyStatusEqual()),
+                    precipitationTypeEqual(condition.precipitationTypeEqual()),
+                    authorIdEqual(condition.authorIdEqual())
+            )
+            .orderBy(
+                    createOrderSpecifier(condition.sortBy(),
+                                         condition.sortDirection()),
+                    new OrderSpecifier&lt;&gt;(Order.DESC, feed.id)
+            )
+            .limit(condition.limit() + 1)
+            .fetch();
+}</code></pre>
+          <p>각 조건이 독립적인 메서드로 분리되어 있어서, 어떤 조건이 적용되는지 한눈에 파악할 수 있다.</p>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">필터 메서드에서 빈 문자열을 무시하지 않음</div>
+            <p><code>keyword</code>가 빈 문자열일 때 null 체크만 하면 <code>LIKE '%%'</code> 조건이 들어간다. 전체 데이터를 반환하긴 하지만 불필요한 LIKE 연산이 실행된다. <code>isBlank()</code> 체크를 함께 해야 한다.</p>
+            <p>[!DANGER] 정렬 기준 변경 시 커서를 초기화하지 않음</p>
+            <p>클라이언트가 "최신순"에서 "좋아요순"으로 정렬을 바꾸면서 이전 커서를 그대로 보내면, <code>created_at</code> 값을 <code>like_count</code>로 비교하게 된다. 정렬 기준이 바뀌면 <mark>커서를 null로 초기화</mark>해서 첫 페이지부터 다시 조회해야 한다.</p>
+            <p>[!DANGER] 보조 정렬 키를 빼먹음</p>
+            <p>1차 정렬만 걸고 <code>id</code> 보조 정렬을 빼먹으면, 같은 값을 가진 행의 순서가 쿼리마다 달라질 수 있다. 커서 조건의 동점 처리와 맞물려 데이터 누락이 발생한다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#스프링</span>
+          <span>#QueryDSL</span>
+          <span>#동적쿼리</span>
+          <span>#정렬</span>
+          <span>#필터링</span>
+          <span>#페이지네이션</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="cursor-pagination-4-querydsl.html">&larr; 이전 글</a>
+          <a href="cursor-pagination-6-api-interview.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

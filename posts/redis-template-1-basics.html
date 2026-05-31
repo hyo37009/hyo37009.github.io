@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Redis] 1. RedisTemplate 개념과 기본 사용법 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Redis] 1. RedisTemplate 개념과 기본 사용법</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">RedisTemplate (1/3)</div>
+            <p>다음 편: <a href="redis-template-2-operations.html">[Redis] 2. 자료구조별 Operations</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">RedisTemplate 시리즈</div>
+            <p>- <a href="redis-template-1-basics.html">RedisTemplate 개념과 기본 사용법</a> ← 현재 문서</p>
+            <p>- <a href="redis-template-2-operations.html">자료구조별 Operations</a></p>
+            <p>- <a href="redis-template-3-patterns.html">실전 패턴</a></p>
+          </div>
+
+          <p><code>@Cacheable</code>로 캐시를 자동 관리하는 것만으로는 부족한 순간이 온다. 좋아요 수를 원자적으로 증가시키거나, 특정 키에 원하는 TTL을 개별 지정하거나, Redis의 자료구조를 직접 활용해야 할 때다. <code>RedisTemplate</code>은 Redis를 <mark>직접 제어</mark>하는 도구다.</p>
+
+          <h2>RedisTemplate이 뭔가</h2>
+
+          <h3>자판기와 주방의 차이</h3>
+
+          <p>음식을 얻는 방법이 두 가지 있다.</p>
+
+          <p>하나는 자판기다. 버튼을 누르면 음식이 나온다. 내부에서 어떤 음식이 재고에 있는지, 언제 보충하는지 신경 쓸 필요 없다. 자판기가 알아서 관리한다. 메뉴가 정해져 있고, 내가 개입할 여지가 없다.</p>
+
+          <p>다른 하나는 주방이다. 냉장고에서 재료를 직접 꺼내고, 원하는 방식으로 조리하고, 먹고 남은 건 직접 치운다. 자유도가 높지만 전부 내 책임이다.</p>
+
+<div class="mermaid">
+flowchart TD
+    U["배고픈 사람"]
+
+    U --> V["자판기"]
+    U --> K["주방"]
+
+    V --> V1["버튼만 누르면 됨"]
+    V1 --> V2["메뉴 고정, 개입 불가"]
+
+    K --> K1["재료를 직접 꺼냄"]
+    K1 --> K2["자유롭게 조리"]
+    K2 --> K3["직접 치워야 함"]
+
+    style U fill:#E8F4F8,stroke:#2196F3,stroke-width:2px,color:#000
+    style V fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style K fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#000
+    style V1 fill:#E8F8E8,stroke:#4CAF50,color:#000
+    style V2 fill:#E8F8E8,stroke:#4CAF50,color:#000
+    style K1 fill:#FFF3E0,stroke:#FF9800,color:#000
+    style K2 fill:#FFF3E0,stroke:#FF9800,color:#000
+    style K3 fill:#FFF3E0,stroke:#FF9800,color:#000
+</div>
+          <p>이 자판기가 Spring에서는 <code>@Cacheable</code>이다. 메서드에 어노테이션만 붙이면 캐시 저장·조회·삭제를 프록시가 알아서 해준다. 주방이 <code>RedisTemplate</code>이다. Redis에 데이터를 직접 넣고, 직접 꺼내고, 직접 지운다.</p>
+
+          <h3>왜 주방이 필요한가</h3>
+
+          <p>자판기로 해결 안 되는 상황이 있다.</p>
+
+          <ul>
+            <li><strong>원자적 증감</strong> : 좋아요 수를 <code>increment</code>로 1 올리고 싶은데, <code>@Cacheable</code>은 "메서드 반환값을 통째로 저장"하는 구조다. 값을 1만 올리는 연산을 지원하지 않는다.</li>
+            <li><strong>키별 개별 TTL</strong> : <code>@Cacheable</code>은 캐시 이름(region) 단위로 TTL을 설정한다. "이 키는 5분, 저 키는 1시간"처럼 개별 지정이 불가능하다.</li>
+            <li><strong>다양한 자료구조</strong> : Redis의 Hash, List, Set, Sorted Set을 활용하고 싶은데, <code>@Cacheable</code>은 String(단일 값) 자료구조만 사용한다.</li>
+            <li><strong>벌크 조회</strong> : <code>multiGet</code>으로 여러 키를 한 번에 가져오고 싶은데, <code>@Cacheable</code>은 키 하나에 메서드 호출 하나가 묶이는 구조다.</li>
+          </ul>
+
+          <p>이 중 하나라도 해당되면 <code>RedisTemplate</code>이 필요하다.</p>
+
+<div class="mermaid">
+flowchart TD
+    Q{{"어떤 작업인가?"}}
+
+    Q -->|"메서드 결과 캐싱"| C["@Cacheable"]
+    Q -->|"원자적 증감"| RT["RedisTemplate"]
+    Q -->|"키별 개별 TTL"| RT
+    Q -->|"Hash/List/Set/ZSet"| RT
+    Q -->|"multiGet 벌크 조회"| RT
+
+    C --> C1["프록시가 자동 관리"]
+    RT --> RT1["직접 제어"]
+
+    style Q fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#000
+    style C fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style RT fill:#E8F4F8,stroke:#2196F3,stroke-width:2px,color:#000
+    style C1 fill:#E8F8E8,stroke:#4CAF50,color:#000
+    style RT1 fill:#E8F4F8,stroke:#2196F3,color:#000
+</div>
+          <h2>RedisTemplate 설정</h2>
+
+          <h3>의존성 추가</h3>
+
+<pre><code class="language-gradle">implementation 'org.springframework.boot:spring-boot-starter-data-redis'</code></pre>
+          <p>이 의존성 하나로 세 가지가 자동 설정된다.</p>
+
+          <ul>
+            <li><code>LettuceConnectionFactory</code> : Redis 서버와의 연결을 관리하는 팩토리</li>
+            <li><code>RedisTemplate&lt;Object, Object&gt;</code> : 기본 RedisTemplate 빈</li>
+            <li><code>StringRedisTemplate</code> : <code>&lt;String, String&gt;</code> 타입의 편의 빈</li>
+          </ul>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">왜 Lettuce인가</div>
+            <p>Spring Boot 2.0부터 기본 Redis 클라이언트가 Jedis에서 Lettuce로 바뀌었다. Lettuce는 Netty 기반 비동기 클라이언트로, <mark>단일 커넥션을 여러 스레드가 공유</mark>할 수 있다. Jedis는 스레드마다 커넥션이 필요해서 커넥션 풀 관리가 필수였다. 별도 설정 없이 의존성만 추가하면 Lettuce가 사용된다.</p>
+          </div>
+
+          <h3>application.yml</h3>
+
+<pre><code class="language-yaml">spring:
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}</code></pre>
+          <h4>host</h4>
+
+          <p>Redis 서버 주소다. <code>${REDIS_HOST:localhost}</code>는 환경 변수 <code>REDIS_HOST</code>가 있으면 그 값을 쓰고, 없으면 <code>localhost</code>를 쓴다는 뜻이다.</p>
+
+          <p>왜 환경 변수로 주입하는가? 로컬 개발에서는 <code>localhost</code>지만, 운영 환경에서는 별도 Redis 서버 주소를 써야 한다. 코드 변경 없이 환경 변수만 바꿔서 배포할 수 있도록 하기 위해서다.</p>
+
+          <h4>port</h4>
+
+          <p>Redis 기본 포트는 <code>6379</code>다. 변경할 일이 거의 없지만, 한 머신에 Redis 인스턴스를 여러 개 띄우거나 보안 정책으로 포트를 바꿔야 할 때를 대비해 환경 변수로 뺀다.</p>
+
+          <h3>RedisTemplate 빈 등록</h3>
+
+          <p>Spring Boot가 자동 등록하는 <code>RedisTemplate&lt;Object, Object&gt;</code>는 기본 직렬화가 <code>JdkSerializationRedisSerializer</code>다. 이게 문제를 일으킨다. 커스텀 빈을 등록해야 하는 이유를 먼저 이해하자.</p>
+
+          <p>택배를 보내는 상황을 떠올려 보자.</p>
+
+          <p>물건을 택배로 보내려면 상자에 포장해야 한다. 받는 사람이 상자를 열면 원래 물건이 나와야 한다. 포장 방식이 두 가지 있다. 하나는 물건을 압축 팩에 넣는 것이다. 공간은 절약되지만, 받는 사람이 뭐가 들었는지 겉에서 볼 수 없다. 같은 압축기가 없으면 열 수도 없다. 다른 하나는 투명 상자에 넣는 것이다. 겉에서 내용물이 보이고, 누구나 열 수 있다.</p>
+
+<div class="mermaid">
+flowchart TD
+    P["물건을 보낸다"]
+
+    P --> A["압축 팩"]
+    A --> A1["겉에서 안 보임"]
+    A1 --> A2["같은 압축기 필요"]
+
+    P --> B["투명 상자"]
+    B --> B1["겉에서 보임"]
+    B1 --> B2["누구나 열 수 있음"]
+
+    style P fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#000
+    style A fill:#FFE6E6,stroke:#F44336,stroke-width:2px,color:#000
+    style A1 fill:#FFE6E6,stroke:#F44336,color:#000
+    style A2 fill:#FFE6E6,stroke:#F44336,color:#000
+    style B fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style B1 fill:#E8F8E8,stroke:#4CAF50,color:#000
+    style B2 fill:#E8F8E8,stroke:#4CAF50,color:#000
+</div>
+          <p>압축 팩이 <code>JdkSerializationRedisSerializer</code>다. 자바 바이너리 형식으로 직렬화하므로, Redis CLI에서 값을 읽을 수 없고, 자바가 아닌 다른 언어에서도 읽을 수 없다. 투명 상자가 <code>StringRedisSerializer</code>나 <code>Jackson2JsonRedisSerializer</code>다. 사람이 읽을 수 있는 형태(문자열, JSON)로 저장한다.</p>
+
+          <p>이제 실제 빈 설정 코드를 보자.</p>
+
+<pre><code class="language-java">@Configuration
+public class RedisConfig {
+
+    @Bean
+    public RedisTemplate&lt;String, Object&gt; redisTemplate(RedisConnectionFactory connectionFactory) {
+        RedisTemplate&lt;String, Object&gt; template = new RedisTemplate&lt;&gt;();
+        template.setConnectionFactory(connectionFactory);
+        template.setKeySerializer(new StringRedisSerializer());
+        template.setValueSerializer(new GenericJackson2JsonRedisSerializer());
+        template.setHashKeySerializer(new StringRedisSerializer());
+        template.setHashValueSerializer(new GenericJackson2JsonRedisSerializer());
+        return template;
+    }
+}</code></pre>
+          <h4><code>RedisTemplate&lt;String, Object&gt;</code></h4>
+
+          <p>키는 항상 문자열이다. Redis 키는 결국 바이트 배열이고, 사람이 읽을 수 있으려면 문자열이어야 한다. 값은 <code>Object</code>로 열어둔다.</p>
+
+          <p>왜 <code>&lt;String, String&gt;</code>이 아닌가? 문자열만 저장할 거면 <code>StringRedisTemplate</code>을 쓰면 된다. <code>&lt;String, Object&gt;</code>로 하면 DTO, 숫자, 컬렉션 등 다양한 타입을 하나의 <code>RedisTemplate</code>으로 다룰 수 있다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">문자열만 다룬다면</div>
+            <p>토큰 저장소처럼 값이 전부 문자열인 경우, <code>StringRedisTemplate</code>을 주입받으면 된다. 별도 빈 등록 없이 Spring Boot가 자동으로 제공한다. <code>opsForValue().set("key", "value")</code>처럼 사용하면 키와 값 모두 <code>StringRedisSerializer</code>가 적용된다.</p>
+          </div>
+
+          <h4>setConnectionFactory</h4>
+
+          <p>Redis 서버 연결 정보를 주입한다. <code>application.yml</code>의 <code>host</code>, <code>port</code>를 읽어서 Spring Boot가 만든 <code>LettuceConnectionFactory</code>가 여기에 들어온다.</p>
+
+          <p>왜 직접 <code>new LettuceConnectionFactory(...)</code>를 하지 않는가? 커넥션 팩토리는 Spring Boot가 관리하는 빈이다. 직접 만들면 커넥션 풀 설정, 타임아웃, 재연결 정책 등 Boot가 자동으로 잡아주는 설정이 적용되지 않는다.</p>
+
+          <h4>setKeySerializer</h4>
+
+          <p>키를 <code>StringRedisSerializer</code>로 직렬화한다. 이걸 빠뜨리면 기본값인 <code>JdkSerializationRedisSerializer</code>가 적용되어 키 앞에 바이너리 프리픽스가 붙는다.</p>
+
+<pre><code># StringRedisSerializer 적용 시
+feed:like:abc-123
+
+# JdkSerializationRedisSerializer 적용 시 (기본값)
+\xac\xed\x00\x05t\x00\x12feed:like:abc-123</code></pre>
+          <p>바이너리 프리픽스가 붙으면 Redis CLI에서 <code>GET feed:like:abc-123</code>으로 조회해도 키를 찾을 수 없다. 실제 키 이름이 다르기 때문이다. 디버깅이 불가능해진다.</p>
+
+          <h4>setValueSerializer</h4>
+
+          <p>값을 <code>GenericJackson2JsonRedisSerializer</code>로 직렬화한다. JSON 형태로 저장되므로 Redis CLI에서 값을 읽을 수 있다.</p>
+
+          <p>왜 <code>Jackson2JsonRedisSerializer</code>가 아닌가? <code>Jackson2JsonRedisSerializer</code>는 특정 타입을 지정해야 한다. <code>GenericJackson2JsonRedisSerializer</code>는 <mark>타입 정보를 JSON에 포함</mark>시켜서, 어떤 타입이든 직렬화·역직렬화할 수 있다. <code>&lt;String, Object&gt;</code>와 궁합이 맞다.</p>
+
+          <p>안 쓰면 어떻게 되는가? 기본값인 <code>JdkSerializationRedisSerializer</code>가 적용된다. Redis CLI에서 값이 바이너리로 보여서 디버깅이 불가능하고, 자바 외 다른 언어에서 값을 읽을 수 없다.</p>
+
+          <h4>setHashKeySerializer, setHashValueSerializer</h4>
+
+          <p>Redis의 Hash 자료구조를 쓸 때 적용되는 직렬화 설정이다. <code>opsForHash()</code>를 통해 Hash 필드를 다룰 때 여기서 설정한 직렬화가 적용된다.</p>
+
+          <p>왜 따로 설정하는가? <code>setKeySerializer</code>는 Redis 키(최상위 키)의 직렬화, <code>setHashKeySerializer</code>는 <mark>Hash 내부 필드 이름</mark>의 직렬화다. 둘은 별개다. Hash를 쓸 계획이 없더라도 미리 설정해두면 나중에 빠뜨릴 일이 없다.</p>
+
+<div class="mermaid">
+flowchart TD
+    subgraph Redis ["Redis 저장 구조"]
+        direction TB
+        K["키: feed:like:abc-123"] --> V["값: 42"]
+        K2["키: user:profile:user1"] --> H["Hash"]
+        H --> F1["필드: name → '김철수'"]
+        H --> F2["필드: age → 25"]
+    end
+
+    subgraph Serializer ["직렬화 적용 대상"]
+        direction TB
+        S1["setKeySerializer → 키"]
+        S2["setValueSerializer → 값"]
+        S3["setHashKeySerializer → Hash 필드명"]
+        S4["setHashValueSerializer → Hash 필드값"]
+    end
+
+    S1 -.-> K
+    S1 -.-> K2
+    S2 -.-> V
+    S3 -.-> F1
+    S3 -.-> F2
+    S4 -.-> F1
+    S4 -.-> F2
+
+    style Redis fill:#E8F4F8,stroke:#2196F3,color:#000
+    style Serializer fill:#FFF3E0,stroke:#FF9800,color:#000
+    style K fill:#E8F4F8,stroke:#2196F3,color:#000
+    style K2 fill:#E8F4F8,stroke:#2196F3,color:#000
+    style V fill:#E8F4F8,stroke:#2196F3,color:#000
+    style H fill:#E8F4F8,stroke:#2196F3,color:#000
+    style F1 fill:#E8F4F8,stroke:#2196F3,color:#000
+    style F2 fill:#E8F4F8,stroke:#2196F3,color:#000
+    style S1 fill:#FFF3E0,stroke:#FF9800,color:#000
+    style S2 fill:#FFF3E0,stroke:#FF9800,color:#000
+    style S3 fill:#FFF3E0,stroke:#FF9800,color:#000
+    style S4 fill:#FFF3E0,stroke:#FF9800,color:#000
+</div>
+          <h2>opsForValue 기본 사용법</h2>
+
+          <p><code>RedisTemplate</code>을 주입받으면, 실제 데이터 조작은 <code>opsFor___()</code> 메서드를 통해 한다. 각 메서드가 Redis의 자료구조에 대응한다.</p>
+
+          <table>
+          <thead>
+          <tr><th>메서드</th><th>Redis 자료구조</th><th>용도</th></tr>
+          </thead>
+          <tbody>
+          <tr><td><code>opsForValue()</code></td><td>String</td><td>단일 값 저장·조회</td></tr>
+          <tr><td><code>opsForHash()</code></td><td>Hash</td><td>필드-값 쌍 (객체 속성)</td></tr>
+          <tr><td><code>opsForList()</code></td><td>List</td><td>순서 있는 목록</td></tr>
+          <tr><td><code>opsForSet()</code></td><td>Set</td><td>중복 없는 집합</td></tr>
+          <tr><td><code>opsForZSet()</code></td><td>Sorted Set</td><td>점수 기반 정렬 집합</td></tr>
+          </tbody>
+          </table>
+
+          <p>이번 편에서는 <code>opsForValue()</code>만 다룬다. 나머지는 <a href="redis-template-2-operations.html">다음 편</a>에서 다룬다.</p>
+
+          <h3>set — 값 저장</h3>
+
+<pre><code class="language-java">// 기본 저장
+redisTemplate.opsForValue().set("feed:like:abc-123", 42);
+
+// TTL과 함께 저장
+redisTemplate.opsForValue().set("feed:like:abc-123", 42, Duration.ofMinutes(5));</code></pre>
+          <h4>첫 번째 인자 — 키</h4>
+
+          <p>Redis에서 이 데이터를 찾을 주소다. <code>feed:like:abc-123</code>처럼 <code>도메인:용도:식별자</code> 패턴을 따르면 나중에 <code>KEYS feed:like:*</code>로 좋아요 관련 키만 골라서 조회할 수 있다.</p>
+
+          <p>왜 계층적으로 짓는가? Redis는 테이블이나 스키마 같은 구분이 없다. <mark>하나의 평탄한 키-값 공간</mark>이다. 키 이름 자체에 구조를 넣어야 관리가 된다.</p>
+
+          <h4>두 번째 인자 — 값</h4>
+
+          <p>저장할 데이터다. <code>&lt;String, Object&gt;</code>로 설정했으므로 문자열, 숫자, DTO 등 어떤 타입이든 넣을 수 있다. <code>GenericJackson2JsonRedisSerializer</code>가 JSON으로 변환해서 저장한다.</p>
+
+          <h4>세 번째 인자 — TTL</h4>
+
+          <p>이 키가 자동 삭제되는 시간이다. <code>Duration.ofMinutes(5)</code>는 5분 후 자동 삭제다.</p>
+
+          <p>왜 항상 TTL을 붙여야 하는가? TTL이 없으면 키가 <mark>영원히</mark> Redis에 남는다. 좋아요 수 캐시가 만료되지 않으면, 피드가 삭제된 후에도 좋아요 데이터가 남아 있게 된다. 시간이 지날수록 Redis 메모리가 무한히 증가한다.</p>
+
+          <p>안 붙이면 어떻게 되는가? <code>set("key", value)</code>만 호출하면 <code>TTL</code> 명령 결과가 <code>-1</code>(만료 없음)로 나온다. 의도적으로 영구 저장이 필요한 경우가 아니라면, 반드시 TTL을 명시한다.</p>
+
+          <h3>get — 값 조회</h3>
+
+<pre><code class="language-java">Object value = redisTemplate.opsForValue().get("feed:like:abc-123");</code></pre>
+          <p>키가 존재하면 저장된 값을 반환하고, 존재하지 않으면 <code>null</code>을 반환한다.</p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">반환 타입이 Object다</div>
+            <p><code>RedisTemplate&lt;String, Object&gt;</code>이므로 <code>get()</code>의 반환 타입은 <code>Object</code>다. 실제 사용할 때는 캐스팅이 필요하다.</p>
+            <p>```java</p>
+            <p>Integer count = (Integer) redisTemplate.opsForValue().get("feed:like:abc-123");</p>
+            <p>```</p>
+            <p><code>GenericJackson2JsonRedisSerializer</code>가 숫자를 <code>Integer</code>나 <code>Long</code>으로 역직렬화한다. 작은 숫자는 <code>Integer</code>, 큰 숫자는 <code>Long</code>이 되므로, <mark><code>Long</code>으로 통일</mark>해서 받는 게 안전하다. <code>Number</code>로 받아서 <code>.longValue()</code>를 호출하는 방법도 있다.</p>
+          </div>
+
+          <h3>delete — 값 삭제</h3>
+
+<pre><code class="language-java">Boolean deleted = redisTemplate.delete("feed:like:abc-123");</code></pre>
+          <p>키가 존재해서 삭제했으면 <code>true</code>, 존재하지 않았으면 <code>false</code>를 반환한다.</p>
+
+          <p>왜 <code>opsForValue().delete()</code>가 아닌가? <code>delete()</code>는 자료구조와 무관하게 <mark>키 자체를 삭제</mark>하는 연산이다. String이든 Hash든 List든, 키를 지우면 값 전체가 사라진다. 그래서 <code>opsForValue()</code> 안이 아니라 <code>RedisTemplate</code>에 직접 있다.</p>
+
+          <h3>increment — 원자적 증감</h3>
+
+<pre><code class="language-java">// 1 증가
+Long newCount = redisTemplate.opsForValue().increment("feed:like:abc-123");
+
+// 지정한 값만큼 증가
+Long newCount = redisTemplate.opsForValue().increment("feed:like:abc-123", 5);
+
+// 감소 (음수를 더함)
+Long newCount = redisTemplate.opsForValue().increment("feed:like:abc-123", -1);</code></pre>
+          <p><code>increment</code>가 <code>@Cacheable</code>로는 불가능한 핵심 기능이다.</p>
+
+          <h4>왜 "원자적"인가</h4>
+
+          <p>동시에 100명이 좋아요를 누르는 상황을 보자.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant A as 사용자 A
+    participant B as 사용자 B
+    participant App as 서버
+    participant Redis as Redis
+
+    rect rgb(255, 230, 230)
+        Note over A, Redis: get → set 방식 (위험)
+        A->>App: 좋아요
+        App->>Redis: GET feed:like:abc → 10
+        B->>App: 좋아요
+        App->>Redis: GET feed:like:abc → 10
+        App->>Redis: SET feed:like:abc 11
+        App->>Redis: SET feed:like:abc 11
+        Note over Redis: 결과: 11 (12여야 맞음)
+    end
+
+    rect rgb(232, 248, 232)
+        Note over A, Redis: INCR 방식 (안전)
+        A->>App: 좋아요
+        App->>Redis: INCR feed:like:abc
+        Note right of Redis: 10 → 11 (원자적)
+        B->>App: 좋아요
+        App->>Redis: INCR feed:like:abc
+        Note right of Redis: 11 → 12 (원자적)
+        Note over Redis: 결과: 12 ✅
+    end
+</div>
+          <p>분홍 영역은 <code>get</code>으로 현재 값을 읽고, 1을 더해서 <code>set</code>으로 다시 쓰는 방식이다. 두 요청이 동시에 10을 읽으면 둘 다 11로 쓴다. 좋아요가 하나 증발한다.</p>
+
+          <p>초록 영역은 <code>INCR</code> 명령(Java에서는 <code>increment()</code>)을 쓰는 방식이다. Redis가 <mark>읽기-증가-쓰기를 하나의 연산으로</mark> 처리하므로, 동시 요청이 몇 개든 정확한 결과가 나온다.</p>
+
+          <h4>키가 없을 때</h4>
+
+          <p>키가 존재하지 않는 상태에서 <code>increment()</code>를 호출하면 Redis가 <mark>자동으로 키를 생성</mark>하고 값을 <code>0</code>에서 시작해서 증가시킨다. 미리 <code>set()</code>으로 초기화할 필요가 없다.</p>
+
+          <p>안 쓰면 어떻게 되는가? <code>get → +1 → set</code> 패턴을 직접 구현해야 하고, 동시성 문제를 막으려면 분산 락이 필요해진다. <code>increment</code> 하나로 끝나는 걸 불필요하게 복잡하게 만드는 셈이다.</p>
+
+          <h3>setIfAbsent — 존재하지 않을 때만 저장</h3>
+
+<pre><code class="language-java">Boolean success = redisTemplate.opsForValue()
+    .setIfAbsent("lock:feed:abc-123", "locked", Duration.ofSeconds(10));</code></pre>
+          <p>키가 <mark>없을 때만</mark> 값을 저장하고 <code>true</code>를 반환한다. 이미 키가 있으면 아무것도 하지 않고 <code>false</code>를 반환한다. Redis의 <code>SET NX</code> 명령에 대응한다.</p>
+
+          <p>왜 필요한가? 분산 락의 기본 구현이다. 여러 서버에서 동시에 같은 작업을 실행하면 안 될 때, <code>setIfAbsent</code>로 락을 잡는다. 먼저 성공한 서버만 작업을 수행하고, 나머지는 <code>false</code>를 받아서 대기하거나 포기한다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant A as 서버 A
+    participant B as 서버 B
+    participant Redis as Redis
+
+    A->>Redis: SET lock:job NX EX 10
+    Note right of Redis: 키 없음 → 생성
+    Redis-->>A: true (락 획득)
+
+    B->>Redis: SET lock:job NX EX 10
+    Note right of Redis: 키 있음 → 거부
+    Redis-->>B: false (락 실패)
+
+    Note over A: 작업 수행
+    A->>Redis: DEL lock:job
+    Note right of Redis: 락 해제
+</div>
+          <h2>전체 흐름 정리</h2>
+
+          <p>Java 코드에서 Redis 서버까지 데이터가 어떻게 이동하는지 전체 흐름을 보자.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant Code as Java 코드
+    participant RT as RedisTemplate
+    participant Ser as Serializer
+    participant Conn as LettuceConnection
+    participant Redis as Redis 서버
+
+    rect rgb(232, 248, 232)
+        Note over Code, Ser: 직렬화
+        Code->>RT: opsForValue().set("key", value, TTL)
+        RT->>Ser: 키 직렬화 (StringSerializer)
+        RT->>Ser: 값 직렬화 (JacksonSerializer)
+    end
+
+    rect rgb(232, 244, 248)
+        Note over Ser, Redis: 네트워크 전송
+        Ser-->>RT: 바이트 배열 반환
+        RT->>Conn: SET 명령 전달
+        Conn->>Redis: Redis 프로토콜로 전송
+        Redis-->>Conn: OK
+    end
+
+    rect rgb(255, 243, 224)
+        Note over Conn, Code: 응답
+        Conn-->>RT: 응답 전달
+        RT-->>Code: void
+    end
+</div>
+          <p>1~3번에서 <code>RedisTemplate</code>이 키와 값을 각각 설정된 Serializer로 직렬화한다. 4~6번에서 <code>LettuceConnection</code>이 Redis 프로토콜로 변환해서 서버에 전송한다. 7~8번에서 응답이 돌아온다.</p>
+
+          <p>개발자가 신경 쓸 부분은 1번뿐이다. 나머지는 <code>RedisTemplate</code>과 Spring이 처리한다.</p>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">직렬화 설정 없이 기본 RedisTemplate을 사용하는 실수</div>
+            <p><code>@Autowired RedisTemplate&lt;Object, Object&gt;</code>로 Spring Boot 자동 설정 빈을 그대로 쓰면, 기본 직렬화인 <code>JdkSerializationRedisSerializer</code>가 적용된다. 키와 값 앞에 바이너리 프리픽스가 붙어서 Redis CLI에서 읽을 수 없고, 같은 문자열 키라도 직렬화 방식이 다르면 <mark>서로 다른 키</mark>로 취급된다.</p>
+            <p>반드시 위에서 설명한 것처럼 커스텀 빈을 등록하거나, 문자열만 다룬다면 <code>StringRedisTemplate</code>을 사용한다.</p>
+            <p>[!DANGER] TTL을 빠뜨려서 데이터가 영원히 남는 실수</p>
+            <p><code>opsForValue().set("key", value)</code>만 호출하면 TTL이 설정되지 않는다. 캐시 용도의 데이터가 만료되지 않으면, 삭제된 피드의 좋아요 수가 영원히 남고, Redis 메모리가 끝없이 증가한다.</p>
+            <p><code>@Cacheable</code>은 <code>CacheConfig</code>에서 기본 TTL을 잡아주지만, <code>RedisTemplate</code>은 <mark>호출할 때마다 직접 TTL을 지정</mark>해야 한다. <code>set()</code> 호출 시 항상 <code>Duration</code>을 세 번째 인자로 넘기는 습관을 들인다.</p>
+            <p>[!DANGER] increment 대신 get → set으로 카운터를 구현하는 실수</p>
+            <p>좋아요 수를 <code>get</code>으로 읽고, Java에서 1을 더하고, <code>set</code>으로 다시 쓰는 패턴은 동시성 문제를 일으킨다. 동시에 두 요청이 같은 값을 읽으면 하나가 덮어써진다.</p>
+            <p><code>increment()</code>는 Redis 서버 내부에서 원자적으로 읽기-증가-쓰기를 수행한다. 카운터 연산에는 반드시 <code>increment()</code>를 사용한다.</p>
+            <p>[!DANGER] get() 반환 타입을 확인하지 않는 실수</p>
+            <p><code>GenericJackson2JsonRedisSerializer</code>는 숫자를 역직렬화할 때, 값의 크기에 따라 <code>Integer</code> 또는 <code>Long</code>을 반환한다. <code>(Long) redisTemplate.opsForValue().get("key")</code>로 캐스팅하면 작은 숫자에서 <code>ClassCastException</code>이 터진다.</p>
+            <p>```java</p>
+            <p>// 위험</p>
+            <p>Long count = (Long) redisTemplate.opsForValue().get("key");</p>
+            <p>// 안전</p>
+            <p>Number count = (Number) redisTemplate.opsForValue().get("key");</p>
+            <p>long value = count != null ? count.longValue() : 0L;</p>
+            <p>```</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Redis</span>
+          <span>#RedisTemplate</span>
+          <span>#opsForValue</span>
+          <span>#직렬화</span>
+          <span>#Spring</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+          <a href="redis-template-2-operations.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

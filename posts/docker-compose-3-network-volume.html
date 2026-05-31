@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3. 03 네트워크와 볼륨이 상태를 만드는 방식 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">3. 03 네트워크와 볼륨이 상태를 만드는 방식</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Docker Compose 정리 (3/9)</div>
+            <p>이전 편: <a href="docker-compose-2-service-image-port.html">2. 02 서비스 이미지 컨테이너 포트의 관계</a></p>
+            <p>다음 편: <a href="docker-compose-4-env-vars-order.html">4. 04 환경 변수와 시작 순서 설계</a></p>
+          </div>
+
+
+
+          <p>﻿# [Docker Compose 개념] 네트워크와 볼륨이 상태를 만드는 방식</p>
+
+          <div class="callout callout-info">
+            <div class="callout-title">Docker Compose 개념편</div>
+            <p>- <a href="docker-compose-1-env-concept.html">Compose 파일이 표현하는 실행 환경</a></p>
+            <p>- <a href="docker-compose-2-service-image-port.html">서비스 이미지 컨테이너 포트의 관계</a></p>
+            <p>- <mark>네트워크와 볼륨이 상태를 만드는 방식</mark> ← 현재 문서</p>
+            <p>- <a href="docker-compose-4-env-vars-order.html">환경 변수와 시작 순서 설계</a></p>
+          </div>
+
+          <p>컨테이너는 쉽게 만들고 쉽게 지우도록 설계되어 있다. 이 특성은 배포와 재현성에는 좋지만, 서버 애플리케이션에는 두 가지 질문을 남긴다.</p>
+
+          <p>첫째, 컨테이너끼리는 어떻게 서로를 찾는가. 둘째, 컨테이너를 지워도 남아야 하는 데이터는 어디에 두는가. Docker Compose에서는 이 두 질문에 각각 네트워크와 볼륨으로 답한다.</p>
+
+          <h2>같은 Compose 프로젝트의 서비스는 이름으로 통신한다</h2>
+
+          <p>현재 예시 앱은 PostgreSQL에 접속해야 한다. 호스트에서 앱을 실행할 때는 DB 주소가 보통 <code>localhost:5432</code>일 수 있다. 하지만 앱을 컨테이너 안에서 실행하면 상황이 달라진다.</p>
+
+          <p>컨테이너 안의 <code>localhost</code>는 호스트가 아니라 <mark>그 컨테이너 자신</mark>이다. 앱 컨테이너 내부에서 <code>localhost:5432</code>를 찾으면 DB 컨테이너가 아니라 앱 컨테이너 내부의 5432 포트를 찾게 된다.</p>
+
+          <p>Compose 네트워크에서는 서비스 이름이 DNS 이름이 된다. 따라서 앱 컨테이너에서 DB 컨테이너로 접속할 때는 다음 주소를 써야 한다.</p>
+
+<pre><code class="language-text">jdbc:postgresql://db:5432/discodeit</code></pre>
+          <p>여기서 <code>db</code>는 Compose의 서비스 이름이다.</p>
+
+<pre><code class="language-yaml">services:
+  db:
+    image: postgres:15-alpine</code></pre>
+          <p>서비스 이름을 바꾸면 DB URL도 함께 바꿔야 한다. 예를 들어 서비스를 <code>postgres</code>로 바꾸면 URL은 <code>jdbc:postgresql://postgres:5432/...</code>가 된다.</p>
+
+          <h2>ports는 외부 진입점이고 네트워크는 내부 경로다</h2>
+
+          <p><code>ports</code>는 호스트에서 컨테이너로 들어오는 문이다.</p>
+
+<pre><code class="language-yaml">app:
+  ports:
+    - "8081:80"</code></pre>
+          <p>이 설정이 있으면 브라우저에서 <code>http://localhost:8081</code>로 앱에 접근할 수 있다. 하지만 앱이 DB에 접근하는 데 이 포트 매핑이 필요한 것은 아니다. 앱과 DB는 Compose의 default network 안에서 직접 통신한다.</p>
+
+          <p>두 경로를 분리해서 생각해야 한다.</p>
+
+          <table>
+          <thead>
+          <tr><th>경로</th><th>예시</th><th>필요한 설정</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>호스트 → 앱 컨테이너</td><td><code>localhost:8081</code> → <code>app:80</code></td><td><code>app.ports</code></td></tr>
+          <tr><td>호스트 → DB 컨테이너</td><td><code>localhost:5432</code> → <code>db:5432</code></td><td><code>db.ports</code></td></tr>
+          <tr><td>앱 컨테이너 → DB 컨테이너</td><td><code>app</code> → <code>db:5432</code></td><td>같은 Compose 네트워크</td></tr>
+          </tbody>
+          </table>
+
+          <p>DB의 <code>ports</code>를 제거해도 앱 컨테이너는 <code>db:5432</code>로 계속 접속할 수 있다. 반대로 DB의 <code>ports</code>를 열어도 앱의 DB URL이 <code>localhost</code>이면 컨테이너 내부에서는 실패할 수 있다.</p>
+
+          <h2>named volume은 컨테이너 밖에 데이터를 남긴다</h2>
+
+          <p>PostgreSQL은 데이터를 <code>/var/lib/postgresql/data</code>에 저장한다. 이 경로가 컨테이너 내부 파일시스템에만 있으면 컨테이너 삭제 시 데이터도 사라진다. 그래서 현재 Compose 파일은 named volume을 붙인다.</p>
+
+<pre><code class="language-yaml">db:
+  volumes:
+    - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:</code></pre>
+          <p>이 설정은 <code>postgres_data</code>라는 Docker 볼륨을 만들고, 그 볼륨을 DB 컨테이너의 데이터 디렉터리에 연결한다. 컨테이너를 다시 만들어도 같은 볼륨을 붙이면 DB 데이터가 유지된다.</p>
+
+          <p>앱도 파일 저장용 볼륨을 가진다.</p>
+
+<pre><code class="language-yaml">app:
+  volumes:
+    - app_storage:/app/storage
+
+volumes:
+  app_storage:</code></pre>
+          <p>현재 운영 프로필은 <code>discodeit.storage.type: s3</code>를 사용하므로 실제 파일 저장이 S3로 갈 수 있다. 그래도 로컬 저장 방식으로 바꾸거나 일부 파일을 컨테이너 내부에 보관하는 경우를 생각하면 앱 저장소 볼륨은 의미가 있다.</p>
+
+          <h2>schema.sql은 매번 실행되지 않는다</h2>
+
+          <p>현재 DB 서비스는 <code>schema.sql</code>을 PostgreSQL 초기화 디렉터리에 읽기 전용으로 마운트한다.</p>
+
+<pre><code class="language-yaml">db:
+  volumes:
+    - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro</code></pre>
+          <p>PostgreSQL 공식 이미지는 데이터 디렉터리가 비어 있을 때 <code>/docker-entrypoint-initdb.d</code> 아래의 초기화 파일을 실행한다. 중요한 점은 <mark>볼륨이 이미 초기화되어 있으면 다시 실행되지 않는다</mark>는 것이다.</p>
+
+          <p>따라서 <code>schema.sql</code>을 수정한 뒤 <code>docker compose up</code>만 다시 해도 기존 DB에는 반영되지 않을 수 있다. 초기 스키마를 다시 적용하려면 다음 중 하나를 선택해야 한다.</p>
+
+          <ul>
+            <li>마이그레이션 도구로 변경분을 적용한다.</li>
+            <li>직접 SQL을 실행한다.</li>
+            <li>개발용 데이터라면 볼륨을 삭제하고 새로 초기화한다.</li>
+          </ul>
+
+          <p>볼륨 삭제는 데이터 삭제다. 실습할 때만 의도적으로 실행해야 한다.</p>
+
+<pre><code class="language-bash">docker compose down -v</code></pre>
+          <div class="callout callout-info">
+            <div class="callout-title">down -v는 데이터 삭제 명령이다</div>
+            <p><code>docker compose down</code>은 컨테이너와 네트워크를 정리한다. <code>-v</code>를 붙이면 Compose가 만든 named volume까지 삭제한다. PostgreSQL 데이터도 같이 사라진다.</p>
+          </div>
+
+          <h2>네트워크와 볼륨을 같이 보면 실행 환경이 보인다</h2>
+
+<div class="mermaid">
+flowchart LR
+    Browser["Browser<br/>localhost:8081"]
+
+    subgraph Network["Compose default network"]
+        App["app<br/>Spring Boot :80"]
+        Db["db<br/>PostgreSQL :5432"]
+    end
+
+    PgVol[("postgres_data<br/>DB files")]
+    AppVol[("app_storage<br/>uploaded files")]
+
+    Browser -->|"ports 8081:80"| App
+    App -->|"db:5432"| Db
+    Db --- PgVol
+    App --- AppVol
+</div>
+          <p>이 그림에서 네트워크는 요청의 이동 경로이고, 볼륨은 데이터의 생존 위치다. 컨테이너를 지워도 볼륨은 남을 수 있고, 호스트 포트를 닫아도 내부 네트워크 통신은 유지될 수 있다.</p>
+
+          <h2>참고한 공식 문서</h2>
+
+          <ul>
+            <li><a href="https://docs.docker.com/compose/intro/compose-application-model/">Docker Compose application model</a></li>
+            <li><a href="https://docs.docker.com/reference/compose-file/volumes/">Define and manage volumes in Docker Compose</a></li>
+            <li><a href="https://docs.docker.com/reference/compose-file/services/">Compose services reference</a></li>
+          </ul>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Docker_Compose</span>
+          <span>#Docker_Network</span>
+          <span>#Docker_Volume</span>
+          <span>#PostgreSQL</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="docker-compose-2-service-image-port.html">&larr; 이전 글</a>
+          <a href="docker-compose-4-env-vars-order.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[QueryDSL] 4. 동적 쿼리 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[QueryDSL] 4. 동적 쿼리</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">QueryDSL 가이드 (4/8)</div>
+            <p>이전 편: <a href="querydsl-3-join-subquery.html">[QueryDSL] 3. 조인과 서브쿼리</a></p>
+            <p>다음 편: <a href="querydsl-5-projection-dto.html">[QueryDSL] 5. 프로젝션과 DTO 매핑</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">QueryDSL 시리즈</div>
+            <p><strong>01 기본</strong></p>
+            <p>1. <a href="querydsl-1-setup.html">환경 설정과 Q클래스</a></p>
+            <p>2. <a href="querydsl-2-basic-query.html">기본 쿼리 작성</a></p>
+            <p>3. <a href="querydsl-3-join-subquery.html">조인과 서브쿼리</a></p>
+            <p><strong>02 실전</strong></p>
+            <p>4. <a href="querydsl-4-dynamic-query.html">동적 쿼리</a> ← 현재 편</p>
+            <p>5. <a href="querydsl-5-projection-dto.html">프로젝션과 DTO 매핑</a></p>
+            <p>6. <a href="querydsl-6-spring-data.html">Spring Data JPA 통합</a></p>
+            <p><strong>03 심화</strong></p>
+            <p>7. <a href="querydsl-7-performance.html">성능 최적화</a></p>
+            <p>8. <a href="querydsl-8-patterns.html">실전 패턴과 면접 대비</a></p>
+          </div>
+
+          <p>검색 기능을 만들면 "이름은 입력했고, 나이는 안 넣었고, 지역은 선택했고..." 같은 상황이 생긴다. 조건이 있으면 적용하고 없으면 무시하는 쿼리, 이것이 <mark>동적 쿼리</mark>다. QueryDSL이 가장 빛나는 영역이기도 하다.</p>
+
+          <h2>BooleanBuilder</h2>
+
+          <p><code>BooleanBuilder</code>는 조건을 하나씩 쌓아가는 가변 객체다.</p>
+
+<div class="mermaid">
+graph TD
+    Start([검색 시작]) --> NameCheck{이름 입력?}
+    NameCheck -- Yes --> AddName[builder.and 이름 조건 추가]
+    NameCheck -- No --> AgeCheck{나이 입력?}
+    AddName --> AgeCheck
+    AgeCheck -- Yes --> AddAge[builder.and 나이 조건 추가]
+    AgeCheck -- No --> RegionCheck{지역 선택?}
+    AddAge --> RegionCheck
+    RegionCheck -- Yes --> AddRegion[builder.and 지역 조건 추가]
+    RegionCheck -- No --> Execute[쿼리 실행 <br/> builder 전달]
+    AddRegion --> Execute
+</div>
+
+<pre><code class="language-java">public List&lt;User&gt; search(String name, Integer minAge, String region) {
+    BooleanBuilder builder = new BooleanBuilder();
+
+    if (name != null) {
+        builder.and(user.name.contains(name));
+    }
+    if (minAge != null) {
+        builder.and(user.age.goe(minAge));
+    }
+    if (region != null) {
+        builder.and(user.region.eq(region));
+    }
+
+    return queryFactory
+            .selectFrom(user)
+            .where(builder)
+            .fetch();
+}</code></pre>
+          <p><code>BooleanBuilder</code>는 빈 상태에서 시작해서, 조건이 존재할 때만 <code>and()</code>로 추가한다. 최종적으로 <code>where</code>에 전달하면, 추가된 조건들이 AND로 연결된 하나의 조건이 된다. 조건이 하나도 없으면 <code>where</code>가 생략된다.</p>
+
+          <h3>OR 조건 조합</h3>
+
+          <p>AND만 쓰는 게 아니다. OR 조건을 섞어야 할 때도 있다.</p>
+
+<pre><code class="language-java">BooleanBuilder builder = new BooleanBuilder();
+
+// 이름이 "kim"이거나 "lee"인 사용자
+builder.or(user.name.eq("kim"));
+builder.or(user.name.eq("lee"));
+
+// AND와 OR를 함께
+BooleanBuilder andCondition = new BooleanBuilder();
+andCondition.and(user.age.goe(20));
+andCondition.and(builder);  // OR 조건을 AND로 묶기</code></pre>
+          <p>OR 조건이 복잡해지면 <code>BooleanBuilder</code>를 중첩해서 쓸 수 있다. 다만 이 지점부터 가독성이 급격히 떨어진다.</p>
+
+          <h2>where 다중 파라미터 패턴</h2>
+
+          <p>QueryDSL의 <code>where</code>는 가변인자를 받는다. <mark><code>null</code>이 전달되면 해당 조건을 무시</mark>한다. 이 특성을 활용하면 <code>BooleanBuilder</code> 없이도 동적 쿼리를 작성할 수 있다.</p>
+
+<div class="mermaid">
+graph LR
+    subgraph "queryFactory.where()"
+        W[where] --> P1["nameContains(name)"]
+        W --> P2["ageGoe(minAge)"]
+        W --> P3["regionEq(region)"]
+    end
+    
+    P1 -- "BooleanExpression" --> R1[쿼리에 포함]
+    P1 -- "null" --> R2[무시됨]
+    P2 -- "BooleanExpression" --> R1
+    P2 -- "null" --> R2
+    P3 -- "BooleanExpression" --> R1
+    P3 -- "null" --> R2
+    
+    style R2 fill:#f96,stroke:#333
+</div>
+
+<pre><code class="language-java">public List&lt;User&gt; search(String name, Integer minAge, String region) {
+    return queryFactory
+            .selectFrom(user)
+            .where(
+                    nameContains(name),
+                    ageGoe(minAge),
+                    regionEq(region)
+            )
+            .fetch();
+}
+
+private BooleanExpression nameContains(String name) {
+    return name != null ? user.name.contains(name) : null;
+}
+
+private BooleanExpression ageGoe(Integer minAge) {
+    return minAge != null ? user.age.goe(minAge) : null;
+}
+
+private BooleanExpression regionEq(String region) {
+    return region != null ? user.region.eq(region) : null;
+}</code></pre>
+          <p>각 조건을 별도 메서드로 분리한다. 값이 <code>null</code>이면 <code>null</code>을 반환하고, <code>where</code>가 알아서 무시한다. 이 방식의 장점은 뚜렷하다.</p>
+
+          <ul>
+            <li><strong>가독성</strong> : 쿼리 본문에 if문이 없다. 어떤 조건들이 적용되는지 한눈에 보인다.</li>
+            <li><strong>재사용</strong> : <code>nameContains()</code>는 다른 쿼리에서도 그대로 쓸 수 있다.</li>
+            <li><strong>조합</strong> : <code>BooleanExpression</code>끼리 <code>and()</code>, <code>or()</code>로 조합할 수 있다.</li>
+          </ul>
+
+<pre><code class="language-java">// 조건 조합 예시
+private BooleanExpression nameOrRegion(String name, String region) {
+    BooleanExpression nameExpr = nameContains(name);
+    BooleanExpression regionExpr = regionEq(region);
+
+    if (nameExpr == null) return regionExpr;
+    if (regionExpr == null) return nameExpr;
+    return nameExpr.or(regionExpr);
+}</code></pre>
+          <h2>BooleanBuilder vs where 다중 파라미터</h2>
+
+          <p>두 방식의 차이를 비교하면 이렇다.</p>
+
+<div class="mermaid">
+mindmap
+  root((동적 쿼리 방식))
+    BooleanBuilder
+      가변 객체 중심
+      명령형 프로그래밍 스타일
+      메서드 내부에 if문 집중
+      복잡한 OR 중첩에 유리
+    where 다중 파라미터
+      BooleanExpression 중심
+      선언적 프로그래밍 스타일
+      높은 재사용성 및 가독성
+      실무 권장 패턴
+</div>
+          <h4>BooleanBuilder</h4>
+
+          <ul>
+            <li>가변 객체. 조건을 순서대로 쌓는다.</li>
+            <li>if문이 메서드 본문에 들어간다.</li>
+            <li>복잡한 OR 조합에 유리하다.</li>
+            <li>조건 재사용이 어렵다.</li>
+          </ul>
+
+          <h4>where 다중 파라미터</h4>
+
+          <ul>
+            <li>조건별 메서드 분리. 불변 <code>BooleanExpression</code>을 반환한다.</li>
+            <li>쿼리 본문이 깔끔하다.</li>
+            <li>조건을 다른 쿼리에서 재사용할 수 있다.</li>
+            <li><mark>실무에서 권장되는 방식</mark>이다.</li>
+          </ul>
+
+          <p>일반적으로 where 다중 파라미터 방식을 기본으로 쓰고, OR 조건이 복잡하게 중첩되는 경우에만 <code>BooleanBuilder</code>를 보조적으로 활용하는 것이 좋다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">실무 패턴</div>
+            <p>조건 메서드의 네이밍은 <code>필드명 + 연산자</code> 패턴이 읽기 좋다. <code>nameContains</code>, <code>ageGoe</code>, <code>regionEq</code>, <code>createdAtAfter</code> 같은 식이다. 이렇게 하면 메서드 이름만으로 어떤 조건인지 바로 알 수 있다.</p>
+          </div>
+
+          <h2>검색 조건 객체 활용</h2>
+
+          <p>파라미터가 많아지면 검색 조건을 별도 객체로 묶는 것이 깔끔하다.</p>
+
+<pre><code class="language-java">public record UserSearchCondition(
+        String name,
+        Integer minAge,
+        Integer maxAge,
+        String region
+) {}</code></pre>
+          <p>이 조건 객체를 받아서 쿼리를 작성한다.</p>
+
+<pre><code class="language-java">public List&lt;User&gt; search(UserSearchCondition condition) {
+    return queryFactory
+            .selectFrom(user)
+            .where(
+                    nameContains(condition.name()),
+                    ageGoe(condition.minAge()),
+                    ageLoe(condition.maxAge()),
+                    regionEq(condition.region())
+            )
+            .fetch();
+}</code></pre>
+          <p>메서드 시그니처가 깔끔해지고, 검색 조건이 늘어나도 메서드 파라미터를 바꿀 필요가 없다. 검색 조건 클래스 설계에 대한 자세한 내용은 <a href="querydsl-8-patterns.html">실전 패턴과 면접 대비</a> 편에서 다룬다.</p>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">BooleanExpression에서 null 반환 시 NPE</div>
+            <p><code>BooleanExpression</code>끼리 <code>and()</code>나 <code>or()</code>로 직접 조합할 때, 한쪽이 <code>null</code>이면 NPE가 발생한다. <code>where</code> 파라미터로 전달할 때는 null이 무시되지만, <mark>직접 조합할 때는 null 체크가 필수</mark>다.</p>
+            <p>```mermaid</p>
+            <p>flowchart TD</p>
+            <p>Start([조건 A와 B 결합]) --> CheckA{A가 null?}</p>
+            <p>CheckA -- Yes --> ReturnB[B 반환]</p>
+            <p>CheckA -- No --> CheckB{B가 null?}</p>
+            <p>CheckB -- Yes --> ReturnA[A 반환]</p>
+            <p>CheckB -- No --> Combine[A.and B 결합]</p>
+            <p>Combine --> End([결과 반환])</p>
+            <p>ReturnA --> End</p>
+            <p>ReturnB --> End</p>
+            <p>```</p>
+            <p>```java</p>
+            <p>// 위험: nameExpr이 null이면 NPE</p>
+            <p>nameExpr.and(regionExpr);</p>
+            <p>// 안전: null 체크 후 조합</p>
+            <p>if (nameExpr != null && regionExpr != null) {</p>
+            <p>return nameExpr.and(regionExpr);</p>
+            <p>}</p>
+            <p>```</p>
+            <p>[!DANGER] BooleanBuilder를 초기값 없이 or()로 시작</p>
+            <p>빈 <code>BooleanBuilder</code>에 바로 <code>or()</code>를 호출하면 의도치 않게 전체 조회가 될 수 있다. 조건이 하나도 없는 <code>BooleanBuilder</code>는 <code>where</code>에서 무시되기 때문이다. 의도한 것이 아니라면 최소한 하나의 기본 조건을 설정하거나, 조건이 비어있는지 확인하는 로직을 추가해야 한다.</p>
+            <p>[!DANGER] 모든 조건이 null일 때 전체 조회</p>
+            <p>where 다중 파라미터 방식에서 모든 조건 메서드가 null을 반환하면 <code>where</code>가 통째로 빠진다. 즉 <mark>테이블 전체를 조회</mark>한다. 의도한 것이라면 괜찮지만, 대용량 테이블에서 실수로 조건 없이 조회하면 장애가 발생할 수 있다. <code>limit</code>을 항상 걸어두거나, 최소 하나의 필수 조건을 검증하는 방어 로직이 필요하다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#QueryDSL</span>
+          <span>#JPA</span>
+          <span>#Spring</span>
+          <span>#동적쿼리</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="querydsl-3-join-subquery.html">&larr; 이전 글</a>
+          <a href="querydsl-5-projection-dto.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

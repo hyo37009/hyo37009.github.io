@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Kotlin] 2. 고급 기능 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Kotlin] 2. 고급 기능</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Java 개발자를 위한 Kotlin (2/4)</div>
+            <p>이전 편: <a href="kotlin-java-1-syntax.html">[Kotlin] 1. Java 개발자를 위한 핵심 문법 전환</a></p>
+            <p>다음 편: <a href="kotlin-java-3-springboot.html">[Kotlin] 3. Spring Boot에서의 Kotlin (코프링)</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">Java 개발자를 위한 Kotlin 시리즈</div>
+            <p>이전 문서: <a href="kotlin-java-1-syntax.html">핵심 문법 전환</a></p>
+            <p>이 문서에서는 Java에 없는 Kotlin만의 기능들을 다룬다.</p>
+          </div>
+
+          <h2>Sealed Class</h2>
+
+          <p><code>when</code>에서 모든 경우를 처리했는지 <strong>컴파일 타임에 검증</strong>해준다. 예외 처리나 상태 관리에서 유용하다.</p>
+
+<pre><code class="language-kotlin">sealed class ApiResult&lt;out T&gt; {
+    data class Success&lt;T&gt;(val data: T) : ApiResult&lt;T&gt;()
+    data class Error(val message: String, val code: Int) : ApiResult&lt;Nothing&gt;()
+    data object Loading : ApiResult&lt;Nothing&gt;()
+}
+
+// when에서 else가 필요 없다 — 모든 케이스를 다뤘으니까
+fun handleResult(result: ApiResult&lt;Post&gt;) = when (result) {
+    is ApiResult.Success -&gt; result.data
+    is ApiResult.Error -&gt; throw BusinessException(result.message)
+    is ApiResult.Loading -&gt; null
+}</code></pre>
+          <p>Java의 enum은 값만 나열할 수 있지만, sealed class는 <strong>각 케이스가 서로 다른 데이터를 가질 수 있다.</strong> API 응답이나 에러 처리에서 매우 깔끔하다.</p>
+
+          <h2>Inline 함수와 Reified 타입</h2>
+
+          <p>Java에서는 제네릭의 타입 정보가 런타임에 지워진다(type erasure). Kotlin의 <code>inline</code> + <code>reified</code>를 쓰면 <mark>런타임에도 타입 정보를 유지</mark>할 수 있다.</p>
+
+<pre><code class="language-kotlin">// Java에서는 불가능한 코드
+// if (obj instanceof T) { }  // 컴파일 에러
+
+// Kotlin에서는 가능
+inline fun &lt;reified T&gt; Any.isType(): Boolean = this is T
+
+42.isType&lt;Int&gt;()      // true
+42.isType&lt;String&gt;()   // false</code></pre>
+          <p>Spring에서 실용적으로 쓰이는 예:</p>
+
+<pre><code class="language-kotlin">// RestTemplate에서 타입 안전하게 호출
+inline fun &lt;reified T&gt; RestTemplate.getForEntity(url: String): ResponseEntity&lt;T&gt; =
+    getForEntity(url, T::class.java)</code></pre>
+          <h2>Coroutine (코루틴) — 참고용</h2>
+
+          <p>코루틴은 Kotlin의 비동기 프로그래밍 솔루션이다. Java의 <code>CompletableFuture</code>나 <code>Thread</code>보다 훨씬 가볍고 직관적이다.</p>
+
+<pre><code class="language-kotlin">suspend fun fetchPost(id: Long): Post {
+    val post = postRepository.findById(id)     // 비동기인데 동기처럼 읽힌다
+    val comments = commentRepository.findByPostId(id)
+    return post.copy(comments = comments)
+}</code></pre>
+          <div class="callout callout-tip">
+            <div class="callout-title">블로그 프로젝트에서는 안 쓴다</div>
+            <p>Spring MVC(동기 방식)를 쓰니까 코루틴은 필요 없다. Spring WebFlux(리액티브)를 쓸 때 빛을 발한다. 지금은 "이런 게 있구나" 정도만 알아두면 된다.</p>
+          </div>
+
+          <h2>Delegation (위임)</h2>
+
+          <h3>클래스 위임</h3>
+
+<pre><code class="language-kotlin">// 인터페이스 구현을 다른 객체에 위임
+class PostServiceLogging(
+    private val delegate: PostService
+) : PostService by delegate {
+
+    // 특정 메서드만 오버라이드
+    override fun createPost(request: PostCreateRequest): Long {
+        log.info("글 작성 요청: ${request.title}")
+        return delegate.createPost(request)
+    }
+}</code></pre>
+          <p>데코레이터 패턴을 한 줄로 구현할 수 있다.</p>
+
+          <h3>프로퍼티 위임</h3>
+
+<pre><code class="language-kotlin">// lazy — 처음 접근할 때 한 번만 초기화
+val heavyObject: HeavyThing by lazy {
+    HeavyThing()    // 이 블록은 최초 접근 시에만 실행
+}
+
+// observable — 값이 바뀔 때마다 콜백
+var name: String by Delegates.observable("초기값") { _, old, new -&gt;
+    println("$old → $new")
+}</code></pre>
+          <p><code>by lazy</code>는 Spring에서도 자주 쓴다. 비용이 큰 초기화를 지연시킬 때 유용하다.</p>
+
+          <h2>연산자 오버로딩</h2>
+
+<pre><code class="language-kotlin">data class Money(val amount: Int, val currency: String) {
+    operator fun plus(other: Money): Money {
+        require(currency == other.currency) { "통화가 다릅니다" }
+        return Money(amount + other.amount, currency)
+    }
+}
+
+val total = Money(1000, "KRW") + Money(2000, "KRW")
+// Money(amount=3000, currency=KRW)</code></pre>
+          <p>남용하면 코드가 읽기 어려워지니까 직관적인 경우에만 쓴다.</p>
+
+          <h2>Destructuring (구조 분해)</h2>
+
+<pre><code class="language-kotlin">// data class는 자동으로 구조 분해 가능
+data class Post(val id: Long, val title: String)
+
+val (id, title) = Post(1, "제목")
+
+// Map 순회에서 유용
+for ((key, value) in map) {
+    println("$key: $value")
+}
+
+// 람다에서도
+posts.forEachIndexed { index, post -&gt;
+    println("$index: ${post.title}")
+}</code></pre>
+          <h2>Type Alias</h2>
+
+          <p>긴 타입 이름에 별칭을 붙일 수 있다.</p>
+
+<pre><code class="language-kotlin">typealias PostId = Long
+typealias TagNames = List&lt;String&gt;
+typealias Predicate&lt;T&gt; = (T) -&gt; Boolean
+
+fun filterPosts(predicate: Predicate&lt;Post&gt;): List&lt;Post&gt; {
+    return posts.filter(predicate)
+}</code></pre>
+          <p>제네릭이 복잡해질 때 가독성을 위해 쓴다.</p>
+
+          <h2>DSL (Domain Specific Language)</h2>
+
+          <p>Kotlin의 람다 + 확장 함수를 조합하면 DSL을 만들 수 있다. Spring에서 이걸 적극 활용한다.</p>
+
+<pre><code class="language-kotlin">// Spring Security DSL 예시
+@Bean
+fun securityFilterChain(http: HttpSecurity) = http {
+    csrf { disable() }
+    authorizeHttpRequests {
+        authorize("/api/posts/**", permitAll)
+        authorize(anyRequest, authenticated)
+    }
+    sessionManagement {
+        sessionCreationPolicy = SessionCreationPolicy.STATELESS
+    }
+}</code></pre>
+          <p>Java로 쓰면 체이닝에 <code>.and()</code> 붙여가며 복잡한데, Kotlin DSL로 쓰면 구조가 한눈에 보인다. 이건 <a href="kotlin-java-3-springboot.html">다음 문서</a>에서 자세히 다룬다.</p>
+
+          <h2>자주 하는 실수</h2>
+
+          <h3>1. <code>==</code>과 <code>===</code></h3>
+
+<pre><code class="language-kotlin">// == : 값 비교 (Java의 equals)
+// === : 참조 비교 (Java의 ==)
+
+val a = "hello"
+val b = "hello"
+a == b    // true (값이 같다)
+a === b   // true (같은 String Pool 참조 — 이건 JVM 최적화)</code></pre>
+          <p>Java에서 <code>==</code>으로 문자열 비교하는 실수를 Kotlin에서는 할 수 없다. Kotlin의 <code>==</code>이 이미 <code>equals()</code>를 호출하니까.</p>
+
+          <h3>2. Unit vs Nothing</h3>
+
+<pre><code class="language-kotlin">// Unit — Java의 void와 같다
+fun printHello(): Unit {
+    println("hello")
+}
+
+// Nothing — 함수가 절대 정상 종료하지 않는다
+fun fail(message: String): Nothing {
+    throw BusinessException(message)
+}</code></pre>
+          <h3>3. lateinit vs lazy</h3>
+
+<pre><code class="language-kotlin">// lateinit — 나중에 초기화할 var
+// null이 아닌 타입에만 사용 가능, primitive 불가
+lateinit var service: PostService
+
+// lazy — 처음 접근 시 초기화되는 val
+val service: PostService by lazy { PostService() }</code></pre>
+          <p>Spring에서 <code>@Autowired</code>로 주입받을 때 <code>lateinit</code>을 쓸 수도 있지만, <mark>생성자 주입이 더 좋다.</mark> 이것도 다음 문서에서 다룬다.</p>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Kotlin</span>
+          <span>#고급기능</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="kotlin-java-1-syntax.html">&larr; 이전 글</a>
+          <a href="kotlin-java-3-springboot.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

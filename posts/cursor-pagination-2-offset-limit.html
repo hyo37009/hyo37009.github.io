@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[스프링] 2. Offset의 한계와 Cursor의 등장 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[스프링] 2. Offset의 한계와 Cursor의 등장</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">커서 기반 페이지네이션 (2/6)</div>
+            <p>이전 편: <a href="cursor-pagination-1-intro.html">[스프링] 1. 커서는 북마크다</a></p>
+            <p>다음 편: <a href="cursor-pagination-3-design.html">[스프링] 3. 커서 설계 전략</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">시리즈</div>
+            <p>1. <a href="cursor-pagination-2-offset-limit.html">Offset의 한계와 Cursor의 등장</a> ← 현재 편</p>
+            <p>2. <a href="cursor-pagination-3-design.html">커서 설계 전략</a></p>
+            <p>3. <a href="cursor-pagination-4-querydsl.html">QueryDSL 커서 조회 구현</a></p>
+            <p>4. <a href="cursor-pagination-5-sort-filter.html">동적 정렬과 필터링</a></p>
+            <p>5. <a href="cursor-pagination-6-api-interview.html">API 통합과 면접 대비</a></p>
+          </div>
+
+          <p>데이터가 많아지면 한 번에 전부 불러올 수 없다. 페이지네이션은 대량 데이터를 나눠서 조회하는 기본 전략인데, 어떤 방식을 고르느냐에 따라 성능과 사용자 경험이 크게 달라진다.</p>
+
+          <h2>Offset 페이지네이션</h2>
+
+          <p>가장 익숙한 방식이다. SQL의 <code>LIMIT</code>과 <code>OFFSET</code>을 조합해서 "몇 번째부터 몇 개"를 지정한다.</p>
+
+<pre><code class="language-sql">SELECT * FROM feed ORDER BY created_at DESC LIMIT 10 OFFSET 20;</code></pre>
+          <p>3페이지를 요청하면 <code>OFFSET 20</code>이 된다. page와 size 두 개의 파라미터만 있으면 되니까 단순하고 직관적이다. Spring Data JPA의 <code>Pageable</code>이 바로 이 방식이다.</p>
+
+          <h3>Offset의 문제점</h3>
+
+          <h4>성능 저하</h4>
+
+          <p>Offset은 "건너뛰기"가 아니라 "읽고 버리기"다.</p>
+
+          <p><code>OFFSET 10000</code>이면 데이터베이스는 10,000개의 행을 <mark>읽은 다음 버린다</mark>. 그 뒤의 10개만 반환하더라도 앞의 10,000개를 스캔하는 비용은 그대로 발생한다. 페이지가 뒤로 갈수록 느려지는 건 이 때문이다. 실제로 데이터가 10만 건이 넘는 테이블에서 <code>OFFSET 500000</code>을 걸면 응답 시간이 수 초까지 늘어난다. 인덱스가 있어도 마찬가지다. OFFSET 자체가 행을 순차적으로 세는 연산이기 때문이다.</p>
+
+<div class="mermaid">
+graph LR
+    subgraph Offset_Performance_Issue
+    Direction[Scan Direction]
+    R1[Row 1] --- R2[Row 2] --- R3[...] --- R1000[Row 1000]
+    R1000 --- Target[Target: Row 1001~1010]
+
+    style R1 fill:#ffcccc,stroke:#ff0000
+    style R2 fill:#ffcccc,stroke:#ff0000
+    style R3 fill:#ffcccc,stroke:#ff0000
+    style R1000 fill:#ffcccc,stroke:#ff0000
+    style Target fill:#ccffcc,stroke:#00aa00
+
+    Note1[읽고 버려지는 데이터<br>I/O 비용 발생] -.-> R1
+    Note2[실제 반환 데이터] -.-> Target
+    end
+</div>
+          <h4>데이터 드리프트</h4>
+
+          <p>Offset에는 더 심각한 문제가 있다. 조회 사이에 데이터가 변하면 결과가 어긋난다.</p>
+
+          <p>1페이지를 조회한 뒤 새 글이 3개 추가되었다고 하자. 2페이지를 요청하면 <code>OFFSET 10</code>인데, 새 글 3개가 앞에 끼어들면서 1페이지에서 이미 본 데이터 3개가 2페이지에 다시 나타난다. 반대로 삭제가 일어나면 아예 보지 못하고 넘어가는 데이터가 생긴다.</p>
+
+          <p>Offset은 "위치"를 기준으로 잡기 때문에, 데이터가 삽입·삭제될 때마다 각 행의 위치가 밀려버리는 것이다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant User
+    participant Server
+    Note over User, Server: 현재 데이터: [10, 9, 8, 7, 6, 5, 4, 3, 2, 1]
+    User->>Server: 1페이지 요청 (Offset 0, Limit 5)
+    Server-->>User: [10, 9, 8, 7, 6] 반환
+    Note over Server: 새로운 데이터 추가! [11] 삽입
+    Note over User, Server: 현재 데이터: [11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1]
+    User->>Server: 2페이지 요청 (Offset 5, Limit 5)
+    Server-->>User: [6, 5, 4, 3, 2] 반환
+    Note right of User: '6'번 데이터 중복 노출 발생!
+</div>
+          <div class="callout callout-warning">
+            <div class="callout-title">실시간 데이터에서 Offset은 위험하다</div>
+            <p>SNS 피드, 채팅 목록처럼 데이터가 자주 추가·삭제되는 곳에서 Offset을 쓰면 중복 조회나 누락이 일상적으로 발생한다. 사용자 경험을 직접적으로 해친다.</p>
+          </div>
+
+          <h2>Cursor 페이지네이션</h2>
+
+          <p>Cursor는 "마지막으로 본 지점"을 기억하는 방식이다. Offset처럼 번호로 건너뛰는 게 아니라, <mark>마지막 조회 결과의 특정 값을 기준점으로 삼아 그 다음 데이터를 가져온다.</mark></p>
+
+<pre><code class="language-sql">SELECT * FROM feed
+WHERE created_at &lt; '2026-03-17T10:30:00Z'
+ORDER BY created_at DESC
+LIMIT 10;</code></pre>
+          <p>여기서 <code>created_at</code> 값이 커서 역할을 한다. "이 시각 이전의 데이터 10개를 달라"는 뜻이다. 클라이언트는 응답에서 받은 마지막 항목의 <code>created_at</code>을 다음 요청의 커서로 보내면 된다.</p>
+
+          <h3>Offset 문제의 해결</h3>
+
+          <h4>일정한 성능</h4>
+
+          <p>WHERE 절로 범위를 제한하기 때문에 앞쪽 데이터를 스캔할 필요가 없다. <code>created_at</code>에 인덱스가 걸려 있으면 데이터가 아무리 많아도 <mark>일정한 속도</mark>로 조회할 수 있다. 10만 번째든 100만 번째든 쿼리 비용이 동일하다.</p>
+
+<div class="mermaid">
+graph TD
+    subgraph Cursor_Mechanism
+    Cursor[커서 값<br>마지막으로 본 ID 또는 시각]
+    Index[(데이터베이스 인덱스)]
+    Result[다음 페이지 데이터]
+
+    Cursor -->|Direct Seek| Index
+    Index -->|Fetch Limit N| Result
+    
+    style Cursor fill:#e1f5fe,stroke:#01579b
+    style Index fill:#fff9c4,stroke:#fbc02d
+    style Result fill:#c8e6c9,stroke:#2e7d32
+    end
+</div>
+          <p>데이터베이스 입장에서 보면, Offset은 "처음부터 N개를 세고 건너뛴 다음 M개를 반환"이고, Cursor는 "인덱스에서 특정 값을 찾아 M개를 반환"이다. 인덱스 탐색은 데이터 양에 관계없이 O(log N)이다.</p>
+
+          <h4>안정적인 데이터 정합성</h4>
+
+          <p>커서는 "이 값보다 작은(또는 큰) 것"이라는 절대적 기준점이다. 새 데이터가 추가되든 기존 데이터가 삭제되든 커서 값 자체는 변하지 않는다. 따라서 데이터가 중복되거나 누락되지 않는다.</p>
+
+          <h2>Offset vs Cursor 비교</h2>
+
+          <table>
+          <thead>
+          <tr><th>기준</th><th>Offset</th><th>Cursor</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>구현 난이도</td><td>낮다</td><td>상대적으로 높다</td></tr>
+          <tr><td>페이지 이동</td><td>임의 페이지 접근 가능</td><td>순차 탐색만 가능</td></tr>
+          <tr><td>대량 데이터 성능</td><td>뒤로 갈수록 느려진다</td><td>일정하다</td></tr>
+          <tr><td>데이터 정합성</td><td>삽입/삭제 시 중복·누락</td><td>안정적이다</td></tr>
+          <tr><td>전체 건수</td><td>자연스럽게 제공</td><td>별도 COUNT 쿼리 필요</td></tr>
+          <tr><td>적합한 UI</td><td>게시판 페이지 번호</td><td>무한 스크롤, 더보기 버튼</td></tr>
+          </tbody>
+          </table>
+
+          <h2>선택 기준</h2>
+
+          <p>Cursor가 무조건 좋은 건 아니다.</p>
+
+          <p>관리자 페이지처럼 "37페이지로 바로 이동"이 필요한 곳에서는 Offset이 맞다. 데이터 변동이 적고 전체 건수가 수천 건 이하라면 Offset의 성능 문제도 체감되지 않는다.</p>
+
+          <p>반면 SNS 피드, 알림 목록, 채팅 메시지처럼 데이터가 계속 추가되고 사용자는 아래로 스크롤만 하는 UI라면 Cursor가 정답이다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">판단 기준 정리</div>
+            <p>- 임의 페이지 접근이 필요한가? → Offset</p>
+            <p>- 데이터 변동이 잦고 순차 탐색인가? → Cursor</p>
+            <p>- 데이터가 10만 건 이상 될 수 있는가? → Cursor</p>
+            <p>- 둘 다 필요한가? → 사용자 화면은 Cursor, 관리자 화면은 Offset으로 분리</p>
+          </div>
+
+<div class="mermaid">
+graph TD
+    Start[페이지네이션 전략 선택] --> Q1{특정 페이지로<br>직접 이동(Jump) 필요?}
+    Q1 -- Yes --> Offset[Offset 방식 선택]
+    Q1 -- No --> Q2{데이터가 계속<br>추가되는 UI인가?}
+    Q2 -- Yes --> Cursor[Cursor 방식 선택]
+    Q2 -- No --> Q3{전체 데이터가<br>10만 건 이상인가?}
+    Q3 -- Yes --> Cursor
+    Q3 -- No --> Offset
+</div>
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">Offset으로 무한 스크롤 구현</div>
+            <p>무한 스크롤 UI에 Offset을 쓰면 스크롤할수록 느려지고, 새 글이 올라올 때마다 같은 글이 반복 노출된다. "동작은 하니까"라고 넘어가면 데이터가 쌓였을 때 반드시 문제가 터진다. Cursor 방식으로 전환해야 한다.</p>
+            <p>[!DANGER] 전체 건수 때문에 Cursor를 포기</p>
+            <p>Cursor에서도 전체 건수는 별도 COUNT 쿼리로 구할 수 있다. "전체 N건 중 M건 표시" 같은 UI가 필요하다고 해서 Offset을 선택할 이유는 없다. COUNT만 따로 날리면 된다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#스프링</span>
+          <span>#페이지네이션</span>
+          <span>#커서</span>
+          <span>#Offset</span>
+          <span>#무한스크롤</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="cursor-pagination-1-intro.html">&larr; 이전 글</a>
+          <a href="cursor-pagination-3-design.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

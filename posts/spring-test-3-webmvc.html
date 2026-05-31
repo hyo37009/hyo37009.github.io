@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Spring 테스트] 3. @WebMvcTest로 API 검증하기 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Spring 테스트] 3. @WebMvcTest로 API 검증하기</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Spring 테스트 (3/4)</div>
+            <p>이전 편: <a href="spring-test-2-datajpa.html">[Spring 테스트] 2. @DataJpaTest로 쿼리 검증하기</a></p>
+            <p>다음 편: <a href="spring-test-4-springboot.html">[Spring 테스트] 4. @SpringBootTest로 통합 검증하기</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">Spring 테스트 시리즈</div>
+            <p>- <a href="spring-test-1-overview.html">개요 — 슬라이스 테스트와 통합 테스트</a></p>
+            <p>- <a href="spring-test-2-datajpa.html">1편 — @DataJpaTest로 쿼리 검증하기</a></p>
+            <p>- <a href="spring-test-3-webmvc.html">2편 — @WebMvcTest로 API 검증하기</a> ← 현재</p>
+            <p>- <a href="spring-test-4-springboot.html">3편 — @SpringBootTest로 통합 검증하기</a></p>
+          </div>
+
+          <p>컨트롤러에 <code>@GetMapping</code>을 붙이고 파라미터를 record로 받았다. 실제로 쿼리 파라미터가 제대로 바인딩되는지, validation이 동작하는지는 직접 HTTP 요청을 날려봐야 안다. <code>@WebMvcTest</code>는 <mark>컨트롤러 레이어만 띄워서</mark> 이런 것들을 검증한다.</p>
+
+          <h2><code>@WebMvcTest</code>가 해주는 일</h2>
+
+          <ul>
+            <li>지정한 컨트롤러와 관련 빈(ControllerAdvice, Filter 등)만 로드한다.</li>
+            <li><code>MockMvc</code>를 자동으로 설정해준다.</li>
+            <li>Service, Repository는 로드하지 않는다. <code>@MockBean</code>으로 가짜를 넣어야 한다.</li>
+          </ul>
+
+          <p>실제 서버를 띄우지 않고 HTTP 요청/응답을 시뮬레이션하기 때문에 빠르다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant Test as 테스트 코드
+    participant MVC as MockMvc
+    participant Ctrl as MessageController
+    participant Svc as MessageService<br/>(@MockBean)
+
+    rect rgb(232, 248, 232)
+        Note over Test, MVC: 요청 구성
+        Test->>MVC: perform(get("/api/direct-messages")<br/>.param("userId", "..."))
+    end
+
+    rect rgb(240, 248, 255)
+        Note over MVC, Svc: Spring MVC 처리
+        MVC->>Ctrl: 파라미터 바인딩 + Validation
+        Ctrl->>Svc: getByCursor(request)
+        Svc-->>Ctrl: 미리 설정한 응답
+        Ctrl-->>MVC: ResponseEntity
+    end
+
+    rect rgb(232, 248, 232)
+        Note over Test, MVC: 결과 검증
+        MVC-->>Test: andExpect(status, jsonPath)
+    end
+</div>
+          <p>초록 영역에서 테스트가 요청을 만들고, 파란 영역에서 Spring MVC가 실제 바인딩과 validation을 수행한다. Service는 <code>@MockBean</code>이니까 미리 설정해둔 값을 그냥 돌려준다. 마지막 초록 영역에서 상태 코드와 응답 JSON을 검증한다.</p>
+
+          <h2>기본 셋업</h2>
+
+<pre><code class="language-java">@WebMvcTest(MessageController.class)
+class MessageControllerTest {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @MockBean
+    private MessageService messageService;
+}</code></pre>
+          <p><code>@WebMvcTest(MessageController.class)</code>로 대상 컨트롤러를 지정한다. 지정하지 않으면 모든 컨트롤러를 다 올리기 때문에 불필요한 <code>@MockBean</code>이 많아진다.</p>
+
+          <h3><code>@MockBean</code>과 <code>@Mock</code>의 차이</h3>
+
+          <p>둘 다 가짜 객체를 만들지만, <mark>어디에 등록되느냐</mark>가 다르다.</p>
+
+<div class="mermaid">
+flowchart LR
+    subgraph Mockito ["Mockito (@Mock)"]
+        direction TB
+        M["가짜 객체"]
+        IJ["@InjectMocks로<br/>직접 주입"]
+        M --> IJ
+    end
+
+    Mockito ~~~ Spring
+
+    subgraph Spring ["Spring (@MockBean)"]
+        direction TB
+        MB["가짜 빈"]
+        CTX["Spring 컨텍스트에<br/>등록"]
+        MB --> CTX
+    end
+
+    style M fill:#FFF3E0,stroke:#FF9800,stroke-width:2px
+    style MB fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px
+    style IJ fill:#FFF3E0,stroke:#FF9800,stroke-width:2px
+    style CTX fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px
+    style Mockito fill:#fff8f0,stroke:#FF9800
+    style Spring fill:#f0f8f0,stroke:#4CAF50
+</div>
+          <ul>
+            <li><code>@Mock</code> : Mockito가 관리한다. <code>@InjectMocks</code>로 테스트 대상에 수동 주입한다. Spring과 무관.</li>
+            <li><code>@MockBean</code> : <mark>Spring 컨텍스트에 빈으로 등록</mark>된다. 컨트롤러가 <code>@Autowired</code>로 주입받는 서비스를 대체한다.</li>
+          </ul>
+
+          <p><code>@WebMvcTest</code>에서 서비스를 <code>@Mock</code>으로 선언하면 Spring이 모르니까 컨트롤러에 주입되지 않아 NPE가 난다.</p>
+
+          <h2>성공 케이스 테스트</h2>
+
+<pre><code class="language-java">@Test
+void DM_조회에_성공한다() throws Exception {
+    // given
+    MessageGetResponse response = new MessageGetResponse(
+            List.of(), null, null, false, 0,
+            SortBy.createdAt, SortDirection.DESCENDING);
+    given(messageService.getByCursor(any()))
+            .willReturn(response);
+
+    // when &amp; then
+    mockMvc.perform(get("/api/direct-messages")
+                    .param("userId", UUID.randomUUID().toString())
+                    .param("limit", "20"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.hasNext").value(false))
+            .andExpect(jsonPath("$.totalCount").value(0));
+}</code></pre>
+          <p><code>given(...).willReturn(...)</code>으로 서비스의 반환값을 미리 설정한다. 이 테스트의 관심사는 <mark>서비스 로직이 아니라 HTTP 레이어</mark>다. 파라미터가 제대로 바인딩되는지, 응답 JSON 구조가 맞는지를 검증한다.</p>
+
+          <h3><code>jsonPath</code>로 응답 검증</h3>
+
+          <p><code>jsonPath</code>는 JSON 응답에서 특정 필드를 꺼내 검증하는 도구다.</p>
+
+<pre><code class="language-java">.andExpect(jsonPath("$.data").isArray())
+.andExpect(jsonPath("$.data.length()").value(3))
+.andExpect(jsonPath("$.data[0].sender.name").value("sender"))
+.andExpect(jsonPath("$.nextCursor").exists())
+.andExpect(jsonPath("$.hasNext").value(true))</code></pre>
+          <ul>
+            <li><code>$</code> : 응답 JSON의 루트</li>
+            <li><code>$.data[0]</code> : 배열의 첫 번째 요소</li>
+            <li><code>.exists()</code> / <code>.doesNotExist()</code> : 필드 존재 여부</li>
+            <li><code>.isArray()</code> / <code>.isEmpty()</code> : 타입 검증</li>
+          </ul>
+
+          <h2>Validation 테스트</h2>
+
+          <p>validation은 <code>@WebMvcTest</code>에서 진짜 힘을 발휘한다. <code>@NotNull</code>, <code>@Min</code> 같은 어노테이션이 실제로 동작하는지 확인할 수 있다.</p>
+
+<pre><code class="language-java">@Test
+void userId가_없으면_400을_반환한다() throws Exception {
+    mockMvc.perform(get("/api/direct-messages")
+                    .param("limit", "20"))
+            .andExpect(status().isBadRequest());
+}
+
+@Test
+void limit이_0이면_400을_반환한다() throws Exception {
+    mockMvc.perform(get("/api/direct-messages")
+                    .param("userId", UUID.randomUUID().toString())
+                    .param("limit", "0"))
+            .andExpect(status().isBadRequest());
+}</code></pre>
+          <p>이런 테스트가 있으면 DTO의 validation 어노테이션을 실수로 삭제해도 바로 잡힌다.</p>
+
+          <div class="callout callout-tip">
+            <p>에러 응답의 메시지 내용까지 검증하고 싶으면 <code>jsonPath("$.message")</code> 등으로 <code>GlobalExceptionHandler</code>가 반환하는 에러 형식을 확인할 수 있다.</p>
+          </div>
+
+          <h2>Security 충돌 해결</h2>
+
+          <p>프로젝트에 <code>SecurityConfig</code>가 있으면 <code>@WebMvcTest</code>에서 403 Forbidden이 뜰 수 있다. Security 필터가 자동으로 적용되기 때문이다.</p>
+
+          <h3>방법 1 — 필터 끄기</h3>
+
+          <p>테스트 목적이 컨트롤러 로직 검증이라면 Security 필터를 통째로 끌 수 있다.</p>
+
+<pre><code class="language-java">@WebMvcTest(MessageController.class)
+@AutoConfigureMockMvc(addFilters = false)
+class MessageControllerTest {
+    // Security 필터 없이 테스트
+}</code></pre>
+          <h3>방법 2 — CSRF 토큰 추가</h3>
+
+          <p>Security를 유지하면서 테스트하려면 요청에 CSRF 토큰을 넣는다.</p>
+
+<pre><code class="language-java">mockMvc.perform(post("/api/direct-messages")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+        .andExpect(status().isOk());</code></pre>
+          <p>GET 요청은 보통 CSRF가 면제되지만, POST/PUT/DELETE는 <code>csrf()</code>가 필요하다.</p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">인증 객체가 필요한 경우</div>
+            <p><code>@AuthenticationPrincipal</code>로 로그인 사용자를 받는 컨트롤러라면, <code>@WithMockUser</code>나 <code>.with(user("test"))</code>로 가짜 인증 객체를 넣어야 한다.</p>
+          </div>
+
+          <h2><code>@ModelAttribute</code>와 <code>@RequestBody</code> 테스트 차이</h2>
+
+          <p>GET 요청에서 쿼리 파라미터를 객체로 바인딩하면 <code>@ModelAttribute</code>를 쓴다. POST에서 JSON body를 받으면 <code>@RequestBody</code>를 쓴다. 테스트 방법도 다르다.</p>
+
+<div class="mermaid">
+flowchart TD
+    A{요청 방식}
+    A -->|"GET + 쿼리 파라미터"| B["@ModelAttribute"]
+    A -->|"POST + JSON body"| C["@RequestBody"]
+    B --> D[".param('key', 'value')"]
+    C --> E[".content(json)<br/>.contentType(APPLICATION_JSON)"]
+
+    style A fill:#FFF3E0,stroke:#FF9800,stroke-width:2px
+    style B fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px
+    style C fill:#E8F4F8,stroke:#2196F3,stroke-width:2px
+    style D fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px
+    style E fill:#E8F4F8,stroke:#2196F3,stroke-width:2px
+</div>
+          <p><code>@ModelAttribute</code>는 <code>.param()</code>으로, <code>@RequestBody</code>는 <code>.content()</code> + <code>contentType</code>으로 보낸다.</p>
+
+<pre><code class="language-java">// @ModelAttribute — 쿼리 파라미터
+mockMvc.perform(get("/api/direct-messages")
+        .param("userId", uuid.toString())
+        .param("limit", "20"))
+
+// @RequestBody — JSON body
+mockMvc.perform(post("/api/direct-messages")
+        .contentType(MediaType.APPLICATION_JSON)
+        .content(objectMapper.writeValueAsString(request)))</code></pre>
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title"><code>@WebMvcTest</code>에서 서비스를 <code>@Mock</code>으로 선언</div>
+            <p><code>@Mock</code>은 Mockito 내부에서만 동작한다. Spring 컨텍스트에 등록되지 않기 때문에 컨트롤러가 의존하는 서비스가 null이 된다. <code>@WebMvcTest</code>에서는 반드시 <code>@MockBean</code>을 써야 한다.</p>
+            <p>[!DANGER] 컨트롤러 미지정으로 전체 로드</p>
+            <p><code>@WebMvcTest</code>에 컨트롤러를 지정하지 않으면 프로젝트의 모든 컨트롤러가 올라온다. 각 컨트롤러가 의존하는 서비스마다 <code>@MockBean</code>을 선언해야 해서 테스트가 비대해진다. 항상 <code>@WebMvcTest(MessageController.class)</code>처럼 대상을 명시한다.</p>
+            <p>[!DANGER] <code>@ModelAttribute</code> record에서 파라미터 바인딩 실패</p>
+            <p>record 타입은 Spring 6+에서 생성자 바인딩으로 동작한다. 컴파일 시 파라미터 이름이 보존되어야 하는데, <code>-parameters</code> 컴파일러 옵션이 빠져 있으면 바인딩이 안 된다. Gradle에서 <code>compileJava { options.compilerArgs &lt;&lt; '-parameters' }</code>를 확인한다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#테스트</span>
+          <span>#WebMvcTest</span>
+          <span>#슬라이스테스트</span>
+          <span>#MockMvc</span>
+          <span>#MockBean</span>
+          <span>#Validation</span>
+          <span>#Spring</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="spring-test-2-datajpa.html">&larr; 이전 글</a>
+          <a href="spring-test-4-springboot.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[코딩테스트] 1. HashSet 기본 원리와 시간복잡도 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[코딩테스트] 1. HashSet 기본 원리와 시간복잡도</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">HashSet 가이드 (1/3)</div>
+            <p>다음 편: <a href="algo-hashset-2-patterns.html">[코딩테스트] 2. HashSet 활용 패턴</a></p>
+          </div>
+
+
+
+          <p><code>HashSet</code>은 중복을 허용하지 않는 집합 자료구조다. Java에서는 내부적으로 <code>HashMap</code>을 사용한다. 값을 넣으면 그 값의 해시값으로 저장 위치를 찾고, 같은 값이 이미 있으면 새로 추가하지 않는다.</p>
+
+          <h2>HashSet이 하는 일</h2>
+
+          <p><code>HashSet</code>은 다음 질문에 빠르게 답한다.</p>
+
+          <blockquote>
+            <p>이 값이 이미 등장했나?</p>
+          </blockquote>
+
+          <p>그래서 <code>HashSet</code>은 다음 상황에 잘 맞는다.</p>
+
+          <ul>
+            <li>중복 제거</li>
+            <li>방문 여부 체크</li>
+            <li>특정 값이 목록에 포함되는지 빠르게 확인</li>
+            <li>서로 다른 값의 개수 세기</li>
+          </ul>
+
+          <p>반대로 다음 상황에는 부족하다.</p>
+
+          <ul>
+            <li>같은 값이 몇 번 나왔는지 세기</li>
+            <li>값마다 점수, 인덱스, 상태를 저장하기</li>
+            <li>정렬된 순서로 꺼내기</li>
+          </ul>
+
+          <h2>왜 평균 O(1)인가</h2>
+
+          <p>배열에서 값을 찾으려면 앞에서부터 비교해야 하므로 <code>O(N)</code>이다.</p>
+
+          <p><code>HashSet</code>은 값을 바로 인덱스로 바꾸는 과정을 거친다.</p>
+
+<pre><code class="language-text">값 → hashCode() → 배열 위치 → 같은 값인지 equals()로 확인</code></pre>
+          <p>예를 들어 <code>"leo"</code>라는 문자열이 들어오면, Java는 <code>"leo"</code>의 해시값을 계산하고 그 해시값을 기반으로 내부 배열의 어느 칸을 볼지 결정한다. 그래서 모든 값을 순회하지 않고도 후보 위치로 바로 이동할 수 있다.</p>
+
+          <p>이 때문에 <code>contains</code>, <code>add</code>, <code>remove</code>가 평균적으로 <code>O(1)</code>이다.</p>
+
+          <div class="callout callout-info">
+            <div class="callout-title">평균 O(1)의 의미</div>
+            <p>항상 한 번에 끝난다는 뜻은 아니다. 해시 충돌이 적고 내부 배열이 적절히 유지될 때 평균적으로 상수 시간에 가깝다는 뜻이다.</p>
+          </div>
+
+          <h2>해시 충돌</h2>
+
+          <p>서로 다른 값이 같은 저장 위치로 몰릴 수 있다. 이를 해시 충돌이라고 한다.</p>
+
+          <p>충돌이 생기면 같은 칸 안에서 <code>equals()</code>로 실제 같은 값인지 다시 확인한다. 충돌이 적으면 빠르고, 충돌이 심하면 느려질 수 있다.</p>
+
+          <p>외우는 법은 다음처럼 잡으면 된다.</p>
+
+<pre><code class="language-text">hashCode는 빠른 위치 후보 찾기
+equals는 진짜 같은 값인지 확인</code></pre>
+          <p>즉, <code>HashSet</code>은 해시값만 믿고 같은 값이라고 판단하지 않는다. 해시 위치를 찾은 뒤 실제 동등성 비교를 한다.</p>
+
+          <h2>자주 쓰는 메서드와 시간복잡도</h2>
+
+          <table>
+          <thead>
+          <tr><th>메서드</th><th>평균 시간복잡도</th><th>설명</th></tr>
+          </thead>
+          <tbody>
+          <tr><td><code>add(value)</code></td><td><code>O(1)</code></td><td>값이 없으면 추가하고, 이미 있으면 추가하지 않는다</td></tr>
+          <tr><td><code>contains(value)</code></td><td><code>O(1)</code></td><td>값이 있는지 확인한다</td></tr>
+          <tr><td><code>remove(value)</code></td><td><code>O(1)</code></td><td>값이 있으면 제거한다</td></tr>
+          <tr><td><code>size()</code></td><td><code>O(1)</code></td><td>저장된 원소 개수를 반환한다</td></tr>
+          <tr><td><code>isEmpty()</code></td><td><code>O(1)</code></td><td>비었는지 확인한다</td></tr>
+          <tr><td><code>clear()</code></td><td><code>O(N)</code></td><td>전체 원소를 제거한다</td></tr>
+          <tr><td>순회</td><td><code>O(N)</code></td><td>저장된 원소를 한 번씩 방문한다</td></tr>
+          <tr><td><code>addAll(collection)</code></td><td>평균 <code>O(M)</code></td><td>M개 원소를 하나씩 추가한다</td></tr>
+          <tr><td><code>removeAll(collection)</code></td><td>구현과 인자에 따라 다름</td><td>상대 컬렉션의 <code>contains</code> 비용에 영향을 받는다</td></tr>
+          </tbody>
+          </table>
+
+          <p><code>removeAll</code>은 특히 조심해야 한다. 상대 컬렉션이 <code>ArrayList</code>면 <code>contains</code>가 <code>O(M)</code>이라 전체가 커질 수 있다. 포함 여부를 빠르게 확인하려면 상대 컬렉션을 <code>HashSet</code>으로 바꿔두는 편이 안전하다.</p>
+
+          <h2>기억하기 쉬운 원리</h2>
+
+          <table>
+          <thead>
+          <tr><th>연산</th><th>왜 빠른가</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>추가</td><td>해시값으로 들어갈 위치를 바로 찾는다</td></tr>
+          <tr><td>탐색</td><td>해시값으로 확인할 위치를 바로 찾는다</td></tr>
+          <tr><td>삭제</td><td>해시값으로 삭제할 위치를 바로 찾는다</td></tr>
+          <tr><td>전체 순회</td><td>결국 모든 원소를 봐야 하므로 <code>O(N)</code>이다</td></tr>
+          </tbody>
+          </table>
+
+          <p><code>HashSet</code>은 "어디 있는지 바로 찍어보는 구조"라고 이해하면 된다. 반대로 "전체를 다 봐야 하는 작업"은 <code>O(1)</code>이 될 수 없다.</p>
+
+          <h2>Java에서 주의할 점</h2>
+
+          <h3>순서가 보장되지 않는다</h3>
+
+          <p><code>HashSet</code>은 넣은 순서대로 나오지 않는다. 순서가 필요하면 다른 구조를 써야 한다.</p>
+
+          <table>
+          <thead>
+          <tr><th>필요한 순서</th><th>자료구조</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>삽입 순서 유지</td><td><code>LinkedHashSet</code></td></tr>
+          <tr><td>정렬 순서 유지</td><td><code>TreeSet</code></td></tr>
+          <tr><td>순서 필요 없음</td><td><code>HashSet</code></td></tr>
+          </tbody>
+          </table>
+
+          <h3>중복 개수를 저장하지 않는다</h3>
+
+          <p><code>HashSet</code>은 같은 값을 한 번만 저장한다.</p>
+
+<pre><code class="language-java">Set&lt;String&gt; set = new HashSet&lt;&gt;();
+set.add("mislav");
+set.add("mislav");
+
+System.out.println(set.size()); // 1</code></pre>
+          <p>동명이인처럼 같은 값이 여러 번 등장할 수 있고 개수가 중요하면 <code>HashMap&lt;String, Integer&gt;</code>를 써야 한다.</p>
+
+          <h2>기본 예시</h2>
+
+<pre><code class="language-java">Set&lt;String&gt; names = new HashSet&lt;&gt;();
+
+names.add("leo");
+names.add("kiki");
+
+if (names.contains("leo")) {
+    System.out.println("이미 등장한 이름");
+}
+
+names.remove("kiki");
+System.out.println(names.size());</code></pre>
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#코딩테스트</span>
+          <span>#HashSet</span>
+          <span>#해시</span>
+          <span>#시간복잡도</span>
+          <span>#자료구조</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+          <a href="algo-hashset-2-patterns.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

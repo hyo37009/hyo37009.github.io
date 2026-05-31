@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[데이터베이스] 3. 스냅샷 설계 원칙 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[데이터베이스] 3. 스냅샷 설계 원칙</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">스냅샷 패턴 (3/3)</div>
+            <p>이전 편: <a href="db-snapshot-2-jsonb.html">[데이터베이스] 2. PostgreSQL JSONB</a></p>
+            <p>이 문서가 시리즈의 마지막 편입니다.</p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">스냅샷 패턴 시리즈</div>
+            <p>- <a href="db-snapshot-1-concept.html">스냅샷 패턴의 개념</a></p>
+            <p>- <a href="db-snapshot-2-jsonb.html">PostgreSQL JSONB</a></p>
+            <p>- <a href="db-snapshot-3-design.html">스냅샷 설계 원칙</a> ← 현재 문서</p>
+          </div>
+
+          <p>스냅샷 패턴의 개념과 JSONB의 기술적 기반을 알았으니, 이제 <mark>설계 판단</mark>을 다룬다. 어떤 필드를 넣을지, 스키마가 바뀌면 어떻게 할지, FK에서 스냅샷으로 전환하려면 어떤 순서로 해야 하는지를 정리한다.</p>
+
+          <h2>스냅샷 필드 선정 — 최소 원칙</h2>
+
+          <p>스냅샷에 넣는 필드는 <mark>소비자가 결정</mark>한다. 원본 테이블에 있는 모든 필드를 복사하는 게 아니라, 스냅샷을 읽는 곳에서 실제로 사용하는 필드만 넣는다.</p>
+
+          <h3>선물 포장 비유</h3>
+
+          <p>선물을 보낼 때, 집에 있는 물건을 전부 상자에 넣지 않는다. 받는 사람이 <mark>필요로 하는 것만</mark> 골라서 넣는다. 필요 없는 물건까지 넣으면 상자가 무거워지고, 받는 사람도 필요한 걸 찾기 어려워진다.</p>
+
+<div class="mermaid">
+flowchart LR
+    subgraph All ["원본 (20개 필드)"]
+        direction TB
+        F1["id, createdAt, updatedAt<br/>latitude, longitude<br/>amount, probability<br/>speed, asWord<br/>..."]
+    end
+
+    All -->|필요한 것만 추출| Snap
+
+    subgraph Snap ["스냅샷 (5개 필드)"]
+        direction TB
+        F2["skyStatus<br/>precipitationType<br/>temperatureCurrent<br/>temperatureMin<br/>temperatureMax"]
+    end
+
+    style All fill:#FFF3E0,stroke:#FF9800
+    style Snap fill:#E8F8E8,stroke:#4CAF50
+    style F1 fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#000
+    style F2 fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+</div>
+          <p>이 선물 상자가 <strong>스냅샷</strong>이다. 받는 사람이 <strong>스냅샷의 소비자</strong> (API 응답을 사용하는 프론트엔드 등)다.</p>
+
+          <h3>필드 선정 절차</h3>
+
+          <p>스냅샷 필드를 결정하는 절차는 세 단계다.</p>
+
+          <h4>1단계 — 소비자 파악</h4>
+
+          <p>이 스냅샷을 읽는 곳이 어디인가? 프론트엔드 컴포넌트, 다른 서비스, 배치 작업 등 실제 소비자를 나열한다.</p>
+
+          <h4>2단계 — 사용 필드 추출</h4>
+
+          <p>각 소비자가 실제로 접근하는 필드만 추출한다. "나중에 쓸 수도 있으니 일단 넣어두자"는 하지 않는다. 나중에 필요하면 그때 추가한다.</p>
+
+          <h4>3단계 — 필터링/정렬 필드 추가</h4>
+
+          <p>소비자가 화면에 보여주지 않더라도, <mark>서버에서 필터링이나 정렬에 사용하는 필드</mark>가 있다면 추가한다. 이 필드가 빠지면 스냅샷 전환 후 해당 기능이 동작하지 않는다.</p>
+
+<div class="mermaid">
+flowchart TD
+    S1["1단계: 소비자 파악"]
+    S2["2단계: 사용 필드 추출"]
+    S3["3단계: 필터/정렬 필드 추가"]
+    Result["최종 스냅샷 스키마"]
+
+    S1 --> S2 --> S3 --> Result
+
+    style S1 fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style S2 fill:#E3F2FD,stroke:#2196F3,stroke-width:2px,color:#000
+    style S3 fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#000
+    style Result fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+</div>
+          <div class="callout callout-tip">
+            <div class="callout-title">"나중에 쓸 수도 있는 필드"를 넣지 않는 이유</div>
+            <p>JSONB의 장점이 바로 여기에 있다. 스키마 마이그레이션 없이 필드를 추가할 수 있다. "지금 안 쓰는 필드"는 지금 안 넣고, 나중에 필요할 때 추가하면 된다. 반대로 일반 컬럼이었다면 <code>ALTER TABLE</code>이 필요하므로 미리 넣어두는 게 합리적일 수 있다.</p>
+          </div>
+
+          <h2>스냅샷 깊이 결정 — 평탄화</h2>
+
+          <p>원본 데이터가 여러 테이블에 걸쳐 있을 때, 그 관계 구조를 스냅샷에 어디까지 반영할지 결정해야 한다.</p>
+
+          <h3>깊은 복사 vs 평탄화</h3>
+
+          <p>원본이 3단 구조라고 해보자.</p>
+
+<pre><code>Clothes → ClothesAttribute → SelectableValue → ClothesAttributeType</code></pre>
+          <p>이 구조를 그대로 스냅샷에 넣으면 JSON이 복잡해진다.</p>
+
+<pre><code class="language-json">{
+  "name": "검정 패딩",
+  "attributes": [
+    {
+      "option": "블랙",
+      "selectableValue": {
+        "id": "...",
+        "option": "블랙",
+        "clothesAttributeType": {
+          "id": "...",
+          "name": "색상"
+        }
+      }
+    }
+  ]
+}</code></pre>
+          <p>소비자가 <code>attributes[].value</code>만 사용한다면, <mark>필요한 값만 평탄하게 뽑는 것</mark>이 맞다.</p>
+
+<pre><code class="language-json">{
+  "name": "검정 패딩",
+  "attributeValues": ["블랙", "L", "폴리에스터"]
+}</code></pre>
+
+<div class="mermaid">
+flowchart TD
+    Q{소비자가 중첩 구조의<br/>내부 필드를 직접<br/>탐색하는가?}
+    Deep["깊은 복사<br/>원본 구조 유지"]
+    Flat["평탄화<br/>필요한 값만 추출"]
+
+    Q -->|여러 레벨을 탐색함| Deep
+    Q -->|최종 값만 사용함| Flat
+
+    style Q fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#000
+    style Deep fill:#E3F2FD,stroke:#2196F3,stroke-width:2px,color:#000
+    style Flat fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+</div>
+          <h4>왜 평탄화가 기본인가</h4>
+
+          <ul>
+            <li>JSON 크기가 작아진다 → 저장 공간 절약, 역직렬화 비용 감소</li>
+            <li>역직렬화 대상이 단순해진다 → <code>List&lt;String&gt;</code> vs 3단 중첩 객체</li>
+            <li>소비자 코드가 간결해진다 → <code>snapshot.attributeValues()</code> vs <code>snapshot.attributes().get(0).getSelectableValue().getOption()</code></li>
+          </ul>
+
+          <h4>언제 깊은 복사가 필요한가</h4>
+
+          <p>소비자가 중간 단계의 정보도 사용할 때. 예를 들어 "색상: 블랙"처럼 속성 이름과 값을 함께 보여줘야 한다면, <code>definitionName</code>도 스냅샷에 넣어야 한다.</p>
+
+          <h2>스키마 진화</h2>
+
+          <p>시간이 지나면 스냅샷에 필드를 추가하거나 변경해야 할 수 있다. 이미 저장된 스냅샷은 옛날 스키마인데, 새 코드는 새 스키마를 기대한다.</p>
+
+          <h3>상위 호환 변경 — 안전한 변경</h3>
+
+          <p>기존 스냅샷을 깨뜨리지 않는 변경이다.</p>
+
+          <h4>필드 추가</h4>
+
+          <p>새 필드를 추가하되, <mark>기본값이나 null 허용</mark>으로 처리한다.</p>
+
+<pre><code class="language-java">public record WeatherSnapshot(
+    String skyStatus,
+    String precipitationType,
+    double temperatureCurrent,
+    double temperatureMin,
+    double temperatureMax,
+    Double humidity           // 새로 추가 — null 허용
+) {}</code></pre>
+          <p>기존 스냅샷에는 <code>humidity</code> 키가 없다. Jackson은 없는 키를 <mark>null로 역직렬화</mark>한다. 새 스냅샷에는 값이 들어가고, 기존 스냅샷은 null이 된다. 소비자 코드에서 null 처리만 하면 된다.</p>
+
+          <h4>왜 JSONB에서 이게 쉬운가</h4>
+
+          <p>일반 컬럼이면 <code>ALTER TABLE ADD COLUMN humidity DOUBLE PRECISION</code>이 필요하다. JSONB는 컬럼 구조를 바꿀 필요 없이 <mark>JSON에 키를 추가</mark>하기만 하면 된다. 기존 행은 그대로 두고, 새 행부터 새 키가 들어간다.</p>
+
+          <h3>하위 비호환 변경 — 마이그레이션 필요</h3>
+
+          <p>기존 스냅샷이 깨지는 변경이다.</p>
+
+          <h4>필드 이름 변경</h4>
+
+          <p><code>skyStatus</code> → <code>sky</code>로 바꾸면, 기존 스냅샷의 <code>skyStatus</code>를 Jackson이 읽지 못한다.</p>
+
+<pre><code class="language-sql">-- 기존 데이터 마이그레이션
+UPDATE feeds SET weather_snapshot =
+    weather_snapshot - 'skyStatus'
+    || jsonb_build_object('sky', weather_snapshot-&gt;&gt;'skyStatus');</code></pre>
+          <h4>필드 타입 변경</h4>
+
+          <p><code>temperatureCurrent</code>를 <code>double</code> → <code>int</code>로 바꾸면, 기존 소수점 값이 잘린다.</p>
+
+          <h4>필드 제거</h4>
+
+          <p>기존 스냅샷에는 있지만 새 코드에서 안 쓰는 필드. Jackson의 <code>@JsonIgnoreProperties(ignoreUnknown = true)</code> 설정이 있으면 역직렬화 시 무시된다. 없으면 예외가 발생한다.</p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">하위 비호환 변경은 마이그레이션 SQL이 필수다</div>
+            <p>코드만 바꾸면 새 스냅샷은 정상이지만, <mark>기존 스냅샷을 읽을 때 오류</mark>가 발생한다. 반드시 기존 데이터를 새 스키마에 맞게 변환하는 SQL을 실행해야 한다.</p>
+          </div>
+
+          <h3>버전 관리 전략</h3>
+
+          <p>스키마 변경이 잦다면, 스냅샷에 버전 필드를 넣는 방법이 있다.</p>
+
+<pre><code class="language-json">{
+  "version": 2,
+  "skyStatus": "CLEAR",
+  "temperatureCurrent": 15.0
+}</code></pre>
+          <h4>왜 이 방법이 있는가</h4>
+
+          <p>버전별로 역직렬화 로직을 분기할 수 있다. v1이면 옛날 스키마로 읽고, v2면 새 스키마로 읽는다.</p>
+
+          <h4>언제 필요한가</h4>
+
+          <p>스냅샷 스키마가 6개월에 한 번 이상 바뀌는 경우. 변경 빈도가 낮다면 <mark>마이그레이션 SQL로 기존 데이터를 일괄 변환</mark>하는 것이 더 단순하다.</p>
+
+<div class="mermaid">
+flowchart TD
+    Q{스키마 변경 빈도는?}
+    Low["6개월에 1번 이하"]
+    High["자주 바뀜"]
+    Migration["마이그레이션 SQL<br/>기존 데이터 일괄 변환"]
+    Version["버전 필드 추가<br/>코드에서 분기 처리"]
+
+    Q -->|낮음| Low --> Migration
+    Q -->|높음| High --> Version
+
+    style Q fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#000
+    style Low fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style High fill:#E3F2FD,stroke:#2196F3,stroke-width:2px,color:#000
+    style Migration fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style Version fill:#E3F2FD,stroke:#2196F3,stroke-width:2px,color:#000
+</div>
+          <h2>FK에서 스냅샷으로 전환하기</h2>
+
+          <p>기존에 FK 참조로 운영 중인 테이블을 스냅샷 구조로 전환하는 절차다. 운영 중인 시스템에서 <mark>데이터 손실 없이</mark> 전환하려면 단계별로 진행해야 한다.</p>
+
+          <h3>4단계 전환 절차</h3>
+
+<div class="mermaid">
+flowchart LR
+    S1["1. 컬럼 추가"]
+    S2["2. 데이터 채우기"]
+    S3["3. 코드 전환"]
+    S4["4. 기존 제거"]
+
+    S1 --> S2 --> S3 --> S4
+
+    style S1 fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style S2 fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#000
+    style S3 fill:#E3F2FD,stroke:#2196F3,stroke-width:2px,color:#000
+    style S4 fill:#FFEBEE,stroke:#F44336,stroke-width:2px,color:#000
+</div>
+          <h4>1단계 — 새 JSONB 컬럼 추가</h4>
+
+          <p>기존 구조를 건드리지 않고, 스냅샷 컬럼만 추가한다. <code>nullable</code>로 시작해서 기존 행이 깨지지 않게 한다.</p>
+
+<pre><code class="language-sql">ALTER TABLE orders ADD COLUMN product_snapshot JSONB;</code></pre>
+          <h4>왜 nullable로 시작하는가</h4>
+
+          <p>기존 행에는 스냅샷 데이터가 없다. <code>NOT NULL</code>로 만들면 기존 행이 제약 위반이 된다. 데이터를 채운 뒤에 <code>NOT NULL</code>로 바꾼다.</p>
+
+          <h4>2단계 — 기존 데이터 마이그레이션</h4>
+
+          <p>FK로 참조하고 있는 원본 데이터를 스냅샷으로 복사한다.</p>
+
+<pre><code class="language-sql">UPDATE orders o SET product_snapshot = jsonb_build_object(
+    'name', p.name,
+    'price', p.price
+)
+FROM products p WHERE o.product_id = p.id;</code></pre>
+          <h4>왜 이 시점에 해야 하는가</h4>
+
+          <p>코드를 먼저 전환하면 기존 데이터에 스냅샷이 없어서 <code>NullPointerException</code>이 발생한다. 반드시 <mark>데이터를 먼저 채우고 코드를 바꿔야</mark> 한다.</p>
+
+          <div class="callout callout-info">
+            <div class="callout-title">원본이 이미 삭제된 경우</div>
+            <p>FK 참조 기간 동안 원본이 삭제된 행은 JOIN이 실패한다. 이런 행은 별도로 처리해야 한다. 삭제된 원본의 정보를 어디서도 복구할 수 없다면, 기본값을 넣거나 해당 행을 표시해두는 수밖에 없다. 이것이 <mark>설계 단계에서 스냅샷을 결정해야 하는 이유</mark>다.</p>
+          </div>
+
+          <h4>3단계 — 애플리케이션 코드 전환</h4>
+
+          <p>엔티티, 서비스, DTO 코드를 스냅샷 기반으로 변경한다. 이 시점부터 새로 생성되는 행은 스냅샷이 포함된다.</p>
+
+          <h4>4단계 — 기존 FK 컬럼과 관계 테이블 제거</h4>
+
+          <p>코드가 안정화되면 기존 FK 컬럼과 불필요한 테이블을 제거한다.</p>
+
+<pre><code class="language-sql">ALTER TABLE orders
+    ALTER COLUMN product_snapshot SET NOT NULL;
+
+ALTER TABLE orders DROP COLUMN product_id;</code></pre>
+          <h4>왜 4단계를 바로 하지 않는가</h4>
+
+          <p>3단계에서 버그가 발견되면, 기존 FK 구조로 <mark>즉시 롤백</mark>할 수 있어야 한다. 4단계를 실행하면 롤백이 불가능하다. 충분한 검증 기간 (최소 1~2주) 후에 실행한다.</p>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">원본과 스냅샷을 동시에 유지하면서 동기화하려는 실수</div>
+            <p>"스냅샷은 넣되, 원본이 바뀌면 스냅샷도 업데이트하자"는 접근. 이러면 스냅샷의 의미가 없어진다. <mark>시점 보존이 목적</mark>인데 최신 상태로 덮어쓰면 FK 참조와 다를 게 없다. 게다가 동기화 누락 시 원본과 스냅샷이 불일치하는 최악의 상황이 된다.</p>
+            <p>[!BUG] 스냅샷 마이그레이션 시 원본 삭제를 고려하지 않는 실수</p>
+            <p>FK 기간 동안 <code>ON DELETE CASCADE</code>나 <code>SET NULL</code>로 원본이 사라진 행이 있을 수 있다. <code>UPDATE ... FROM ... WHERE</code> JOIN이 실패하는 행이 발생한다. 마이그레이션 전에 <mark>고아 행이 몇 개인지 확인</mark>하는 쿼리를 먼저 돌려야 한다.</p>
+            <p>[!BUG] 4단계 전환에서 2단계를 빼먹는 실수</p>
+            <p>"코드를 스냅샷 기반으로 바꿨으니 배포하자" → 기존 행에 스냅샷이 null → 전체 피드 목록이 터진다. 2단계 (데이터 마이그레이션)를 빼먹는 건 <mark>프로덕션 장애를 보장</mark>하는 것이다.</p>
+            <p>[!BUG] 스냅샷 스키마 변경 시 기존 데이터를 잊는 실수</p>
+            <p><code>WeatherSnapshot</code>에 <code>humidity</code> 필드를 추가하고, 코드에서 <code>snapshot.humidity()</code>를 non-null로 쓰면, 기존 스냅샷 (humidity 없음)을 읽을 때 NPE가 발생한다. 새 필드는 반드시 <mark>nullable이거나 기본값이 있어야</mark> 한다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#데이터베이스</span>
+          <span>#스냅샷</span>
+          <span>#설계</span>
+          <span>#마이그레이션</span>
+          <span>#스키마진화</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="db-snapshot-2-jsonb.html">&larr; 이전 글</a>
+          <a href="../pages/nbuntu.html">목록으로 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

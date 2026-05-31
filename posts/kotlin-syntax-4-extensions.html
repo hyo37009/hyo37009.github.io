@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Kotlin] 4. 확장 함수, 스코프 함수, 람다 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Kotlin] 4. 확장 함수, 스코프 함수, 람다</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Kotlin 문법 복습 (4/4)</div>
+            <p>이전 편: <a href="kotlin-syntax-3-null-collections.html">[Kotlin] 3. Null Safety와 컬렉션</a></p>
+            <p>이 문서가 시리즈의 마지막 편입니다.</p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">Kotlin 문법 복습 시리즈 (4/4)</div>
+            <p>이전 편: <a href="kotlin-syntax-3-null-collections.html">3 Null Safety와 컬렉션</a></p>
+          </div>
+
+          <p>Java에는 없는, Kotlin만의 특징적인 기능들이 있다. 그중에서도 <strong>확장 함수</strong>, <strong>스코프 함수</strong>, <strong>람다</strong>는 Kotlin 코드를 읽을 때 가장 자주 마주치면서도, Java 배경에서는 가장 낯선 개념이다.</p>
+
+          <p>이 세 가지를 모르면 Kotlin 코드를 읽는 것 자체가 어렵다. 반대로 이 세 가지에 익숙해지면 "아, Kotlin이 이래서 좋구나"가 체감된다. 이 문서에서는 각각의 개념과 기본 사용법을 복습하고, 깊은 내용은 <a href="kotlin-이디엄.html">사고방식 시리즈</a>로 넘긴다.</p>
+
+          <h2>확장 함수</h2>
+
+          <p>Java에서 <code>String</code>에 새로운 기능을 추가하고 싶으면 유틸 클래스를 만들어야 했다.</p>
+
+<pre><code class="language-java">// Java — StringUtils라는 별도 클래스가 필요
+public class StringUtils {
+    public static boolean isValidEmail(String str) {
+        return str.contains("@") &amp;&amp; str.contains(".");
+    }
+}
+StringUtils.isValidEmail("test@blog.com");</code></pre>
+          <p>Kotlin에서는 <strong>기존 클래스를 수정하지 않고도 함수를 추가</strong>할 수 있다.</p>
+
+<pre><code class="language-kotlin">fun String.isValidEmail(): Boolean {
+    return this.contains("@") &amp;&amp; this.contains(".")
+}
+
+"test@blog.com".isValidEmail()   // true</code></pre>
+          <ul>
+            <li><code>String.</code> — 확장할 대상 타입. 이것을 <strong>수신 타입(receiver type)</strong>이라 한다.</li>
+            <li><code>this</code> — 함수 안에서 수신 객체를 가리킨다. 생략 가능.</li>
+          </ul>
+
+          <p>확장 함수의 핵심은 <strong>호출하는 쪽의 가독성</strong>이다. <code>StringUtils.isValidEmail(str)</code> 보다 <code>str.isValidEmail()</code>이 자연스럽다. 마치 <code>String</code> 클래스에 원래부터 있던 메서드처럼 읽힌다.</p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">확장 함수는 진짜 멤버가 아니다</div>
+            <p>확장 함수는 컴파일되면 <strong>static 메서드</strong>가 된다. 클래스 내부의 <code>private</code> 멤버에는 접근할 수 없다. 같은 이름의 멤버 함수가 있으면 멤버 함수가 우선한다.</p>
+          </div>
+
+          <p>실무에서 자주 쓰이는 패턴은 엔티티 → DTO 변환이다.</p>
+
+<pre><code class="language-kotlin">fun Post.toResponse() = PostResponse(
+    id = id,
+    title = title,
+    content = content,
+    viewCount = viewCount,
+    createdAt = createdAt
+)
+
+// 사용
+val response = post.toResponse()</code></pre>
+          <p>Java에서 <code>PostMapper.toResponse(post)</code> 로 쓰던 걸, 마치 <code>Post</code>의 메서드인 것처럼 자연스럽게 호출할 수 있다.</p>
+
+          <hr>
+
+          <h2>람다</h2>
+
+          <p>Kotlin에서 람다를 이해하는 가장 쉬운 방법은, <strong>"이름 없는 함수를 변수에 담는 것"</strong>이라고 생각하는 것이다.</p>
+
+<pre><code class="language-kotlin">val greet: (String) -&gt; String = { name -&gt; "안녕, $name" }
+greet("관리자")  // "안녕, 관리자"</code></pre>
+          <ul>
+            <li><code>(String) -&gt; String</code> — 함수 타입. String을 받아서 String을 반환하는 함수.</li>
+            <li><code>{ name -&gt; "안녕, $name" }</code> — 람다 표현식. <code>name</code>은 파라미터.</li>
+          </ul>
+
+          <p>파라미터가 하나면 <code>it</code>으로 대체할 수 있다.</p>
+
+<pre><code class="language-kotlin">val greet: (String) -&gt; String = { "안녕, $it" }</code></pre>
+          <p>Java의 람다와 비교하면 문법이 조금 다르다. Java는 <code>(name) -&gt; "안녕, " + name</code>이고, Kotlin은 <code>{ name -&gt; "안녕, $name" }</code> — 중괄호로 감싼다.</p>
+
+          <hr>
+
+          <h3>후행 람다(Trailing Lambda)</h3>
+
+          <p>Kotlin에서 함수의 마지막 파라미터가 람다이면, <strong>괄호 밖으로 뺄 수 있다.</strong></p>
+
+<pre><code class="language-kotlin">// 일반적인 호출
+posts.filter({ it.isPublished })
+
+// 후행 람다 — 괄호 밖으로
+posts.filter() { it.isPublished }
+
+// 다른 파라미터가 없으면 괄호 생략
+posts.filter { it.isPublished }</code></pre>
+          <p>이것이 Kotlin 코드가 깔끔해 보이는 핵심 이유 중 하나다. <code>filter { it.isPublished }</code> 같은 코드는 영어 문장처럼 읽힌다.</p>
+
+          <hr>
+
+          <h3>고차 함수</h3>
+
+          <p>함수를 파라미터로 받거나 반환하는 함수를 <strong>고차 함수(higher-order function)</strong>라 한다. <code>filter</code>, <code>map</code> 같은 컬렉션 함수가 대표적이다.</p>
+
+          <p>직접 만들 수도 있다.</p>
+
+<pre><code class="language-kotlin">fun &lt;T&gt; List&lt;T&gt;.customFilter(predicate: (T) -&gt; Boolean): List&lt;T&gt; {
+    val result = mutableListOf&lt;T&gt;()
+    for (item in this) {
+        if (predicate(item)) result.add(item)
+    }
+    return result
+}</code></pre>
+          <ul>
+            <li><code>predicate: (T) -&gt; Boolean</code> — 함수 타입 파라미터. <code>T</code>를 받아서 <code>Boolean</code>을 반환하는 함수.</li>
+            <li>호출하는 쪽에서 조건 로직을 주입할 수 있다.</li>
+          </ul>
+
+<pre><code class="language-kotlin">val published = posts.customFilter { it.isPublished }</code></pre>
+          <p>Java에서 <code>Predicate&lt;T&gt;</code>, <code>Function&lt;T, R&gt;</code> 인터페이스를 쓰던 것을 Kotlin은 함수 타입으로 간결하게 표현한다. 이 개념은 <a href="함수는-일급-시민이다.html">사고방식 시리즈</a>에서 깊이 다룬다.</p>
+
+          <hr>
+
+          <h2>스코프 함수</h2>
+
+          <p>Kotlin에서 처음 만나면 가장 헷갈리는 기능이다. <code>let</code>, <code>apply</code>, <code>also</code>, <code>run</code>, <code>with</code> — 다섯 개인데, 어떤 걸 언제 써야 하는지 감이 안 온다.</p>
+
+          <p>핵심은 두 가지 기준으로 나뉜다는 것이다.</p>
+
+          <ol>
+            <li><strong>객체를 뭐로 참조하나?</strong> — <code>it</code> vs <code>this</code></li>
+            <li><strong>뭘 반환하나?</strong> — 람다의 결과 vs 객체 자신</li>
+          </ol>
+
+          <table>
+          <thead>
+          <tr><th>함수</th><th>참조</th><th>반환값</th><th>대표 용도</th></tr>
+          </thead>
+          <tbody>
+          <tr><td><code>let</code></td><td><code>it</code></td><td>람다 결과</td><td>null 체크, 변환</td></tr>
+          <tr><td><code>apply</code></td><td><code>this</code></td><td>객체 자신</td><td>객체 초기화</td></tr>
+          <tr><td><code>also</code></td><td><code>it</code></td><td>객체 자신</td><td>부수 효과 (로깅)</td></tr>
+          <tr><td><code>run</code></td><td><code>this</code></td><td>람다 결과</td><td>객체 함수 실행 + 결과</td></tr>
+          <tr><td><code>with</code></td><td><code>this</code></td><td>람다 결과</td><td><code>run</code>과 유사, 비확장</td></tr>
+          </tbody>
+          </table>
+
+          <p>처음에는 표를 외우려 하지 말고, 자주 쓰는 세 개만 익히면 된다.</p>
+
+          <hr>
+
+          <h3>let — null 체크 + 변환</h3>
+
+<pre><code class="language-kotlin">val name = user?.let { user -&gt;
+    "${user.firstName} ${user.lastName}"
+} ?: "익명"</code></pre>
+          <ul>
+            <li><code>user</code>가 null이 아닐 때만 블록이 실행된다.</li>
+            <li>블록의 반환값이 <code>let</code>의 결과가 된다.</li>
+            <li><code>?.let</code>과 <code>?:</code> 조합은 코프링에서 매우 자주 등장하는 패턴이다.</li>
+          </ul>
+
+          <hr>
+
+          <h3>apply — 객체 초기화</h3>
+
+<pre><code class="language-kotlin">val post = Post().apply {
+    title = "새 글"
+    content = "&lt;p&gt;내용&lt;/p&gt;"
+    isPublished = true
+}</code></pre>
+          <ul>
+            <li>블록 안에서 <code>this</code>가 <code>Post</code> 객체를 가리킨다. 그래서 <code>this.title</code> 대신 <code>title</code>만 써도 된다.</li>
+            <li><mark>객체 자신을 반환</mark>한다. 초기화 후 바로 변수에 담을 수 있다.</li>
+            <li>Java의 빌더 패턴과 비슷한 역할을 한다.</li>
+          </ul>
+
+          <hr>
+
+          <h3>also — 부수 효과</h3>
+
+<pre><code class="language-kotlin">val post = postRepository.save(newPost).also {
+    log.info("글 저장 완료: ${it.id}")
+}</code></pre>
+          <ul>
+            <li><code>it</code>으로 객체를 참조한다.</li>
+            <li><mark>객체 자신을 반환</mark>한다. 체이닝 중간에 로깅 같은 부수 효과를 끼워넣을 때 유용하다.</li>
+          </ul>
+
+          <p><code>apply</code>와 <code>also</code>의 차이가 헷갈릴 수 있는데, 단순하다. 객체의 프로퍼티를 설정할 때는 <code>apply</code>(<code>this</code>), 객체를 활용해서 뭔가 다른 일을 할 때는 <code>also</code>(<code>it</code>).</p>
+
+          <hr>
+
+          <h3>run — 실행 + 결과</h3>
+
+<pre><code class="language-kotlin">val length = "Hello, World!".run {
+    println(this)
+    length       // 마지막 줄이 반환값
+}</code></pre>
+          <ul>
+            <li><code>this</code>로 객체를 참조하고, 람다의 결과를 반환한다.</li>
+            <li><code>let</code>과 비슷하지만, 참조가 <code>it</code>이 아닌 <code>this</code>라는 점이 다르다.</li>
+          </ul>
+
+          <p>실무에서는 <code>let</code>만으로 대부분 해결되기 때문에 <code>run</code>은 상대적으로 덜 쓴다.</p>
+
+          <hr>
+
+          <h3>with — run의 비확장 버전</h3>
+
+<pre><code class="language-kotlin">val info = with(post) {
+    "$title (조회수: $viewCount)"
+}</code></pre>
+          <ul>
+            <li><code>run</code>과 기능이 같지만, 확장 함수가 아니라 객체를 <strong>인자로</strong> 받는다.</li>
+            <li>nullable 객체에는 <code>with</code>보다 <code>run</code>이나 <code>let</code>이 낫다.</li>
+          </ul>
+
+          <hr>
+
+          <h2>심화 분석</h2>
+
+          <h4>스코프 함수 선택 흐름</h4>
+
+          <p>어떤 스코프 함수를 써야 할지 고민될 때 이 흐름을 따르면 된다.</p>
+
+<div class="mermaid">
+graph TD
+    A[null 체크가 필요한가?] -->|Yes| B["let (?.let)"]
+    A -->|No| C[객체를 초기화하는가?]
+    C -->|Yes| D[apply]
+    C -->|No| E[부수 효과만 필요한가?]
+    E -->|Yes| F[also]
+    E -->|No| G["run 또는 let"]
+
+    style B fill:#e1f5fe
+    style D fill:#e8f5e9
+    style F fill:#fff3e0
+    style G fill:#fce4ec
+</div>
+          <p>대부분의 상황은 <code>let</code>, <code>apply</code>, <code>also</code> 세 가지로 해결된다. <code>run</code>과 <code>with</code>는 특수한 경우에만 쓴다.</p>
+
+          <h4>확장 함수의 컴파일 결과</h4>
+
+          <p>확장 함수가 내부적으로 어떻게 동작하는지 알면 한계도 이해할 수 있다.</p>
+
+<pre><code class="language-kotlin">// Kotlin 코드
+fun String.addExclamation() = "$this!"
+
+// 컴파일 후 Java 코드 (개념적)
+public static String addExclamation(String $this) {
+    return $this + "!";
+}</code></pre>
+          <p>확장 함수는 결국 <strong>첫 번째 파라미터로 수신 객체를 받는 static 메서드</strong>다. 그래서 클래스의 <code>private</code> 멤버에 접근할 수 없고, 런타임에 다형성이 적용되지 않는다. "신택틱 슈가"이지만, 코드 가독성에 미치는 영향은 크다.</p>
+
+          <hr>
+
+          <h2>자주 하는 실수</h2>
+
+          <h4>스코프 함수 남용</h4>
+
+<pre><code class="language-kotlin">// 나쁜 예 — 스코프 함수를 이유 없이 중첩
+user?.let { u -&gt;
+    u.posts.let { posts -&gt;
+        posts.filter { it.isPublished }.let { published -&gt;
+            published.map { it.title }
+        }
+    }
+}
+
+// 좋은 예 — 체이닝이 더 읽기 좋다
+user?.posts
+    ?.filter { it.isPublished }
+    ?.map { it.title }</code></pre>
+          <p>스코프 함수는 도구일 뿐이다. 체이닝으로 해결되는 걸 굳이 <code>let</code>으로 감싸면 오히려 가독성이 떨어진다.</p>
+
+          <h4>it의 중첩</h4>
+
+<pre><code class="language-kotlin">posts.filter { post -&gt;
+    post.tags.any { tag -&gt;   // 여기서 it을 쓰면 뭘 가리키는지 모호해진다
+        tag.name == "Kotlin"
+    }
+}</code></pre>
+          <p>람다가 중첩되면 <code>it</code>이 어떤 객체를 가리키는지 헷갈린다. 이럴 때는 <strong>명시적 파라미터 이름</strong>을 쓰는 것이 좋다. <code>post</code>, <code>tag</code>처럼 의미 있는 이름을 주면 가독성이 올라간다.</p>
+
+          <h4>확장 함수를 너무 많이 만들기</h4>
+
+          <p>확장 함수가 편하다고 모든 유틸 메서드를 확장 함수로 만들면, 나중에 IDE 자동완성에 불필요한 함수가 넘쳐나고 어떤 패키지에서 왔는지 추적이 어려워진다. 확장 함수는 <strong>해당 타입과 의미적으로 관련이 있는 경우에만</strong> 쓰자.</p>
+
+          <hr>
+
+          <div class="callout callout-question">
+            <div class="callout-title">면접 Q&A</div>
+            <p><strong>Q. Kotlin의 확장 함수는 어떻게 동작하나요?</strong></p>
+            <p>컴파일 시 수신 객체를 첫 번째 파라미터로 받는 static 메서드로 변환됩니다. 클래스를 실제로 수정하지 않고, 호출 측의 가독성을 높이는 문법적 편의 기능입니다. 그래서 private 멤버에는 접근할 수 없고, 같은 시그니처의 멤버 함수가 있으면 멤버 함수가 우선합니다.</p>
+            <p><strong>Q. let과 apply의 차이는?</strong></p>
+            <p><code>let</code>은 <code>it</code>으로 객체를 참조하고 람다의 결과를 반환합니다. null 체크나 변환에 적합합니다. <code>apply</code>는 <code>this</code>로 객체를 참조하고 객체 자신을 반환합니다. 객체 초기화에 적합합니다.</p>
+            <p><strong>Q. Kotlin에서 불변 컬렉션은 정말 불변인가요?</strong></p>
+            <p>인터페이스 레벨에서 수정 메서드를 노출하지 않을 뿐, 내부적으로는 가변 구현체(<code>ArrayList</code> 등)일 수 있습니다. 타입 시스템을 통한 "계약"이지 강제적인 불변은 아닙니다. 하지만 이 계약을 깨뜨리는 캐스팅은 하면 안 됩니다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Kotlin</span>
+          <span>#확장함수</span>
+          <span>#스코프함수</span>
+          <span>#람다</span>
+          <span>#고차함수</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="kotlin-syntax-3-null-collections.html">&larr; 이전 글</a>
+          <a href="../pages/nbuntu.html">목록으로 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

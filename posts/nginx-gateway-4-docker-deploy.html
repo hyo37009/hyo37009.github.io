@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[스프링] 4. Docker로 마이크로서비스 배포하기 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[스프링] 4. Docker로 마이크로서비스 배포하기</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Nginx API Gateway (4/7)</div>
+            <p>이전 편: <a href="nginx-gateway-3-rate-limiting.html">[스프링] 3. Rate Limiting과 트래픽 제어</a></p>
+            <p>다음 편: <a href="nginx-gateway-5-spring-boot.html">[스프링] 5. Spring Boot 마이크로서비스 구성하기</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">Nginx API Gateway 개념 시리즈</div>
+            <p>1. <a href="nginx-gateway-1-microservice.html">마이크로서비스와 API Gateway</a></p>
+            <p>2. <a href="nginx-gateway-2-reverse-proxy.html">Nginx 리버스 프록시의 동작 원리</a></p>
+            <p>3. <a href="nginx-gateway-3-rate-limiting.html">Rate Limiting과 트래픽 제어</a></p>
+            <p>4. <strong>Docker로 마이크로서비스 배포하기</strong> (현재 문서)</p>
+            <p>[!QUESTION] 면접 Q&A</p>
+            <p><strong>Q. API Gateway를 도입하면 단일 장애점이 되지 않나?</strong></p>
+            <p>맞다. 모든 트래픽이 Gateway를 통과하므로, Gateway가 죽으면 전체 서비스에 접근할 수 없다. 이를 해결하려면 Gateway 자체를 이중화하고, 앞단에 로드 밸런서를 두어야 한다. 실무에서는 AWS ALB + Nginx 조합이나, Kubernetes Ingress Controller 같은 방식으로 Gateway의 고가용성을 확보한다.</p>
+            <p><strong>Q. Nginx와 Spring Cloud Gateway 중 어떤 것을 선택해야 하는가?</strong></p>
+            <p>함정이 있는 질문이다. "Nginx가 더 빠르니까 무조건 Nginx"라고 답하면 안 된다. 선택 기준은 라우팅 로직의 복잡도다. URL 패턴 기반의 단순 라우팅이면 Nginx가 적합하고, JWT 파싱 결과에 따라 동적 라우팅이 필요하거나 Spring Security 통합이 중요하면 Spring Cloud Gateway가 낫다. 둘을 함께 쓰는 것도 가능하다. Nginx가 SSL 종단과 정적 파일을 처리하고, 뒤에서 Spring Cloud Gateway가 비즈니스 라우팅을 담당하는 구성이다.</p>
+            <p><strong>Q. Rate Limiting을 Gateway에서 하면 서비스별 Rate Limiting은 필요 없는가?</strong></p>
+            <p>Gateway의 Rate Limiting은 <mark>1차 방어선</mark>이다. Gateway를 우회하는 내부 호출이나, 서비스 간 통신에서는 적용되지 않는다. 따라서 민감한 서비스는 자체적으로도 Rate Limiting을 구현하는 것이 안전하다. 방어는 겹칠수록 좋다.</p>
+            <p><strong>Q. 마이크로서비스 간 통신은 어떻게 하는가?</strong></p>
+            <p>동기 통신은 HTTP/gRPC, 비동기 통신은 메시지 큐를 사용한다. 이 실습에서는 서비스 간 직접 통신이 없지만, 실무에서는 order-service가 user-service를 호출하거나, 이벤트를 Kafka로 발행하는 구조가 일반적이다. Gateway는 외부 → 내부 진입점만 관리하고, 내부 간 통신은 별도 체계로 처리한다.</p>
+            <p><strong>Q. Docker Compose는 운영 환경에서도 쓰는가?</strong></p>
+            <p>Docker Compose는 개발/테스트 환경에 적합하다. 운영 환경에서는 Kubernetes나 AWS ECS 같은 오케스트레이션 도구를 사용한다. 단일 서버에서 소규모로 운영할 때는 Compose도 가능하지만, 롤링 업데이트, 자동 복구, 스케일링 같은 기능이 부족하다.</p>
+          </div>
+
+          <p>마이크로서비스를 로컬에서 하나씩 실행하면 포트 충돌, 환경 차이, 실행 순서 문제가 끝없이 발생한다. Docker와 Docker Compose는 이런 문제를 컨테이너라는 격리된 환경으로 해결한다. 4개의 서비스를 한 번에 띄우고, 네트워크까지 자동으로 연결하는 방법을 알아본다.</p>
+
+          <h2>컨테이너가 마이크로서비스에 적합한 이유</h2>
+
+          <p>Docker 컨테이너는 <mark>애플리케이션과 그 실행 환경을 함께 패키징</mark>하는 기술이다. JDK 버전, 라이브러리, 설정 파일을 모두 포함해서 하나의 이미지로 만든다.</p>
+
+          <p>마이크로서비스에서 컨테이너가 특히 빛나는 이유가 있다.</p>
+
+          <ul>
+            <li><strong>환경 일치</strong> : "내 컴퓨터에서는 되는데"가 사라진다. 개발, 테스트, 운영 환경이 동일한 이미지를 쓴다.</li>
+            <li><strong>격리</strong> : 각 서비스가 독립된 파일 시스템, 네트워크, 프로세스 공간에서 돌아간다. user-service의 Java 17과 다른 서비스의 Java 21이 충돌하지 않는다.</li>
+            <li><strong>경량성</strong> : VM과 달리 OS를 통째로 올리지 않는다. 호스트 OS의 커널을 공유하므로 시작 시간이 빠르고 리소스 사용이 적다.</li>
+          </ul>
+
+<div class="mermaid">
+block-beta
+    columns 2
+
+    block:vm["가상 머신"]:1
+        columns 1
+        APP1["App + 라이브러리"]
+        OS1["Guest OS (전체)"]
+        HV["Hypervisor"]
+    end
+
+    block:container["컨테이너"]:1
+        columns 1
+        APP2["App + 라이브러리"]
+        RT["Container Runtime"]
+    end
+
+    HOST["Host OS + Kernel"]:2
+
+    style APP1 fill:#FFE6E6,stroke:#F44336,stroke-width:2px,color:#000
+    style OS1 fill:#FFE6E6,stroke:#F44336,stroke-width:2px,color:#000
+    style HV fill:#FFE6E6,stroke:#F44336,stroke-width:2px,color:#000
+    style APP2 fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style RT fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style HOST fill:#E8F4F8,stroke:#2196F3,stroke-width:2px,color:#000
+    style vm fill:#fff0f0,stroke:#F44336
+    style container fill:#f0f8f0,stroke:#4CAF50
+</div>
+          <p>왼쪽의 VM은 Guest OS 전체를 포함해서 무겁다. 오른쪽의 컨테이너는 앱과 라이브러리만 담고 Host OS의 커널을 공유하므로 가볍다.</p>
+
+          <h2>Dockerfile — 이미지 빌드 설계도</h2>
+
+          <p>Dockerfile은 <mark>컨테이너 이미지를 어떻게 만들 것인지 정의하는 파일</mark>이다. 각 명령이 하나의 레이어를 만들고, 이 레이어들이 쌓여서 최종 이미지가 된다.</p>
+
+          <p>실습의 Spring Boot 서비스 Dockerfile은 멀티스테이지 빌드를 사용한다.</p>
+
+          <h4>멀티스테이지 빌드의 원리</h4>
+
+          <p>하나의 Dockerfile에 빌드 단계와 실행 단계를 분리하는 기법이다. 빌드에 필요한 도구는 빌드 단계에만 존재하고, 최종 이미지에는 <mark>실행에 필요한 최소한의 파일만 포함</mark>된다.</p>
+
+<div class="mermaid">
+flowchart LR
+    subgraph BUILD ["빌드 스테이지 (JDK)"]
+        direction TB
+        B1["소스 코드 복사"]
+        B2["Gradle 빌드"]
+        B3["JAR 파일 생성"]
+        B1 --> B2 --> B3
+    end
+
+    BUILD -->|"JAR만 복사"| RUN
+
+    subgraph RUN ["실행 스테이지 (JRE)"]
+        direction TB
+        R1["JAR 복사"]
+        R2["포트 노출"]
+        R3["java -jar 실행"]
+        R1 --> R2 --> R3
+    end
+
+    style B1 fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#000
+    style B2 fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#000
+    style B3 fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#000
+    style R1 fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style R2 fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style R3 fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style BUILD fill:#fff8f0,stroke:#FF9800
+    style RUN fill:#f0f8f0,stroke:#4CAF50
+</div>
+          <p>주황 영역의 빌드 스테이지에는 JDK, Gradle, 소스 코드가 모두 포함된다. 초록 영역의 실행 스테이지에는 JRE와 빌드된 JAR만 들어간다. 이 분리 덕분에 최종 이미지의 크기가 크게 줄어든다. JDK 이미지는 500MB 이상이지만, JRE 이미지는 200MB 정도다.</p>
+
+          <p>실습의 Dockerfile을 분석하면 각 명령의 의미가 보인다.</p>
+
+<pre><code class="language-dockerfile"># 빌드 스테이지 — JDK로 소스 빌드
+FROM eclipse-temurin:17-jdk-jammy AS builder
+WORKDIR /app
+COPY gradlew .
+COPY gradle gradle
+COPY build.gradle .
+COPY settings.gradle .
+COPY src src
+RUN chmod +x ./gradlew
+RUN ./gradlew clean bootJar</code></pre>
+          <p><code>FROM ... AS builder</code>로 이 스테이지에 <code>builder</code>라는 이름을 붙인다. Gradle Wrapper와 소스 코드를 복사한 뒤 빌드를 실행한다.</p>
+
+<pre><code class="language-dockerfile"># 실행 스테이지 — JRE로 애플리케이션 실행
+FROM eclipse-temurin:17-jre-jammy
+WORKDIR /app
+COPY --from=builder /app/build/libs/*.jar app.jar
+EXPOSE 8081
+ENV JAVA_OPTS="-Xms256m -Xmx512m -XX:+UseG1GC"
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]</code></pre>
+          <p><code>COPY --from=builder</code>로 빌드 스테이지에서 JAR 파일만 가져온다. <code>EXPOSE</code>는 문서화 용도이고, <code>ENTRYPOINT</code>가 컨테이너 시작 시 실행할 명령이다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">JAVA_OPTS를 ENV로 분리하는 이유</div>
+            <p>JVM 옵션을 <code>ENTRYPOINT</code>에 직접 박아 넣으면 이미지를 다시 빌드해야 변경할 수 있다. ENV로 분리하면 <code>docker run -e JAVA_OPTS="..."</code> 같은 방식으로 <mark>이미지 재빌드 없이 JVM 튜닝</mark>이 가능하다.</p>
+          </div>
+
+          <h2>Docker Compose — 멀티 컨테이너 오케스트레이션</h2>
+
+          <p>Docker Compose는 <mark>여러 컨테이너를 하나의 YAML 파일로 정의하고 한 번에 관리</mark>하는 도구다. 실습에서는 Nginx + 3개 Spring Boot 서비스, 총 4개의 컨테이너를 Docker Compose로 관리한다.</p>
+
+<pre><code class="language-yaml">services:
+  api-gateway:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    depends_on:
+      - user-service
+      - order-service
+      - payment-service
+
+  user-service:
+    build:
+      context: ./user-service
+      dockerfile: Dockerfile
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SERVER_PORT=8081
+
+  order-service:
+    build:
+      context: ./order-service
+      dockerfile: Dockerfile
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SERVER_PORT=8082
+
+  payment-service:
+    build:
+      context: ./payment-service
+      dockerfile: Dockerfile
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SERVER_PORT=8083
+
+networks:
+  microservices-network:
+    driver: bridge</code></pre>
+          <p>핵심 설정을 하나씩 살펴본다.</p>
+
+          <h4>ports vs 노출 안 함</h4>
+
+          <p><code>api-gateway</code>만 <code>ports: "80:80"</code>을 선언한다. 호스트의 80번 포트를 컨테이너의 80번 포트에 매핑하는 것이다. 나머지 서비스에는 ports 설정이 없다.</p>
+
+          <p>이것이 바로 API Gateway 패턴의 핵심이다. <mark>외부에서 접근할 수 있는 것은 Gateway뿐</mark>이고, 백엔드 서비스는 Docker 네트워크 내부에서만 접근 가능하다.</p>
+
+          <h4>depends_on</h4>
+
+          <p><code>api-gateway</code>가 <code>depends_on</code>으로 세 서비스를 지정한다. Docker Compose가 백엔드 서비스를 먼저 시작한 뒤에 Gateway를 시작한다.</p>
+
+          <p>단, 이것은 <mark>컨테이너의 시작 순서만 보장</mark>한다. 서비스가 실제로 요청을 받을 준비가 되었는지까지는 확인하지 않는다. 그래서 healthcheck가 필요하다.</p>
+
+          <h4>environment</h4>
+
+          <p>환경 변수로 Spring Boot의 프로파일과 포트를 주입한다. <code>SPRING_PROFILES_ACTIVE=docker</code>는 application.yml의 docker 프로파일을 활성화시킨다. 코드 변경 없이 환경에 따라 설정을 바꿀 수 있는 12-Factor App 원칙이다.</p>
+
+          <h2>Docker 네트워크 — 서비스 간 통신</h2>
+
+          <p>Docker Compose는 기본적으로 <mark>같은 Compose 파일의 서비스를 하나의 네트워크에 연결</mark>한다. 실습에서는 <code>microservices-network</code>라는 bridge 네트워크를 명시적으로 정의한다.</p>
+
+          <p>이 네트워크 안에서 각 컨테이너는 <mark>서비스 이름을 DNS 이름으로 사용</mark>할 수 있다. Nginx 설정의 <code>server user-service:8081</code>에서 <code>user-service</code>가 IP 주소가 아닌 이름인 이유가 바로 이것이다.</p>
+
+<div class="mermaid">
+block-beta
+    columns 3
+
+    EXTERNAL["외부 (브라우저)"]:3
+
+    block:network["Docker Bridge Network (microservices-network)"]:3
+        columns 4
+        GW["api-gateway<br/>:80"]:1
+        U["user-service<br/>:8081"]:1
+        O["order-service<br/>:8082"]:1
+        P["payment-service<br/>:8083"]:1
+    end
+
+    EXTERNAL -->|"포트 80만 노출"| GW
+    GW -->|"DNS: user-service"| U
+    GW -->|"DNS: order-service"| O
+    GW -->|"DNS: payment-service"| P
+
+    style EXTERNAL fill:#E8F4F8,stroke:#2196F3,stroke-width:2px,color:#000
+    style GW fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#000
+    style U fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style O fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style P fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style network fill:#faf0fa,stroke:#9C27B0
+</div>
+          <p>외부에서는 80번 포트를 통해 Gateway에만 접근할 수 있다. 보라색 네트워크 영역 안에서는 서비스 이름으로 자유롭게 통신하지만, 이 통신은 외부에 노출되지 않는다.</p>
+
+          <div class="callout callout-info">
+            <div class="callout-title">bridge 네트워크의 동작 원리</div>
+            <p>Docker의 bridge 네트워크는 호스트에 가상 네트워크 인터페이스를 만든다. 각 컨테이너가 이 가상 네트워크에 연결되고, Docker의 내장 DNS 서버가 서비스 이름을 컨테이너 IP로 해석해준다. <code>user-service</code>라는 이름으로 요청을 보내면 Docker DNS가 해당 컨테이너의 IP를 반환하는 것이다.</p>
+          </div>
+
+          <h2>헬스체크 — 서비스 상태 확인</h2>
+
+          <p>컨테이너가 떠 있다고 해서 애플리케이션이 정상인 것은 아니다. Java 프로세스가 살아 있어도 Spring Boot가 초기화를 끝내지 않았을 수 있다. 헬스체크는 <mark>애플리케이션이 실제로 요청을 처리할 수 있는 상태인지</mark>를 주기적으로 확인한다.</p>
+
+<pre><code class="language-yaml">healthcheck:
+  test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
+  interval: 30s
+  timeout: 10s
+  retries: 3</code></pre>
+          <p>30초마다 Actuator의 health 엔드포인트에 요청을 보내고, 10초 안에 응답이 없으면 실패로 간주한다. 3번 연속 실패하면 컨테이너를 unhealthy 상태로 표시한다.</p>
+
+          <p>Nginx의 헬스체크는 좀 더 단순하다.</p>
+
+<pre><code class="language-dockerfile">HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+    CMD curl -f http://localhost/health || exit 1</code></pre>
+          <p>이 <code>/health</code> 엔드포인트는 Nginx 설정에서 직접 정의한 것이다. <code>return 200</code>으로 즉시 응답하므로 Nginx 프로세스가 정상 동작하는지만 확인한다.</p>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">멀티스테이지 빌드를 안 쓰고 JDK를 최종 이미지에 포함하기</div>
+            <p>빌드와 실행을 하나의 스테이지에서 하면, 최종 이미지에 JDK, Gradle, 소스 코드가 모두 포함된다. 이미지 크기가 불필요하게 커지고, 소스 코드가 노출되는 보안 위험도 있다. 운영 이미지에는 JRE와 JAR만 있으면 된다.</p>
+            <p>[!DANGER] depends_on으로 서비스 준비를 보장한다고 착각하기</p>
+            <p><code>depends_on</code>은 컨테이너의 <mark>시작 순서</mark>만 보장한다. user-service 컨테이너가 시작되었다고 해서 Spring Boot가 초기화를 끝낸 것은 아니다. Gateway가 먼저 요청을 받았는데 백엔드가 아직 준비 중이면 502 Bad Gateway가 발생한다. <code>depends_on</code>에 <code>condition: service_healthy</code>를 추가하면 헬스체크까지 통과한 후에 다음 서비스를 시작한다.</p>
+            <p>[!DANGER] 백엔드 서비스의 포트를 외부에 노출하기</p>
+            <p>디버깅을 위해 <code>ports: "8081:8081"</code>을 추가하면, 브라우저에서 <code>localhost:8081</code>로 직접 접근할 수 있다. Gateway를 우회하는 것이므로 Rate Limiting, 로깅, 인증이 모두 무력화된다. 개발 중에만 임시로 열고, 운영에서는 반드시 제거해야 한다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#스프링</span>
+          <span>#Docker</span>
+          <span>#Docker_Compose</span>
+          <span>#멀티스테이지빌드</span>
+          <span>#컨테이너</span>
+          <span>#마이크로서비스</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="nginx-gateway-3-rate-limiting.html">&larr; 이전 글</a>
+          <a href="nginx-gateway-5-spring-boot.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

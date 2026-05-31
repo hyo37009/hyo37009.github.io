@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Spring GraphQL] 1. GraphQL 등장 배경과 핵심 개념 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Spring GraphQL] 1. GraphQL 등장 배경과 핵심 개념</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Spring GraphQL (1/8)</div>
+            <p>다음 편: <a href="spring-graphql-2-architecture.html">[Spring GraphQL] 2. Spring GraphQL 아키텍처와 Resolver</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">Spring GraphQL 개념 시리즈</div>
+            <p>1. <a href="spring-graphql-1-concepts.html">GraphQL 등장 배경과 핵심 개념</a> ← 현재 문서</p>
+            <p>2. <a href="spring-graphql-2-architecture.html">Spring GraphQL 아키텍처와 Resolver</a></p>
+            <p>3. <a href="spring-graphql-3-n-plus-one.html">N+1 문제와 @BatchMapping</a></p>
+            <p>4. <a href="spring-graphql-4-subscription.html">Subscription과 예외 처리</a></p>
+          </div>
+
+          <p>REST API로 프론트엔드와 백엔드를 연결하는 일은 익숙하다. 하지만 화면이 복잡해지고 클라이언트가 다양해질수록, REST만으로는 해결하기 어려운 구조적 문제가 드러난다. GraphQL은 이 문제를 근본적으로 다른 방식으로 풀어낸 쿼리 언어다.</p>
+
+          <h2>REST API는 어디가 불편한가</h2>
+
+          <p>REST에서 리소스를 가져오려면 서버가 정해놓은 엔드포인트를 호출해야 한다. <code>GET /api/books/1</code>을 호출하면 서버가 결정한 형태로 응답이 온다. 클라이언트가 원하는 필드만 골라서 받을 수 없다.</p>
+
+          <p>이 구조에서 두 가지 문제가 생긴다.</p>
+
+          <h4>Over-Fetching</h4>
+
+          <p>책 목록 화면에서 제목과 가격만 보여주면 되는데, API는 ISBN, 출판 연도, 저자 정보, 생성일까지 전부 내려보낸다. 쓰지 않는 데이터가 네트워크를 타고 이동하는 것이다.</p>
+
+          <h4>Under-Fetching</h4>
+
+          <p>책 상세 화면에서 저자의 다른 책 목록도 함께 보여줘야 한다면? <code>/api/books/1</code>로 책 정보를 가져오고, 응답에서 저자 ID를 꺼내서 <code>/api/authors/3/books</code>를 다시 호출해야 한다. 한 화면을 그리는 데 API를 두 번 이상 호출하게 된다.</p>
+
+          <p>이 두 문제를 요청 흐름으로 비교하면 차이가 명확하다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant C as 클라이언트
+    participant S as REST 서버
+    participant DB
+
+    rect rgb(255, 230, 230)
+        Note over C, DB: Over-Fetching
+        C->>S: GET /api/books/1
+        S->>DB: SELECT * FROM books
+        DB-->>S: 모든 컬럼 반환
+        S-->>C: {id, title, isbn, year, price, author, createdAt}
+        Note right of C: title, price만<br/>필요했는데 전부 받음
+    end
+
+    rect rgb(255, 230, 230)
+        Note over C, DB: Under-Fetching
+        C->>S: GET /api/books/1
+        S-->>C: {bookInfo + authorId: 3}
+        C->>S: GET /api/authors/3/books
+        S->>DB: SELECT * FROM books WHERE author_id = 3
+        S-->>C: [{book1}, {book2}, ...]
+        Note right of C: 화면 하나에<br/>API 두 번 호출
+    end
+</div>
+          <p>분홍 영역 두 곳 모두 불필요한 비용이 발생한다. 위쪽은 필요 없는 데이터를 받아오는 낭비, 아래쪽은 필요한 데이터를 모으기 위해 요청을 여러 번 보내는 낭비다.</p>
+
+          <p>REST에서도 쿼리 파라미터(<code>?fields=title,price</code>)나 전용 엔드포인트를 만들어 해결할 수 있다. 하지만 화면마다 엔드포인트를 만드는 건 결국 백엔드와 프론트엔드를 강하게 결합시키고, API 수가 폭발적으로 늘어나는 문제를 낳는다.</p>
+
+          <h2>GraphQL이 이 문제를 푸는 방식</h2>
+
+          <p>GraphQL은 <mark>클라이언트가 필요한 데이터의 구조를 직접 명시</mark>하는 쿼리 언어다. 2012년 Facebook이 모바일 앱의 성능 문제를 해결하기 위해 만들었고, 2015년에 오픈소스로 공개했다.</p>
+
+          <p>핵심 차이는 단 하나다. REST는 <mark>서버가 응답 구조를 결정</mark>하지만, GraphQL은 <mark>클라이언트가 응답 구조를 결정</mark>한다.</p>
+
+<pre><code class="language-graphql">{
+  book(id: 1) {
+    title
+    price
+    author {
+      name
+      books {
+        title
+      }
+    }
+  }
+}</code></pre>
+          <p>이 쿼리 하나로 책의 제목, 가격, 저자 이름, 그리고 저자의 다른 책 목록까지 한 번에 가져온다. Over-Fetching도 없고, Under-Fetching도 없다.</p>
+
+          <p>같은 데이터를 REST와 GraphQL로 가져오는 흐름을 나란히 놓으면 차이가 뚜렷하다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant C as 클라이언트
+    participant S as GraphQL 서버
+    participant DB
+
+    rect rgb(232, 248, 232)
+        Note over C, DB: 단일 요청으로 필요한 데이터만
+        C->>S: POST /graphql
+        Note right of C: { book(id:1) {<br/>  title, price,<br/>  author { name }<br/>} }
+        S->>DB: 필요한 필드만 조회
+        DB-->>S: 요청된 데이터
+        S-->>C: { title, price, author: { name } }
+        Note right of C: 요청한 것만<br/>정확히 받음
+    end
+</div>
+          <p>초록 영역에서 보이듯, 엔드포인트는 <code>/graphql</code> 하나뿐이다. 어떤 데이터가 필요한지는 요청 본문에 담긴 쿼리가 결정한다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">GraphQL은 HTTP 프로토콜 위에서 동작한다</div>
+            <p>GraphQL이 REST를 완전히 대체하는 별도의 프로토콜이라고 오해하기 쉽다. 실제로는 HTTP POST 요청의 본문에 쿼리 문자열을 담아 보내는 방식이다. 전송 계층은 REST와 동일하고, <mark>쿼리를 해석하는 방식이 다른 것</mark>이다.</p>
+          </div>
+
+          <h2>타입 시스템</h2>
+
+          <p>GraphQL의 가장 중요한 특징은 <mark>강력한 타입 시스템</mark>이다. 서버가 제공할 수 있는 데이터의 구조를 스키마로 정의하고, 클라이언트는 그 범위 안에서만 데이터를 요청할 수 있다.</p>
+
+          <p>스키마에 등장하는 타입을 종류별로 살펴보자.</p>
+
+          <h3>스칼라 타입</h3>
+
+          <p>가장 기본적인 데이터 단위다. 더 이상 하위 필드로 쪼갤 수 없는 값이다.</p>
+
+          <ul>
+            <li><code>Int</code> : 정수 (Java의 <code>Integer</code>)</li>
+            <li><code>Float</code> : 실수 (Java의 <code>Double</code>)</li>
+            <li><code>String</code> : 문자열</li>
+            <li><code>Boolean</code> : 참/거짓</li>
+            <li><code>ID</code> : 고유 식별자. 문자열로 직렬화되지만 "이 값은 식별 목적"이라는 의미를 담고 있다.</li>
+          </ul>
+
+          <h3>오브젝트 타입</h3>
+
+          <p>스칼라 타입을 조합해 만든 복합 타입이다. 엔티티 하나를 표현한다.</p>
+
+<pre><code class="language-graphql">type Book {
+    id: ID!
+    title: String!
+    isbn: String!
+    publishedYear: Int!
+    price: Float!
+    author: Author!
+    createAt: String!
+}
+
+type Author {
+    id: ID!
+    name: String!
+    email: String!
+    books: [Book!]!
+}</code></pre>
+          <p>필드 뒤의 <code>!</code>는 Non-Null을 의미한다. <code>Author!</code>는 "null이 될 수 없는 Author 객체"이고, <code>[Book!]!</code>는 "null이 아닌 Book 객체들의 null이 아닌 리스트"다.</p>
+
+          <p>타입 사이의 관계를 보면, <code>Book</code>이 <code>Author</code>를 참조하고, <code>Author</code>가 <code>[Book]</code>을 참조하는 양방향 구조다.</p>
+
+<div class="mermaid">
+flowchart LR
+    subgraph BookType ["Book 타입"]
+        direction TB
+        B_id["id: ID!"]
+        B_title["title: String!"]
+        B_isbn["isbn: String!"]
+        B_year["publishedYear: Int!"]
+        B_price["price: Float!"]
+        B_author["author: Author!"]
+    end
+
+    subgraph AuthorType ["Author 타입"]
+        direction TB
+        A_id["id: ID!"]
+        A_name["name: String!"]
+        A_email["email: String!"]
+        A_books["books: [Book!]!"]
+    end
+
+    B_author ==>|"N:1"| AuthorType
+    A_books ==>|"1:N"| BookType
+
+    style BookType fill:#E8F4F8,stroke:#2196F3,stroke-width:2px
+    style AuthorType fill:#E8F4F8,stroke:#2196F3,stroke-width:2px
+    style B_author fill:#FFF3E0,stroke:#FF9800,stroke-width:2px
+    style A_books fill:#FFF3E0,stroke:#FF9800,stroke-width:2px
+</div>
+          <p>주황색으로 표시된 필드가 관계를 맺는 부분이다. 클라이언트는 이 관계를 따라 원하는 깊이까지 데이터를 탐색할 수 있다. 어디까지 탐색할지는 쿼리가 결정한다.</p>
+
+          <h3>Input 타입</h3>
+
+          <p>데이터를 <mark>서버로 보낼 때</mark> 사용하는 타입이다. 오브젝트 타입과 비슷하지만 <code>type</code> 대신 <code>input</code> 키워드를 쓴다.</p>
+
+<pre><code class="language-graphql">input CreateBookInput {
+    title: String!
+    isbn: String!
+    publishedYear: Int!
+    price: Float!
+    authorId: ID!
+}
+
+input UpdateBookInput {
+    title: String
+    isbn: String
+    publishedYear: Int
+    price: Float
+}</code></pre>
+          <p><code>CreateBookInput</code>은 모든 필드가 필수(<code>!</code>)지만, <code>UpdateBookInput</code>은 모든 필드가 선택이다. 수정할 때는 바꾸고 싶은 필드만 보내면 되기 때문이다.</p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">type과 input을 분리하는 이유</div>
+            <p>오브젝트 타입(<code>type</code>)에는 <code>author: Author!</code>처럼 다른 오브젝트 타입을 직접 참조하는 필드가 있다. 하지만 Input에서는 <code>authorId: ID!</code>처럼 ID만 받는다. 클라이언트가 Author 객체 전체를 보내는 건 비현실적이기 때문이다. 이렇게 <mark>읽기용 구조와 쓰기용 구조를 분리</mark>하는 것이 GraphQL의 설계 원칙이다.</p>
+          </div>
+
+          <h2>세 가지 연산</h2>
+
+          <p>GraphQL에는 데이터를 다루는 세 가지 루트 타입이 있다.</p>
+
+          <h3>Query — 데이터 조회</h3>
+
+          <p>읽기 전용 연산이다. REST의 GET에 해당한다.</p>
+
+<pre><code class="language-graphql">type Query {
+    books: [Book!]!
+    book(id: ID!): Book
+    searchBooks(title: String!): [Book!]!
+    authors: [Author!]!
+    author(id: ID!): Author
+    booksByAuthor(authorId: ID!): [Book!]!
+}</code></pre>
+          <p><code>book(id: ID!): Book</code>에서 반환 타입이 <code>Book</code>이지 <code>Book!</code>이 아니다. 해당 ID의 책이 없으면 null을 반환할 수 있다는 뜻이다.</p>
+
+          <h3>Mutation — 데이터 변경</h3>
+
+          <p>쓰기 연산이다. REST의 POST, PUT, DELETE에 해당한다.</p>
+
+<pre><code class="language-graphql">type Mutation {
+    createBook(input: CreateBookInput!): Book!
+    updateBook(id: ID!, input: UpdateBookInput!): Book!
+    deleteBook(id: ID!): Boolean!
+    createAuthor(input: CreateAuthorInput!): Author!
+    updateAuthor(id: ID!, input: UpdateAuthorInput!): Author!
+    deleteAuthor(id: ID!): Boolean!
+}</code></pre>
+          <p>Mutation은 단순히 "변경했습니다"로 끝나지 않는다. <mark>변경된 결과 데이터를 반환</mark>한다. <code>createBook</code>은 생성된 <code>Book</code>을, <code>deleteBook</code>은 삭제 성공 여부를 <code>Boolean</code>으로 돌려준다.</p>
+
+          <h3>Subscription — 실시간 구독</h3>
+
+          <p>서버에서 클라이언트로 데이터를 <mark>푸시</mark>하는 연산이다. REST에는 대응 개념이 없고, WebSocket을 기반으로 동작한다.</p>
+
+<pre><code class="language-graphql">type Subscription {
+    bookAdded: Book!
+}</code></pre>
+          <p>클라이언트가 <code>bookAdded</code>를 구독하면, 누군가 새 책을 등록할 때마다 자동으로 알림을 받는다.</p>
+
+          <p>세 연산의 역할과 통신 방식을 정리하면 이렇다.</p>
+
+<div class="mermaid">
+flowchart TD
+    subgraph Client ["클라이언트"]
+        direction TB
+        Q["Query 요청"]
+        M["Mutation 요청"]
+        S["Subscription 구독"]
+    end
+
+    subgraph Server ["GraphQL 서버"]
+        direction TB
+        QR["QueryResolver"]
+        MR["MutationResolver"]
+        SR["SubscriptionResolver"]
+    end
+
+    Q -->|"POST /graphql"| QR
+    QR -->|"응답 (JSON)"| Q
+    M -->|"POST /graphql"| MR
+    MR -->|"응답 (JSON)"| M
+    S <-->|"WebSocket /graphql"| SR
+
+    style Q fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px
+    style M fill:#FFF3E0,stroke:#FF9800,stroke-width:2px
+    style S fill:#E8F4F8,stroke:#2196F3,stroke-width:2px
+    style QR fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px
+    style MR fill:#FFF3E0,stroke:#FF9800,stroke-width:2px
+    style SR fill:#E8F4F8,stroke:#2196F3,stroke-width:2px
+    style Client fill:#fafafa,stroke:#999
+    style Server fill:#fafafa,stroke:#999
+</div>
+          <p>Query와 Mutation은 HTTP 요청-응답 방식이고, Subscription만 WebSocket으로 양방향 연결을 유지한다.</p>
+
+          <h2>스키마가 곧 계약이다</h2>
+
+          <p>GraphQL 스키마는 단순한 문서가 아니다. <mark>서버가 제공할 수 있는 데이터의 정확한 명세</mark>이자, 클라이언트와 서버 사이의 계약이다.</p>
+
+          <p>스키마를 먼저 정의하면 다음과 같은 이점이 생긴다.</p>
+
+          <ul>
+            <li><strong>프론트-백 병렬 개발</strong> : 스키마만 합의하면 각자 구현을 시작할 수 있다. 프론트엔드는 스키마를 보고 쿼리를 작성하고, 백엔드는 Resolver를 구현한다.</li>
+            <li><strong>자동 검증</strong> : 스키마에 없는 필드를 요청하면 서버가 즉시 에러를 반환한다. 런타임 에러가 아니라 쿼리 파싱 단계에서 잡힌다.</li>
+            <li><strong>자기 문서화</strong> : 스키마 자체가 API 문서 역할을 한다. GraphiQL 같은 도구에서 스키마를 탐색하며 바로 쿼리를 테스트할 수 있다.</li>
+          </ul>
+
+          <p>이 개념을 Spring Boot에서 어떻게 구현하는지는 <a href="spring-graphql-2-architecture.html">다음 편</a>에서 다룬다.</p>
+
+<div class="mermaid">
+block-beta
+    columns 3
+
+    A["스키마 정의<br/>(schema.graphqls)"]:3
+
+    block:client["프론트엔드"]:1
+        columns 1
+        C1["쿼리 작성"]
+        C2["타입 자동완성"]
+    end
+
+    block:tools["개발 도구"]:1
+        columns 1
+        T1["GraphiQL"]
+        T2["자동 검증"]
+    end
+
+    block:server["백엔드"]:1
+        columns 1
+        S1["Resolver 구현"]
+        S2["타입 매핑"]
+    end
+
+    style A fill:#E8F4F8,stroke:#2196F3,stroke-width:2px,color:#000
+    style client fill:#E8F8E8,stroke:#4CAF50
+    style tools fill:#FFF3E0,stroke:#FF9800
+    style server fill:#F3E5F5,stroke:#9C27B0
+</div>
+          <p>스키마(파란색)를 중심으로 프론트엔드, 개발 도구, 백엔드가 각자의 역할을 수행한다. 스키마가 바뀌면 세 영역 모두에 즉시 반영된다.</p>
+
+          <h2>REST와 GraphQL 비교</h2>
+
+          <p>둘은 경쟁 관계가 아니라 <mark>상황에 따라 선택</mark>하는 도구다.</p>
+
+          <table>
+          <thead>
+          <tr><th>기준</th><th>REST</th><th>GraphQL</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>엔드포인트</td><td>리소스마다 별도 URL</td><td><code>/graphql</code> 단일 엔드포인트</td></tr>
+          <tr><td>응답 구조</td><td>서버가 결정</td><td>클라이언트가 결정</td></tr>
+          <tr><td>Over-Fetching</td><td>발생 가능</td><td>요청한 필드만 반환</td></tr>
+          <tr><td>Under-Fetching</td><td>여러 번 호출 필요</td><td>한 번의 쿼리로 해결</td></tr>
+          <tr><td>캐싱</td><td>HTTP 캐싱 활용 가능</td><td>별도 전략 필요</td></tr>
+          <tr><td>학습 곡선</td><td>낮음</td><td>상대적으로 높음</td></tr>
+          <tr><td>적합한 상황</td><td>단순 CRUD, 공개 API</td><td>복잡한 관계, 다양한 클라이언트</td></tr>
+          </tbody>
+          </table>
+
+          <p>GraphQL은 모바일/웹 등 <mark>클라이언트마다 필요한 데이터가 다른 환경</mark>에서 빛을 발한다. 반면 단순한 CRUD API나 HTTP 캐싱이 중요한 공개 API에서는 REST가 더 적합할 수 있다.</p>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">GraphQL이면 REST를 전부 대체해야 한다는 생각</div>
+            <p>하나의 프로젝트에서 REST와 GraphQL을 함께 사용하는 건 흔한 일이다. 파일 업로드, 헬스체크, 웹훅 수신 같은 단순 작업은 REST가 더 자연스럽다. <mark>기술 선택은 상황에 맞게</mark> 하는 것이다.</p>
+            <p>[!DANGER] 중첩 쿼리의 깊이 제한을 두지 않는 것</p>
+            <p>GraphQL은 클라이언트가 관계를 따라 무한히 깊게 쿼리할 수 있다. <code>book → author → books → author → books → ...</code> 같은 순환 쿼리를 막지 않으면 서버에 심각한 부하를 줄 수 있다. 운영 환경에서는 <mark>쿼리 깊이 제한</mark>과 <mark>복잡도 분석</mark>을 반드시 적용해야 한다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Spring</span>
+          <span>#GraphQL</span>
+          <span>#REST</span>
+          <span>#스키마</span>
+          <span>#Query</span>
+          <span>#Mutation</span>
+          <span>#Subscription</span>
+          <span>#타입시스템</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+          <a href="spring-graphql-2-architecture.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

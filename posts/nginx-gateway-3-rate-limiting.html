@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[스프링] 3. Rate Limiting과 트래픽 제어 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[스프링] 3. Rate Limiting과 트래픽 제어</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Nginx API Gateway (3/7)</div>
+            <p>이전 편: <a href="nginx-gateway-2-reverse-proxy.html">[스프링] 2. Nginx 리버스 프록시의 동작 원리</a></p>
+            <p>다음 편: <a href="nginx-gateway-4-docker-deploy.html">[스프링] 4. Docker로 마이크로서비스 배포하기</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">Nginx API Gateway 개념 시리즈</div>
+            <p>1. <a href="nginx-gateway-1-microservice.html">마이크로서비스와 API Gateway</a></p>
+            <p>2. <a href="nginx-gateway-2-reverse-proxy.html">Nginx 리버스 프록시의 동작 원리</a></p>
+            <p>3. <strong>Rate Limiting과 트래픽 제어</strong> (현재 문서)</p>
+            <p>4. <a href="nginx-gateway-4-docker-deploy.html">Docker로 마이크로서비스 배포하기</a></p>
+          </div>
+
+          <p>API를 외부에 노출하면 누군가는 반드시 과도한 요청을 보낸다. 의도적인 공격일 수도 있고, 클라이언트의 버그일 수도 있다. Rate Limiting은 이런 상황에서 서비스를 보호하는 첫 번째 방어선이다. Nginx가 이를 어떻게 처리하는지, 그 메커니즘을 이해한다.</p>
+
+          <h2>Rate Limiting이 필요한 이유</h2>
+
+          <p>Rate Limiting은 <mark>특정 시간 동안 허용할 요청 수를 제한</mark>하는 기술이다. "분당 20회까지만 허용하겠다"처럼 상한선을 정하고, 초과하면 거부한다.</p>
+
+          <p>왜 이런 제한이 필요한가?</p>
+
+          <ul>
+            <li><strong>서비스 보호</strong> : 한 클라이언트가 초당 수천 건의 요청을 보내면 서버 리소스가 고갈된다. 다른 정상 사용자까지 영향을 받는다.</li>
+            <li><strong>DDoS 완화</strong> : 대량의 요청으로 서비스를 마비시키려는 공격을 1차적으로 걸러낸다.</li>
+            <li><strong>비용 제어</strong> : 클라우드 환경에서는 요청 수가 곧 비용이다. 과도한 요청을 차단하면 불필요한 비용을 줄일 수 있다.</li>
+            <li><strong>공정한 사용</strong> : 한 사용자가 리소스를 독점하지 못하게 해서, 모든 사용자에게 일정한 품질을 보장한다.</li>
+          </ul>
+
+          <p>Rate Limiting이 없는 상태에서 악의적인 요청이 들어오면 어떻게 되는지 보면 필요성이 체감된다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant A as 악의적 클라이언트
+    participant GW as API Gateway
+    participant S as 백엔드 서비스
+
+    rect rgb(255, 230, 230)
+        Note over A, S: Rate Limiting 없음 — 모든 요청이 백엔드까지 도달
+        loop 초당 1000회 요청
+            A->>GW: GET /api/users
+            GW->>S: GET /api/users
+            S-->>GW: 200 OK
+            GW-->>A: 200 OK
+        end
+        Note over S: CPU 100%, 메모리 고갈<br/>정상 사용자도 응답 불가
+    end
+</div>
+          <p>분홍 영역 전체가 문제 상황이다. 모든 요청이 여과 없이 백엔드까지 전달되면서 서비스가 마비된다.</p>
+
+          <p>Rate Limiting을 적용하면 Gateway 단에서 초과 요청을 차단한다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant A as 악의적 클라이언트
+    participant GW as API Gateway
+    participant S as 백엔드 서비스
+
+    rect rgb(232, 248, 232)
+        Note over A, GW: Rate Limiting 적용 — 허용 범위 내 요청만 통과
+        A->>GW: GET /api/users (1번째)
+        GW->>S: GET /api/users
+        S-->>GW: 200 OK
+        GW-->>A: 200 OK
+    end
+
+    rect rgb(255, 230, 230)
+        Note over A, GW: 초과 요청은 Gateway에서 즉시 거부
+        A->>GW: GET /api/users (21번째)
+        GW--xA: 429 Too Many Requests
+        Note over GW: 백엔드까지 도달하지 않음
+    end
+</div>
+          <p>초록 영역에서는 허용 범위 내 요청이 정상 처리된다. 분홍 영역에서는 초과 요청이 <mark>Gateway 단에서 즉시 429 응답으로 거부</mark>되고, 백엔드 서비스까지 도달하지 않는다.</p>
+
+          <h2>Nginx의 Leaky Bucket 알고리즘</h2>
+
+          <p>Nginx의 Rate Limiting은 <mark>Leaky Bucket</mark> 알고리즘을 기반으로 한다. 이름 그대로 "새는 양동이"다.</p>
+
+          <p>양동이에 물을 부으면 바닥의 구멍으로 일정한 속도로 물이 빠져나간다. 물을 붓는 속도가 빠져나가는 속도보다 빠르면 양동이에 물이 차오르고, 넘치면 버린다. 여기서 물은 요청, 빠져나가는 속도는 처리 속도, 양동이의 크기는 버스트 허용량이다.</p>
+
+          <p>이 알고리즘의 핵심은 <mark>요청 처리 속도를 일정하게 유지</mark>한다는 것이다. 순간적으로 많은 요청이 몰려도, 처리는 설정한 속도대로 균일하게 이루어진다.</p>
+
+<div class="mermaid">
+flowchart TD
+    REQ(["요청 도착"])
+    REQ --> CHECK{"양동이에<br/>빈자리?"}
+    CHECK -->|"있음"| ADD["양동이에 추가"]
+    ADD --> DRAIN["일정 속도로 처리<br/>(rate에 따라)"]
+    DRAIN --> DONE(["처리 완료"])
+    CHECK -->|"꽉 참"| REJECT["429 거부"]
+
+    style REQ fill:#E8F4F8,stroke:#2196F3,stroke-width:2px,color:#000
+    style CHECK fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#000
+    style ADD fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style DRAIN fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style DONE fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style REJECT fill:#FFE6E6,stroke:#F44336,stroke-width:2px,color:#000
+</div>
+          <h2>limit_req_zone — 제한 규칙 정의</h2>
+
+          <p>Nginx에서 Rate Limiting을 설정하는 첫 번째 단계는 <code>limit_req_zone</code>으로 규칙을 정의하는 것이다.</p>
+
+<pre><code class="language-nginx">limit_req_zone $binary_remote_addr zone=users_limit:10m rate=20r/m;</code></pre>
+          <p>이 한 줄에 세 가지 설정이 담겨 있다.</p>
+
+          <ul>
+            <li><strong>$binary_remote_addr</strong> : <mark>어떤 기준으로 요청을 구분</mark>할 것인가. 이 변수는 클라이언트의 IP 주소를 바이너리 형태로 저장한다. 같은 IP에서 오는 요청을 하나의 그룹으로 묶어 제한한다.</li>
+            <li><strong>zone=users_limit:10m</strong> : 공유 메모리 영역의 이름과 크기. <code>users_limit</code>이라는 이름의 10MB 영역을 할당한다. 이 메모리에 각 클라이언트의 요청 카운터가 저장된다.
+          <ul>
+            <li>10MB는 약 16만 개의 IP 주소를 추적할 수 있다</li>
+          </ul>
+          </li>
+            <li><strong>rate=20r/m</strong> : <mark>허용하는 요청 빈도</mark>. 분당 20회, 즉 3초에 1회 요청을 허용한다.</li>
+          </ul>
+
+          <p>실습 프로젝트에서는 서비스별로 다른 Rate Limit을 적용한다.</p>
+
+<pre><code class="language-nginx">limit_req_zone $binary_remote_addr zone=users_limit:10m rate=20r/m;
+limit_req_zone $binary_remote_addr zone=orders_limit:10m rate=15r/m;
+limit_req_zone $binary_remote_addr zone=payments_limit:10m rate=10r/m;</code></pre>
+          <p>결제 서비스는 분당 10회로 가장 엄격하고, 사용자 서비스는 분당 20회로 상대적으로 여유롭다. 서비스의 <mark>민감도와 리소스 비용에 따라 차등 제한</mark>을 거는 것이 실무에서 일반적인 패턴이다.</p>
+
+          <div class="callout callout-info">
+            <div class="callout-title">rate=20r/m의 실제 의미</div>
+            <p><code>rate=20r/m</code>은 "분당 20회"이지만, Nginx 내부에서는 이것을 <mark>3초에 1회</mark>로 변환해서 처리한다. 60초 ÷ 20 = 3초 간격이다. 따라서 3초 안에 2번째 요청이 오면 거부된다. "분당 20회를 어느 시점에 다 써도 된다"는 뜻이 아니라, "3초마다 1회씩 균일하게 허용한다"는 뜻이다. 이 차이를 모르면 테스트할 때 예상과 다른 결과를 보게 된다.</p>
+          </div>
+
+          <h2>limit_req — 제한 적용</h2>
+
+          <p><code>limit_req_zone</code>은 규칙을 정의할 뿐, 실제로 적용하려면 location 블록 안에서 <code>limit_req</code>를 선언해야 한다.</p>
+
+<pre><code class="language-nginx">location /api/users {
+    limit_req zone=users_limit burst=5 nodelay;
+
+    proxy_pass http://user-service;
+    # ...
+}</code></pre>
+          <p>여기서 <code>burst</code>와 <code>nodelay</code>가 핵심이다.</p>
+
+          <h4>burst — 순간 트래픽 허용</h4>
+
+          <p><code>burst=5</code>는 양동이의 크기를 5로 설정한다는 뜻이다. rate를 초과하는 요청이 와도, <mark>5개까지는 대기열에 넣고 순서대로 처리</mark>한다.</p>
+
+          <p>burst가 없으면 3초에 1번 이상의 요청은 모두 즉시 거부된다. 실제 서비스에서는 사용자가 페이지를 열 때 여러 API를 동시에 호출하는 경우가 많기 때문에, burst 없이 운영하면 정상적인 사용자도 429를 보게 된다.</p>
+
+          <h4>nodelay — 대기 없이 즉시 처리</h4>
+
+          <p><code>burst=5</code>만 쓰면 대기열의 요청이 rate 속도에 맞춰 지연 처리된다. 3초 간격으로 하나씩 꺼내서 처리한다는 뜻이다. 응답이 3초, 6초, 9초 뒤에 순차적으로 돌아온다.</p>
+
+          <p><code>nodelay</code>를 추가하면 <mark>burst 범위 내의 요청을 지연 없이 즉시 처리</mark>한다. 5개의 요청이 동시에 왔으면 5개 모두 바로 처리한다. 단, 그 이후에는 rate에 따라 양동이가 비워질 때까지 기다려야 한다.</p>
+
+          <p>burst와 nodelay의 조합이 요청을 어떻게 처리하는지 흐름으로 보면 이해가 쉽다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant C as 클라이언트
+    participant N as Nginx
+    participant B as 백엔드
+
+    Note over C, B: rate=20r/m (3초당 1회), burst=5, nodelay
+
+    rect rgb(232, 248, 232)
+        Note over C, N: 1~6번째 요청 — burst 범위 내, 즉시 처리
+        C->>N: 요청 1 (rate 허용)
+        N->>B: 전달
+        B-->>N: 200 OK
+        N-->>C: 200 OK
+
+        C->>N: 요청 2~6 (burst 소진)
+        N->>B: 즉시 전달 (nodelay)
+        B-->>N: 200 OK
+        N-->>C: 200 OK
+    end
+
+    rect rgb(255, 230, 230)
+        Note over C, N: 7번째 요청 — burst 초과, 거부
+        C->>N: 요청 7
+        N--xC: 429 Too Many Requests
+    end
+
+    rect rgb(255, 243, 224)
+        Note over C, N: 3초 후 — burst 슬롯 1개 회복
+        C->>N: 요청 8
+        N->>B: 전달
+        B-->>N: 200 OK
+        N-->>C: 200 OK
+    end
+</div>
+          <p>초록 영역에서 처음 6개 요청이 한꺼번에 통과한다. rate 허용분 1개 + burst 5개 = 총 6개다. 분홍 영역에서 7번째는 즉시 거부된다. 주황 영역에서 보이듯, 3초가 지나면 burst 슬롯이 1개 회복되어 다시 요청을 받을 수 있다.</p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">burst 슬롯의 회복 속도</div>
+            <p>burst 슬롯은 rate 속도로 회복된다. <code>rate=20r/m</code>이면 3초에 1개씩 회복된다. burst=5를 모두 소진했다면, 5개가 전부 회복되려면 15초가 걸린다.</p>
+          </div>
+
+          <h2>429 상태 코드 설정</h2>
+
+          <p>Nginx의 Rate Limiting 기본 거부 상태 코드는 503이다. 하지만 HTTP 표준에서 <mark>Rate Limiting 초과를 나타내는 적절한 코드는 429 Too Many Requests</mark>다. 실습에서는 이를 명시적으로 설정한다.</p>
+
+<pre><code class="language-nginx">limit_req_status 429;</code></pre>
+          <p>이 설정이 없으면 클라이언트가 503 Service Unavailable을 받게 되는데, 이는 서버 장애와 혼동될 수 있다. 429를 반환하면 "요청이 너무 많다"는 의미가 명확해지고, 클라이언트가 재시도 로직을 적절히 구현할 수 있다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">429 응답과 Retry-After 헤더</div>
+            <p>운영 환경에서는 429 응답에 <code>Retry-After</code> 헤더를 함께 보내는 것이 좋은 관행이다. 이 헤더는 클라이언트에게 "몇 초 후에 다시 시도하라"는 정보를 전달한다. Nginx에서는 <code>add_header Retry-After 3 always;</code> 같은 설정으로 추가할 수 있다.</p>
+          </div>
+
+          <h2>서비스별 차등 Rate Limiting 전략</h2>
+
+          <p>모든 API에 같은 Rate Limit을 적용하는 것은 비효율적이다. 서비스마다 리소스 소비량, 보안 민감도, 사용 빈도가 다르기 때문이다.</p>
+
+          <p>실습 프로젝트의 차등 전략을 보면 이런 원칙을 따르고 있다.</p>
+
+          <ul>
+            <li><strong>user-service (20r/m, burst=5)</strong> : 사용자 조회는 가벼운 연산이다. 상대적으로 넉넉하게 허용한다.</li>
+            <li><strong>order-service (15r/m, burst=3)</strong> : 주문은 비즈니스 로직이 좀 더 복잡하다. 중간 수준으로 제한한다.</li>
+            <li><strong>payment-service (10r/m, burst=3)</strong> : 결제는 가장 민감하고 비용이 높은 연산이다. 가장 엄격하게 제한한다.</li>
+          </ul>
+
+<div class="mermaid">
+flowchart LR
+    subgraph RL ["Rate Limiting 정책"]
+        direction TB
+        U["user-service<br/>20r/m, burst=5"]
+        O["order-service<br/>15r/m, burst=3"]
+        P["payment-service<br/>10r/m, burst=3"]
+    end
+
+    style U fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style O fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#000
+    style P fill:#FFE6E6,stroke:#F44336,stroke-width:2px,color:#000
+    style RL fill:#f8f8f8,stroke:#999
+</div>
+          <p>초록은 여유로운 제한, 주황은 중간, 빨간은 엄격한 제한이다. 이런 차등 전략을 설계할 때는 <mark>해당 API가 호출되었을 때 서버에 얼마나 부하를 주는가</mark>를 기준으로 삼는다.</p>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">burst 없이 Rate Limiting 적용하기</div>
+            <p><code>limit_req zone=users_limit;</code>만 쓰고 burst를 생략하면, rate를 초과하는 모든 요청이 즉시 거부된다. 현실에서 사용자는 페이지 로드 시 여러 API를 동시에 호출한다. burst 없는 Rate Limiting은 정상 사용자를 차단하는 원인이 된다.</p>
+            <p>[!DANGER] rate 값을 초 단위로 오해하기</p>
+            <p><code>rate=20r/m</code>은 "분당 20회까지 쌓아두고 한꺼번에 처리"가 아니라 "3초에 1회씩 균일하게 처리"라는 뜻이다. 이 차이를 모르면 "분당 20회인데 왜 2초 만에 거부되지?"라는 혼란에 빠진다.</p>
+            <p>[!DANGER] 모든 API에 동일한 Rate Limit 적용하기</p>
+            <p>헬스체크 API에 분당 10회 제한을 걸면 모니터링 시스템이 오작동한다. 읽기 전용 API와 쓰기 API, 내부용 API와 외부용 API는 각각 다른 제한을 가져야 한다. <code>limit_req_zone</code>을 서비스별로 분리하는 이유가 여기에 있다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#스프링</span>
+          <span>#Nginx</span>
+          <span>#Rate_Limiting</span>
+          <span>#트래픽제어</span>
+          <span>#burst</span>
+          <span>#nodelay</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="nginx-gateway-2-reverse-proxy.html">&larr; 이전 글</a>
+          <a href="nginx-gateway-4-docker-deploy.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[QueryDSL] 1. 환경 설정과 Q클래스 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[QueryDSL] 1. 환경 설정과 Q클래스</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">QueryDSL 가이드 (1/8)</div>
+            <p>다음 편: <a href="querydsl-2-basic-query.html">[QueryDSL] 2. 기본 쿼리 작성</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">QueryDSL 시리즈</div>
+            <p><strong>01 기본</strong></p>
+            <p>1. <a href="querydsl-1-setup.html">환경 설정과 Q클래스</a> ← 현재 편</p>
+            <p>2. <a href="querydsl-2-basic-query.html">기본 쿼리 작성</a></p>
+            <p>3. <a href="querydsl-3-join-subquery.html">조인과 서브쿼리</a></p>
+            <p><strong>02 실전</strong></p>
+            <p>4. <a href="querydsl-4-dynamic-query.html">동적 쿼리</a></p>
+            <p>5. <a href="querydsl-5-projection-dto.html">프로젝션과 DTO 매핑</a></p>
+            <p>6. <a href="querydsl-6-spring-data.html">Spring Data JPA 통합</a></p>
+            <p><strong>03 심화</strong></p>
+            <p>7. <a href="querydsl-7-performance.html">성능 최적화</a></p>
+            <p>8. <a href="querydsl-8-patterns.html">실전 패턴과 면접 대비</a></p>
+          </div>
+
+          <p>Spring Data JPA의 메서드 이름 기반 쿼리는 단순 조회에는 편리하지만, 조건이 복잡해지면 한계가 온다. <code>@Query</code>로 JPQL을 직접 쓸 수도 있지만 문자열이라 컴파일 타임에 검증이 안 된다. QueryDSL은 이 문제를 <mark>타입 안전한 쿼리 빌더</mark>로 해결한다.</p>
+
+          <h2>왜 QueryDSL인가</h2>
+
+          <p>JPA로 복잡한 조회를 구현하는 방법은 크게 세 가지다.</p>
+
+          <ul>
+            <li><strong>메서드 이름 쿼리</strong> : <code>findByNameAndAgeGreaterThan</code> 같은 방식. 조건이 3개만 넘어가도 메서드 이름이 끔찍해진다.</li>
+            <li><strong>@Query + JPQL</strong> : 문자열로 쿼리를 작성한다. 필드 이름을 오타 내면 런타임에야 터진다. 리팩토링할 때 IDE가 잡아주지 않는다.</li>
+            <li><strong>QueryDSL</strong> : Java 코드로 쿼리를 작성한다. <mark>필드 이름을 잘못 쓰면 컴파일 에러</mark>가 나고, IDE 자동완성이 된다.</li>
+          </ul>
+
+          <p>핵심은 <strong>컴파일 타임 검증</strong>이다. 엔티티 필드가 바뀌면 Q클래스도 함께 바뀌고, 잘못된 참조는 빌드 자체가 실패한다. 런타임에 쿼리가 터지는 사고를 원천 차단하는 셈이다.</p>
+
+<div class="mermaid">
+graph TD
+    A[JPA 조회 방식 선택] --> B{조건이<br>복잡한가?}
+    B -- 아니오 --> C[메서드 이름 쿼리]
+    B -- 예 --> D{타입 안전성이<br>필요한가?}
+    D -- 아니오 --> E["@Query (JPQL)"]
+    D -- 예 --> F[QueryDSL]
+    
+    style F fill:#f9f,stroke:#333,stroke-width:4px
+</div>
+          <h2>Gradle 의존성 설정</h2>
+
+          <p>Spring Boot 프로젝트에서 QueryDSL을 사용하려면 두 종류의 의존성이 필요하다.</p>
+
+<pre><code class="language-gradle">dependencies {
+    // QueryDSL 런타임 라이브러리
+    implementation "com.querydsl:querydsl-jpa:5.0.0:jakarta"
+
+    // Q클래스 생성용 어노테이션 프로세서
+    annotationProcessor "com.querydsl:querydsl-apt:${dependencyManagement.importedProperties['querydsl.version']}:jakarta"
+    annotationProcessor "jakarta.persistence:jakarta.persistence-api"
+    annotationProcessor "jakarta.annotation:jakarta.annotation-api"
+}</code></pre>
+          <p>각 의존성의 역할은 다음과 같다.</p>
+
+          <ul>
+            <li><code>querydsl-jpa</code> — 실제 쿼리를 빌드하고 실행하는 런타임 라이브러리다. <code>:jakarta</code> classifier는 Spring Boot 3.x 이상에서 Jakarta EE 네임스페이스를 사용하기 때문에 반드시 붙여야 한다.</li>
+            <li><code>querydsl-apt</code> — 어노테이션 프로세서. 빌드 시점에 <code>@Entity</code>가 붙은 클래스를 스캔해서 Q클래스를 자동 생성한다.</li>
+            <li><code>jakarta.persistence-api</code>, <code>jakarta.annotation-api</code> — 어노테이션 프로세서가 <code>@Entity</code>, <code>@Table</code> 같은 JPA 어노테이션을 인식하려면 이 의존성이 classpath에 있어야 한다.</li>
+          </ul>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">querydsl-apt 버전 관리</div>
+            <p><code>querydsl-apt</code>의 버전을 <code>${dependencyManagement.importedProperties['querydsl.version']}</code>으로 지정하면 Spring Boot의 의존성 관리가 자동으로 버전을 맞춰준다. 버전을 하드코딩하면 Spring Boot 업그레이드 시 버전 불일치가 생길 수 있다.</p>
+          </div>
+
+          <h2>Q클래스 생성 원리</h2>
+
+          <p>빌드하면 <code>build/generated/sources/annotationProcessor/java/main</code> 경로에 Q클래스가 생성된다. <mark>엔티티 하나당 Q클래스 하나</mark>가 만들어진다.</p>
+
+          <p>생성 과정은 이렇다.</p>
+
+          <ol>
+            <li>Gradle이 컴파일을 시작한다.</li>
+            <li><code>querydsl-apt</code> 어노테이션 프로세서가 소스 코드에서 <code>@Entity</code>가 붙은 클래스를 찾는다.</li>
+            <li>각 엔티티의 필드 정보를 읽어서 Q클래스 소스 코드를 자동 생성한다.</li>
+            <li>생성된 Q클래스는 일반 Java 클래스처럼 컴파일되어 사용할 수 있다.</li>
+          </ol>
+
+<div class="mermaid">
+flowchart LR
+    A[Entity 작성] -->|@Entity| B[Gradle Build/Compile]
+    B --> C{APT 스캔}
+    C -->|Q클래스 소스 생성| D[build/generated/...]
+    D --> E[컴파일된 Q클래스 사용]
+    
+    subgraph "Annotation Processing"
+    C
+    D
+    end
+</div>
+          <p>예를 들어, 다음과 같은 <code>User</code> 엔티티가 있다고 하자.</p>
+
+<pre><code class="language-java">@Entity
+public class User extends BaseEntity {
+    private String name;
+    private String email;
+}</code></pre>
+          <p>이 엔티티로부터 <code>QUser</code> 클래스가 생성된다.</p>
+
+<pre><code class="language-java">public class QUser extends EntityPathBase&lt;User&gt; {
+
+    public static final QUser user = new QUser("user");
+
+    public final StringPath name = createString("name");
+    public final StringPath email = createString("email");
+    // ...
+}</code></pre>
+          <p>Q클래스 안에는 <mark>정적 인스턴스</mark>(<code>QUser.user</code>)와 엔티티 필드에 대응하는 <strong>Path 필드</strong>가 들어있다.</p>
+
+          <h3>Path 타입</h3>
+
+          <p>Q클래스의 각 필드는 엔티티 필드의 Java 타입에 따라 다른 Path 타입으로 생성된다. Path 타입마다 사용할 수 있는 메서드가 다르다.</p>
+
+          <ul>
+            <li><code>String</code> → <code>StringPath</code>
+          <ul>
+            <li><code>like()</code>, <code>contains()</code>, <code>startsWith()</code> 등 문자열 전용 메서드를 제공한다.</li>
+          </ul>
+          </li>
+            <li><code>Integer</code>, <code>Long</code> → <code>NumberPath</code>
+          <ul>
+            <li><code>add()</code>, <code>subtract()</code>, <code>avg()</code> 등 숫자 연산 메서드를 제공한다.</li>
+          </ul>
+          </li>
+            <li><code>Instant</code>, <code>LocalDateTime</code> → <code>DateTimePath</code>
+          <ul>
+            <li><code>before()</code>, <code>after()</code> 등 날짜 비교 메서드를 제공한다.</li>
+          </ul>
+          </li>
+            <li><code>UUID</code> → <code>ComparablePath</code>
+          <ul>
+            <li><code>eq()</code>, <code>ne()</code> 등 기본 비교 연산 메서드를 제공한다.</li>
+          </ul>
+          </li>
+            <li>연관 엔티티 (<code>@ManyToOne</code> 등) → 해당 엔티티의 Q타입
+          <ul>
+            <li><code>follow.follower.name</code>처럼 중첩 접근이 가능하다.</li>
+          </ul>
+          </li>
+          </ul>
+
+          <p><mark>Path 타입이 곧 타입 안전성의 핵심</mark>이다. <code>StringPath</code>에서는 <code>like()</code>를 쓸 수 있지만 <code>NumberPath</code>에서는 쓸 수 없다. 잘못된 연산은 컴파일 에러로 잡힌다.</p>
+
+<div class="mermaid">
+classDiagram
+    class User {
+        +String name
+        +Long id
+        +LocalDateTime createdAt
+    }
+    class QUser {
+        +StringPath name
+        +NumberPath id
+        +DateTimePath createdAt
+        +static QUser user
+    }
+    User ..> QUser : Generate
+</div>
+          <h3>static import 패턴</h3>
+
+          <p>Q클래스를 사용할 때는 정적 인스턴스를 static import하는 것이 관례다.</p>
+
+<pre><code class="language-java">import static com.example.domain.entity.QUser.user;
+import static com.example.domain.entity.QFollow.follow;</code></pre>
+          <p>이렇게 하면 쿼리를 작성할 때 <code>user.name</code>, <code>follow.createdAt</code>처럼 SQL과 비슷한 느낌으로 깔끔하게 쓸 수 있다.</p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">같은 테이블 셀프 조인</div>
+            <p>같은 엔티티를 두 번 참조해야 하는 경우에는 static import된 기본 인스턴스를 쓸 수 없다. 별칭이 충돌하기 때문이다. 이때는 새 인스턴스를 직접 만들어야 한다.</p>
+            <p>```java</p>
+            <p>QUser userA = new QUser("userA");</p>
+            <p>QUser userB = new QUser("userB");</p>
+            <p>```</p>
+          </div>
+
+          <h2>JPAQueryFactory 설정</h2>
+
+          <p>QueryDSL로 쿼리를 실행하려면 <code>JPAQueryFactory</code> 빈을 등록해야 한다. 이 팩토리가 <code>EntityManager</code>를 감싸서 타입 안전한 쿼리 빌더를 제공한다.</p>
+
+<pre><code class="language-java">@Configuration
+public class QueryDslConfig {
+
+    @Bean
+    public JPAQueryFactory jpaQueryFactory(EntityManager entityManager) {
+        return new JPAQueryFactory(entityManager);
+    }
+}</code></pre>
+          <p><code>JPAQueryFactory</code>는 내부적으로 <code>EntityManager</code>를 사용해서 JPQL을 생성하고 실행한다. 스프링이 관리하는 <code>EntityManager</code>를 주입받기 때문에 <mark>트랜잭션 범위 내에서 동작</mark>한다.</p>
+
+          <h3>동시성 안전</h3>
+
+          <p><code>JPAQueryFactory</code>를 싱글톤 빈으로 등록해도 동시성 문제가 없다. 스프링의 <code>EntityManager</code>는 실제로는 프록시 객체이고, 각 트랜잭션마다 다른 실제 <code>EntityManager</code>에 위임하기 때문이다. 여러 스레드가 같은 <code>JPAQueryFactory</code>를 동시에 사용해도 각 요청이 서로 간섭하지 않는다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    participant App as Application Code
+    participant JQF as JPAQueryFactory<br>(Singleton Bean)
+    participant EMP as EntityManager<br>(Proxy)
+    participant EM1 as Actual EM<br>(Thread 1)
+    participant EM2 as Actual EM<br>(Thread 2)
+
+    rect rgb(240, 240, 240)
+    Note over App, EM1: Thread 1 (T1 Context)
+    App->>JQF: selectFrom(user)...
+    JQF->>EMP: call method
+    EMP->>EM1: Delegate to T1 EM
+    end
+
+    rect rgb(220, 220, 220)
+    Note over App, EM2: Thread 2 (T2 Context)
+    App->>JQF: selectFrom(user)...
+    JQF->>EMP: call method
+    EMP->>EM2: Delegate to T2 EM
+    end
+</div>
+          <div class="callout callout-info">
+            <div class="callout-title">EntityManager 프록시의 동작 방식</div>
+            <p>스프링 컨테이너에서 주입받는 <code>EntityManager</code>는 <code>SharedEntityManagerInvocationHandler</code>라는 프록시다. 메서드가 호출되면 현재 트랜잭션에 바인딩된 실제 <code>EntityManager</code>를 찾아서 위임한다. 트랜잭션별로 독립된 영속성 컨텍스트를 사용하므로, 싱글톤 빈에 주입해도 안전하다.</p>
+          </div>
+
+          <h2>첫 번째 쿼리 맛보기</h2>
+
+          <p>설정이 끝났으니, 간단한 쿼리를 하나 작성해보자.</p>
+
+<pre><code class="language-java">@RequiredArgsConstructor
+@Repository
+public class UserQueryRepository {
+
+    private final JPAQueryFactory queryFactory;
+
+    public List&lt;User&gt; findByName(String name) {
+        return queryFactory
+                .selectFrom(user)
+                .where(user.name.eq(name))
+                .fetch();
+    }
+}</code></pre>
+          <p><code>selectFrom(user)</code>는 <code>select(user).from(user)</code>의 축약형이다. <code>where</code>에 조건을 넣고, <code>fetch()</code>로 결과를 가져온다. SQL로 변환하면 <code>SELECT * FROM user WHERE name = ?</code>와 같다.</p>
+
+          <p>여기서 <code>user</code>는 <code>QUser.user</code>를 static import한 것이다. <code>user.name</code>은 <code>StringPath</code> 타입이므로 <code>eq()</code>, <code>like()</code>, <code>contains()</code> 같은 메서드를 쓸 수 있다. 다음 편에서 이런 기본 쿼리를 더 자세히 다룬다.</p>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">Q클래스가 없다는 컴파일 에러</div>
+            <p><code>QUser</code>를 import했는데 "cannot find symbol" 에러가 나는 경우. 빌드를 한 번도 안 했거나, 엔티티를 수정한 뒤 다시 빌드하지 않은 것이다. <code>./gradlew compileJava</code>를 실행하면 Q클래스가 재생성된다.</p>
+            <p>[!DANGER] jakarta classifier 누락</p>
+            <p><code>querydsl-jpa:5.0.0</code>만 쓰고 <code>:jakarta</code>를 빼먹으면, <code>javax</code> 패키지 기반 라이브러리가 들어온다. Spring Boot 3.x 이상은 <code>jakarta</code> 패키지를 쓰므로 런타임에 <code>ClassNotFoundException</code>이 발생한다. 반드시 <code>:jakarta</code>를 붙여야 한다.</p>
+            <p>[!DANGER] Lombok과 annotationProcessor 순서</p>
+            <p>Lombok과 QueryDSL APT를 함께 쓸 때, Lombok의 <code>annotationProcessor</code>가 먼저 선언되어야 한다. 순서가 뒤바뀌면 Lombok이 생성하는 getter/setter가 아직 없는 상태에서 Q클래스를 생성하려 해서 컴파일 에러가 날 수 있다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#QueryDSL</span>
+          <span>#JPA</span>
+          <span>#Spring</span>
+          <span>#설정</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+          <a href="querydsl-2-basic-query.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

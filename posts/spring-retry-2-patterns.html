@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Spring Retry] 2. 재시도 책임과 실전 패턴 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Spring Retry] 2. 재시도 책임과 실전 패턴</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Spring Retry (2/2)</div>
+            <p>이전 편: <a href="spring-retry-1-retryable.html">[Spring Retry] 1. @Retryable과 백오프 전략</a></p>
+            <p>이 문서가 시리즈의 마지막 편입니다.</p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">시리즈 안내</div>
+            <p>- <a href="spring-retry-1-retryable.html">1편 — @Retryable과 백오프 전략</a></p>
+            <p>- <strong>2편 — 재시도 책임과 실전 패턴</strong> ← 현재 문서</p>
+          </div>
+
+          <p><a href="spring-retry-1-retryable.html">1편</a>에서 <code>@Retryable</code>의 기본 사용법과 백오프 전략을 다뤘다. 하지만 "어디에 붙일 것인가"라는 질문에는 답하지 않았다. 이번 편에서는 <mark>재시도 책임의 위치</mark>를 설계하고, <code>@Recover</code>, <code>@Async</code>, <code>@TransactionalEventListener</code>와 함께 실전 패턴을 조립하는 방법을 다룬다.</p>
+
+          <h2>@Recover의 동작 원리</h2>
+
+          <p><code>@Retryable</code> 메서드가 <code>maxAttempts</code>만큼 시도한 뒤에도 실패하면, <mark>마지막 예외가 그대로 던져진다</mark>. <code>@Recover</code>는 이 최종 실패 시점에 개입하여 대안 동작을 실행하는 어노테이션이다.</p>
+
+<pre><code class="language-java">@Retryable(retryFor = S3Exception.class, maxAttempts = 3)
+public void uploadFile(String key, byte[] data) {
+    s3Client.putObject(key, data);
+}
+
+@Recover
+public void recover(S3Exception e, String key, byte[] data) {
+    log.error("S3 업로드 최종 실패: key={}", key, e);
+}</code></pre>
+          <p><code>@Recover</code>가 호출되면 <mark>예외가 더 이상 전파되지 않는다</mark>. 호출자 입장에서는 정상 리턴으로 보인다. 반대로, <code>@Recover</code>가 없으면 마지막 시도의 예외가 호출자에게 그대로 전달된다.</p>
+
+          <p>재시도부터 복구까지의 전체 흐름을 보면 각 단계의 역할이 명확해진다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant Caller as 호출자
+    participant Proxy as Spring Retry 프록시
+    participant Method as uploadFile()
+    participant Recover as @Recover
+
+    Caller->>Proxy: uploadFile(key, data)
+
+    rect rgb(255, 243, 224)
+        Note over Proxy, Method: 재시도 구간
+        Proxy->>Method: 시도 1
+        Method-->>Proxy: S3Exception
+        Note over Proxy: delay 대기
+        Proxy->>Method: 시도 2
+        Method-->>Proxy: S3Exception
+        Note over Proxy: delay 대기
+        Proxy->>Method: 시도 3
+        Method-->>Proxy: S3Exception
+    end
+
+    rect rgb(232, 248, 232)
+        Note over Proxy, Recover: 복구 구간
+        Proxy->>Recover: recover(e, key, data)
+        Recover-->>Proxy: 정상 리턴
+    end
+
+    Proxy-->>Caller: 정상 리턴
+</div>
+          <p>주황색 영역이 재시도 구간이다. 3번 모두 실패하면 초록색 영역의 <code>@Recover</code>로 넘어간다. <code>@Recover</code>가 정상적으로 끝나면, 호출자는 예외를 모른 채 정상 리턴을 받는다.</p>
+
+          <h3>시그니처 매칭 규칙</h3>
+
+          <p><code>@Recover</code> 메서드의 시그니처는 세 가지 조건을 모두 만족해야 한다.</p>
+
+          <ul>
+            <li><strong>첫 번째 파라미터</strong> : 발생한 예외 타입. <code>@Retryable</code>의 <code>retryFor</code>와 일치하거나 그 상위 타입이어야 한다</li>
+            <li><strong>나머지 파라미터</strong> : <code>@Retryable</code> 메서드의 파라미터와 <mark>동일한 타입, 동일한 순서</mark></li>
+            <li><strong>반환 타입</strong> : <code>@Retryable</code> 메서드와 동일 (void면 void, String이면 String)</li>
+          </ul>
+
+          <p>하나라도 맞지 않으면 Spring은 <code>@Recover</code>를 매칭하지 못한다. 이때 <mark>컴파일 에러도, 런타임 경고도 없다</mark>. 그냥 조용히 무시되고 예외가 그대로 던져진다. 디버깅이 매우 어려워지므로 시그니처를 반드시 확인해야 한다.</p>
+
+<div class="mermaid">
+flowchart TD
+    A["@Retryable 메서드<br/>maxAttempts 초과"] --> B{"@Recover<br/>매칭 성공?"}
+    B -->|"시그니처 일치"| C["@Recover 실행"]
+    C --> D["정상 리턴"]
+    B -->|"불일치 또는 없음"| E["예외 그대로 전파"]
+
+    style A fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#000
+    style B fill:#E8F4F8,stroke:#2196F3,stroke-width:2px,color:#000
+    style C fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style D fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style E fill:#FFE6E6,stroke:#F44336,stroke-width:2px,color:#000
+</div>
+          <p><code>@Recover</code> 매칭 실패는 초록 경로가 아닌 빨간 경로를 탄다. 빨간 경로로 빠지면 재시도가 의미 없어진다. 재시도를 3번 했지만 결국 예외가 그대로 올라가기 때문이다.</p>
+
+          <h2>재시도 책임은 누구의 것인가</h2>
+
+          <p><code>@Retryable</code>을 어디에 붙여야 할까? S3에 파일을 올리는 <code>S3Service</code>에 붙여야 할까, 아니면 이벤트를 수신하는 <code>S3EventListener</code>에 붙여야 할까?</p>
+
+          <h3>S3Service에 붙이면 생기는 문제</h3>
+
+          <p>직관적으로는 S3Service에 붙이는 게 자연스러워 보인다. "S3 업로드는 실패할 수 있으니까 S3Service가 재시도하면 되지 않나?" 라는 생각이다.</p>
+
+<pre><code class="language-java">// S3Service에 @Retryable을 붙인 경우
+@Retryable(maxAttempts = 3, backoff = @Backoff(delay = 1000, multiplier = 2))
+public void put(String fileName, String contentType, byte[] bytes) {
+    s3Client.putObject(fileName, contentType, bytes);
+}</code></pre>
+          <p>문제는 <mark>모든 호출자가 같은 재시도 정책에 묶인다</mark>는 것이다. S3Service를 호출하는 곳이 하나가 아니기 때문이다.</p>
+
+<div class="mermaid">
+flowchart TD
+    subgraph Callers ["호출자들"]
+        direction TB
+        A["이벤트 리스너<br/>3회 재시도 필요"]
+        B["배치 업로드<br/>재시도 불필요"]
+        C["동기 API<br/>즉시 실패 필요"]
+    end
+
+    S["S3Service<br/>@Retryable(maxAttempts=3)"]
+
+    A --> S
+    B --> S
+    C --> S
+
+    style A fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style B fill:#FFE6E6,stroke:#F44336,stroke-width:2px,color:#000
+    style C fill:#FFE6E6,stroke:#F44336,stroke-width:2px,color:#000
+    style S fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#000
+    style Callers fill:#f8f8f8,stroke:#999
+</div>
+          <p>이벤트 리스너는 비동기라서 3회 재시도해도 괜찮다. 하지만 배치 업로드는 1000개 파일을 올리는데 실패한 파일마다 재시도하면 시간이 3배로 늘어난다. 동기 API는 사용자가 응답을 기다리고 있으니 재시도 대기 시간이 곧 응답 지연이 된다.</p>
+
+          <p>S3Service의 책임은 "파일을 업로드하고, 실패하면 예외를 던지는 것"이다. <mark>재시도 여부는 S3Service가 결정할 문제가 아니다</mark>. 그건 호출하는 쪽의 맥락에 따라 달라지는 정책이다.</p>
+
+          <h3>리스너에 붙이는 것이 맞다</h3>
+
+          <p>재시도 정책은 <mark>호출 맥락을 아는 쪽</mark>이 결정해야 한다. "이 실패가 치명적인가?", "재시도할 시간적 여유가 있는가?", "최종 실패 시 어떻게 할 것인가?" — 이 판단은 호출자만 할 수 있다.</p>
+
+<pre><code class="language-java">@Component
+@RequiredArgsConstructor
+public class S3EventListener {
+    private final S3Service s3Service;
+
+    @Retryable(maxAttempts = 3, backoff = @Backoff(delay = 1000, multiplier = 2))
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void handleS3PutEvent(S3PutEvent event) {
+        s3Service.put(event.fileName(), event.contentType(), event.bytes());
+    }
+
+    @Recover
+    public void recover(Exception e, S3PutEvent event) {
+        log.error("S3 업로드 최종 실패: key={}", event.fileName(), e);
+    }
+}</code></pre>
+          <p>이렇게 하면 S3Service는 순수한 인프라 어댑터로 남고, 재시도 정책은 각 호출자가 자신의 맥락에 맞게 독립적으로 결정한다.</p>
+
+<div class="mermaid">
+flowchart TD
+    subgraph Callers ["호출자별 독립 정책"]
+        direction TB
+        A["이벤트 리스너<br/>@Retryable(3회)"]
+        B["배치 업로드<br/>재시도 없음"]
+        C["동기 API<br/>재시도 없음"]
+    end
+
+    S["S3Service<br/>순수 인프라 어댑터"]
+
+    A --> S
+    B --> S
+    C --> S
+
+    style A fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style B fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style C fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style S fill:#E8F4F8,stroke:#2196F3,stroke-width:2px,color:#000
+    style Callers fill:#f8f8f8,stroke:#999
+</div>
+          <p>이전 다이어그램에서는 빨간색이 2개였지만, 지금은 모두 초록색이다. 각 호출자가 자기 맥락에 맞는 정책을 쓰기 때문이다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">설계 원칙</div>
+            <p><strong>Service는 "무엇을 하는가"</strong>, <strong>Listener는 "실패하면 어떻게 할 것인가"</strong> 를 결정한다. 재시도는 "어떻게 할 것인가"의 영역이므로 호출자(Listener)의 책임이다.</p>
+          </div>
+
+          <h2>@Retryable과 @Async와 @TransactionalEventListener 조합</h2>
+
+          <p>실전에서는 세 어노테이션이 한 세트로 움직인다. <a href="직접-호출과-이벤트의-경계.html">이벤트와 트랜잭션 설계 1편</a>과 <a href="트랜잭션-경계와-부수효과.html">이벤트와 트랜잭션 설계 2편</a>에서 다뤘듯이, 부수효과는 트랜잭션 커밋 후 비동기로 처리하는 것이 안전하다. 여기에 재시도까지 더하면 견고한 파이프라인이 완성된다.</p>
+
+<pre><code class="language-java">@Async("s3UploadTaskExecutor")
+@Retryable(maxAttempts = 3, backoff = @Backoff(delay = 1000, multiplier = 2))
+@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+public void handleS3PutEvent(S3PutEvent event) {
+    s3Service.put(event.fileName(), event.contentType(), event.bytes());
+}
+
+@Recover
+public void recover(Exception e, S3PutEvent event) {
+    log.error("S3 업로드 최종 실패: key={}", event.fileName(), e);
+}</code></pre>
+          <p>각 어노테이션이 하나씩 레이어를 담당한다. 이 조합이 실행되는 순서를 살펴보자.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant Service as ClothesService
+    participant Spring as Spring
+    participant Thread as 비동기 스레드
+    participant Retry as Spring Retry
+    participant S3 as S3Service
+
+    rect rgb(240, 248, 255)
+        Note over Service, Spring: 트랜잭션 커밋
+        Service->>Spring: publishEvent(S3PutEvent)
+        Note over Spring: 트랜잭션 커밋 완료 후 전달
+    end
+
+    rect rgb(232, 248, 232)
+        Note over Spring, Thread: 비동기 전환
+        Spring-)Thread: handleS3PutEvent(event)
+    end
+
+    rect rgb(255, 243, 224)
+        Note over Thread, S3: 재시도 구간
+        Thread->>Retry: 프록시 진입
+        Retry->>S3: put() 시도 1
+        S3-->>Retry: 실패
+        Note over Retry: 1초 대기
+        Retry->>S3: put() 시도 2
+        S3-->>Retry: 성공
+        Retry-->>Thread: 정상 리턴
+    end
+</div>
+          <p>파란 영역에서 트랜잭션이 커밋된 후 이벤트가 전달되고, 초록 영역에서 별도 스레드로 넘어간다. 주황 영역에서 재시도가 진행된다. 이 순서 덕분에 <mark>트랜잭션 롤백과 재시도가 서로 간섭하지 않는다</mark>.</p>
+
+          <h3>이 조합이 동작하는 이유</h3>
+
+          <p>세 어노테이션이 모두 프록시 기반이라는 점이 핵심이다. <code>S3EventListener</code>가 <code>@Component</code>로 등록되어 있으므로 Spring이 프록시를 생성한다. 외부에서 <code>handleS3PutEvent()</code>를 호출하면 프록시를 통과하고, 프록시가 <code>@Async</code> → <code>@Retryable</code> → <code>@TransactionalEventListener</code> 순서로 처리한다.</p>
+
+          <p><a href="spring-event-2-transactional.html">@TransactionalEventListener</a>에서 설명했듯이, <code>AFTER_COMMIT</code>은 트랜잭션 커밋 이후에만 리스너를 실행한다. <code>@Async</code>가 별도 스레드에서 실행하므로 원래 트랜잭션 스레드를 블로킹하지 않는다. <code>@Retryable</code>이 실패 시 자동으로 재시도한다.</p>
+
+          <h3>내부 호출 함정</h3>
+
+          <p>프록시 기반이기 때문에 <mark>같은 클래스 내부에서 호출하면 동작하지 않는다</mark>. 이건 <code>@Async</code>, <code>@Transactional</code>과 동일한 제약이다.</p>
+
+<pre><code class="language-java">// 동작하지 않는 코드
+@Component
+public class S3EventListener {
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void handleS3PutEvent(S3PutEvent event) {
+        this.retryableUpload(event);  // 프록시를 우회 — @Retryable 무시
+    }
+
+    @Retryable(maxAttempts = 3)
+    public void retryableUpload(S3PutEvent event) {
+        s3Service.put(event.fileName(), event.contentType(), event.bytes());
+    }
+}</code></pre>
+          <p><code>this.retryableUpload()</code>는 프록시가 아닌 실제 객체의 메서드를 호출한다. Spring Retry 프록시를 건너뛰므로 재시도가 전혀 일어나지 않는다.</p>
+
+<div class="mermaid">
+flowchart TD
+    subgraph OK ["프록시 경유 — 정상 동작"]
+        direction LR
+        A1["Spring"] -->|"프록시 호출"| B1["Retry 프록시"]
+        B1 --> C1["handleS3PutEvent()"]
+    end
+
+    OK ~~~ NG
+
+    subgraph NG ["내부 호출 — 프록시 우회"]
+        direction LR
+        A2["handleS3PutEvent()"] -->|"this.retryableUpload()"| B2["retryableUpload()"]
+    end
+
+    style B1 fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style C1 fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style A1 fill:#E8F4F8,stroke:#2196F3,stroke-width:2px,color:#000
+    style A2 fill:#FFE6E6,stroke:#F44336,stroke-width:2px,color:#000
+    style B2 fill:#FFE6E6,stroke:#F44336,stroke-width:2px,color:#000
+    style OK fill:#f0f8f0,stroke:#4CAF50
+    style NG fill:#fff0f0,stroke:#F44336
+</div>
+          <p>위쪽 초록 경로처럼 Spring이 프록시를 통해 호출해야 <code>@Retryable</code>이 동작한다. 아래쪽 빨간 경로는 <code>this</code>로 직접 호출하므로 프록시를 건너뛴다.</p>
+
+          <p>해결 방법은 두 가지다.</p>
+
+          <ul>
+            <li><strong>리스너 메서드 자체에 <code>@Retryable</code> 붙이기</strong> : 내부 호출이 없으므로 프록시가 정상 작동한다. 앞서 본 코드가 이 방식이다</li>
+            <li><strong>재시도 로직을 별도 빈으로 분리하기</strong> : <code>RetryableS3Uploader</code> 같은 빈을 만들고 리스너가 주입받아 호출한다</li>
+          </ul>
+
+          <p>첫 번째 방법이 간결하고 직관적이다. 별도 빈을 만들면 클래스가 하나 더 생기고, 재시도 정책이 리스너에서 분리되어 흐름을 파악하기 어려워진다.</p>
+
+          <h2>프로젝트 적용 예시</h2>
+
+          <p>실제 WeatherFit 프로젝트의 S3EventListener에 이 패턴을 적용한 전체 코드다.</p>
+
+<pre><code class="language-java">@Component
+@RequiredArgsConstructor
+@Slf4j
+public class S3EventListener {
+    private final S3Service s3Service;
+
+    @Async("s3UploadTaskExecutor")
+    @Retryable(maxAttempts = 3, backoff = @Backoff(delay = 1000, multiplier = 2))
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void handleS3PutEvent(S3PutEvent event) {
+        s3Service.put(event.fileName(), event.contentType(), event.bytes());
+    }
+
+    @Recover
+    public void recover(Exception e, S3PutEvent event) {
+        log.error("S3 업로드 최종 실패: key={}", event.fileName(), e);
+    }
+}</code></pre>
+          <p>각 어노테이션이 왜 이 자리에 있는지 정리하면 다음과 같다.</p>
+
+          <ul>
+            <li><code>@Component</code> : Spring 빈으로 등록되어 프록시가 생성된다. <code>@Async</code>, <code>@Retryable</code> 모두 프록시 기반이므로 필수다</li>
+            <li><code>@Async("s3UploadTaskExecutor")</code> : S3 업로드 전용 스레드 풀에서 실행한다. 메인 스레드를 블로킹하지 않는다</li>
+            <li><code>@Retryable(maxAttempts = 3, backoff = @Backoff(delay = 1000, multiplier = 2))</code> : 실패 시 1초 → 2초 간격으로 최대 3회 시도한다</li>
+            <li><code>@TransactionalEventListener(phase = AFTER_COMMIT)</code> : 트랜잭션이 커밋된 후에만 실행한다. 롤백되면 S3 업로드 자체가 일어나지 않는다</li>
+            <li><code>@Recover</code> : 3회 모두 실패하면 로그를 남긴다. 예외가 더 이상 전파되지 않으므로 비동기 스레드가 조용히 종료된다</li>
+          </ul>
+
+          <p>이 구조의 실행 타임라인을 시간 축으로 정리하면 전체 그림이 한눈에 들어온다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    actor User as 사용자
+    participant API as ClothesController
+    participant Service as ClothesService
+    participant DB as DB
+    participant Spring as Spring Event
+    participant Thread as 비동기 스레드
+    participant S3 as S3Service
+    participant Recover as @Recover
+
+    rect rgb(240, 248, 255)
+        Note over User, DB: 동기 요청 처리
+        User->>API: POST /clothes
+        API->>Service: create()
+        Service->>DB: save(clothes)
+        Service->>Spring: publishEvent(S3PutEvent)
+        DB-->>Service: 커밋 완료
+        Service-->>API: ClothesDto
+        API-->>User: 201 Created
+    end
+
+    rect rgb(232, 248, 232)
+        Note over Spring, Recover: 비동기 + 재시도
+        Spring-)Thread: handleS3PutEvent(event)
+        Thread->>S3: put() 시도 1
+        S3-->>Thread: 실패
+        Note over Thread: 1초 대기
+        Thread->>S3: put() 시도 2
+        S3-->>Thread: 실패
+        Note over Thread: 2초 대기
+        Thread->>S3: put() 시도 3
+        S3-->>Thread: 실패
+        Thread->>Recover: recover(e, event)
+        Note over Recover: 로그 기록
+    end
+</div>
+          <p>파란 영역에서 사용자는 즉시 응답을 받는다. S3 업로드는 초록 영역에서 완전히 별개로 진행된다. 재시도가 3번 다 실패해도 사용자 응답에는 영향이 없다.</p>
+
+          <h2>면접 Q&A</h2>
+
+          <div class="callout callout-question">
+            <div class="callout-title">@Retryable을 Service에 두면 안 되나요?</div>
+            <p>안 되는 건 아니다. 하지만 재시도 정책은 호출 맥락에 따라 달라져야 한다. 배치에서는 재시도가 불필요하고, 동기 API에서는 재시도 대기가 응답 지연이 된다. Service에 고정하면 <mark>모든 호출자가 같은 정책에 묶이는</mark> 문제가 생긴다. 재시도는 "무엇을 하느냐"가 아니라 "실패했을 때 어떻게 할 것이냐"의 문제이므로, 호출자가 결정하는 것이 맞다.</p>
+            <p>[!QUESTION] @Retryable과 @Transactional을 함께 쓰면 어떻게 되나요?</p>
+            <p>주의가 필요하다. <code>@Transactional</code> 메서드 안에서 예외가 터지면 트랜잭션이 롤백 마킹된다. 이 상태에서 재시도해봐야 <mark>같은 트랜잭션이 이미 롤백 마킹</mark>되어 있으므로 의미가 없다. 재시도할 때마다 새로운 트랜잭션이 필요하다면 <code>@Retryable</code>을 <code>@Transactional</code> 바깥에 두거나, <code>Propagation.REQUIRES_NEW</code>를 사용해야 한다.</p>
+            <p>[!QUESTION] @Recover가 매칭 안 되면 어떤 일이 일어나나요?</p>
+            <p>컴파일 에러도, 런타임 경고도 없다. <mark>조용히 무시</mark>되고 마지막 시도의 예외가 그대로 호출자에게 던져진다. 시그니처 불일치(파라미터 타입, 순서, 반환 타입)가 가장 흔한 원인이다. <code>@Recover</code>를 작성한 뒤에는 반드시 일부러 실패시켜서 실제로 호출되는지 테스트해야 한다.</p>
+            <p>[!QUESTION] 비동기 리스너에서 @Retryable이 동작하는 이유는 뭔가요?</p>
+            <p>리스너가 <code>@Component</code>로 등록된 <mark>별도 빈</mark>이기 때문이다. Spring은 빈마다 프록시를 생성하고, 외부에서 메서드를 호출할 때 프록시를 경유한다. 이벤트 발행 → 리스너 호출은 Spring이 프록시를 통해 하므로 <code>@Retryable</code>이 정상 동작한다. 같은 클래스 내부에서 <code>this.method()</code>로 호출하면 프록시를 건너뛰어 동작하지 않는다.</p>
+            <p>[!QUESTION] @Async + @Retryable에서 재시도 중 스레드는 점유되나요?</p>
+            <p>그렇다. <code>@Async</code>로 할당된 스레드 하나가 <mark>재시도가 끝날 때까지 점유</mark>된다. <code>@Backoff(delay = 1000, multiplier = 2)</code>에서 3회 시도하면 최대 1초 + 2초 = 3초 동안 스레드를 잡고 있는 셈이다. 스레드 풀 크기와 재시도 정책을 함께 고려해야 한다.</p>
+          </div>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">@Recover 시그니처 불일치</div>
+            <p><code>@Recover</code> 메서드의 파라미터 타입이나 순서가 <code>@Retryable</code> 메서드와 다르면, Spring이 매칭에 실패하고 조용히 무시한다. 컴파일 에러가 나지 않으므로 운영 환경에서 발견되는 경우가 많다. <code>@Recover</code>를 추가한 뒤에는 <mark>의도적으로 실패시키는 테스트</mark>를 반드시 작성해야 한다.</p>
+            <p>[!DANGER] @Retryable을 내부 호출로 사용</p>
+            <p>같은 클래스에서 <code>this.retryableMethod()</code>를 호출하면 프록시를 우회하여 재시도가 전혀 일어나지 않는다. 리스너 메서드 자체에 <code>@Retryable</code>을 붙이거나, 재시도 대상 메서드를 별도 빈으로 분리해야 한다.</p>
+            <p>[!DANGER] 모든 예외에 재시도</p>
+            <p><code>retryFor</code>를 지정하지 않으면 모든 예외에 재시도한다. <code>IllegalArgumentException</code>처럼 <mark>재시도해도 결과가 바뀌지 않는 예외</mark>까지 3번씩 시도하면 시간 낭비이고 외부 서비스에 불필요한 부하를 준다. 일시적 실패(네트워크, 타임아웃)만 재시도 대상으로 지정해야 한다.</p>
+            <p>[!DANGER] @Retryable과 @Transactional의 순서 미고려</p>
+            <p><code>@Retryable</code> 메서드 안에서 <code>@Transactional</code>이 동작하면, 재시도할 때마다 같은 롤백된 트랜잭션을 재사용하려고 시도한다. 재시도마다 새 트랜잭션이 필요하다면 <code>@Retryable</code>을 트랜잭션 바깥에 배치하거나 <code>REQUIRES_NEW</code>를 명시해야 한다.</p>
+            <p>[!DANGER] @Recover에서 예외를 다시 던지는 것</p>
+            <p><code>@Recover</code>의 역할은 최종 실패를 우아하게 처리하는 것이다. 여기서 다시 예외를 던지면 <code>@Recover</code>를 쓰는 의미가 없어진다. 로그를 남기거나, 상태를 업데이트하거나, 관리자에게 알림을 보내는 등 <mark>복구 가능한 동작</mark>을 수행해야 한다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Spring</span>
+          <span>#Retry</span>
+          <span>#Retryable</span>
+          <span>#Recover</span>
+          <span>#Async</span>
+          <span>#TransactionalEventListener</span>
+          <span>#프록시</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="spring-retry-1-retryable.html">&larr; 이전 글</a>
+          <a href="../pages/nbuntu.html">목록으로 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>9. 05 실행 검증과 문제 해결 루틴 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">9. 05 실행 검증과 문제 해결 루틴</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Docker Compose 정리 (9/9)</div>
+            <p>이전 편: <a href="docker-compose-8-postgresql.html">8. 04 PostgreSQL 볼륨과 초기화 다루기</a></p>
+            <p>이 문서가 시리즈의 마지막 편입니다.</p>
+          </div>
+
+
+
+          <p>﻿# [Docker Compose 실습] 실행 검증과 문제 해결 루틴</p>
+
+          <div class="callout callout-info">
+            <div class="callout-title">Docker Compose 실습편</div>
+            <p>- <a href="docker-compose-5-diagnose.html">현재 docker-compose.yml 진단하기</a></p>
+            <p>- <a href="docker-compose-6-refine.html">Compose 파일 1차 정리하기</a></p>
+            <p>- <a href="docker-compose-7-spring-boot.html">Spring Boot 컨테이너 설정 맞추기</a></p>
+            <p>- <a href="docker-compose-8-postgresql.html">PostgreSQL 볼륨과 초기화 다루기</a></p>
+            <p>- <mark>실행 검증과 문제 해결 루틴</mark> ← 현재 문서</p>
+          </div>
+
+          <p>Compose 환경에서 문제가 생기면 감으로 파일을 만지기 쉽다. 하지만 대부분의 문제는 정해진 순서로 좁힐 수 있다. 이번 실습의 목표는 실행, 상태 확인, 로그 확인, 설정 확인을 반복 가능한 루틴으로 만드는 것이다.</p>
+
+          <h2>실행 전 설정 확인</h2>
+
+          <p>파일을 고친 뒤에는 바로 <code>up</code>하지 말고 먼저 해석 결과를 본다.</p>
+
+<pre><code class="language-bash">docker compose config</code></pre>
+          <p>확인할 것은 다음이다.</p>
+
+          <ul>
+            <li><code>version</code> obsolete 경고가 사라졌는가.</li>
+            <li><code>app.environment</code>에 필요한 값이 들어갔는가.</li>
+            <li><code>db.environment</code>가 <code>POSTGRES_*</code> 중심으로 좁혀졌는가.</li>
+            <li><code>SPRING_DATASOURCE_URL</code>이 <code>jdbc:postgresql://db:5432/...</code> 형태인가.</li>
+            <li><code>ports</code>가 원하는 값으로 풀렸는가.</li>
+            <li><code>volumes</code> 이름이 예상한 프로젝트 이름을 기준으로 만들어지는가.</li>
+          </ul>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">이 명령은 검증용이지 공유용이 아니다</div>
+            <p><code>docker compose config</code>에는 실제 secret 값이 나올 수 있다. 확인 후 터미널 안에서만 다룬다.</p>
+          </div>
+
+          <h2>전체 실행</h2>
+
+          <p>이미지 빌드까지 포함해서 실행한다.</p>
+
+<pre><code class="language-bash">docker compose up -d --build</code></pre>
+          <p><code>--build</code>를 붙이면 앱 코드나 Dockerfile 변경이 이미지에 반영된다. Compose 파일만 바꾼 경우에는 빌드가 필요 없을 수 있지만, 학습 단계에서는 변경 반영 누락을 줄이기 위해 붙이는 편이 안전하다.</p>
+
+          <p>실행 상태를 확인한다.</p>
+
+<pre><code class="language-bash">docker compose ps</code></pre>
+          <p>정상이라면 <code>db</code>는 <code>healthy</code>, <code>app</code>은 <code>Up</code> 상태가 되어야 한다. 앱에 별도 healthcheck를 넣지 않았다면 앱은 <code>healthy</code>가 아니라 단순 <code>Up</code>으로 보일 수 있다.</p>
+
+          <h2>로그 확인 순서</h2>
+
+          <p>문제가 생기면 전체 로그보다 서비스별 로그를 먼저 본다.</p>
+
+<pre><code class="language-bash">docker compose logs -f db</code></pre>
+          <p>DB가 healthy가 되지 않으면 앱은 시작되지 않거나 대기한다. DB 로그에서 초기화, 비밀번호, 데이터 디렉터리, 포트 충돌 관련 메시지를 확인한다.</p>
+
+          <p>DB가 정상이라면 앱 로그를 본다.</p>
+
+<pre><code class="language-bash">docker compose logs -f app</code></pre>
+          <p>앱 로그에서는 다음 유형을 구분한다.</p>
+
+          <table>
+          <thead>
+          <tr><th>로그 유형</th><th>의심 지점</th></tr>
+          </thead>
+          <tbody>
+          <tr><td><code>Unable to access jarfile</code></td><td>Dockerfile의 JAR 파일명 또는 <code>COPY</code> 경로</td></tr>
+          <tr><td><code>Connection refused</code></td><td>DB가 아직 준비되지 않았거나 URL이 잘못됨</td></tr>
+          <tr><td><code>UnknownHostException: db</code></td><td>Compose 네트워크나 서비스 이름 문제</td></tr>
+          <tr><td><code>password authentication failed</code></td><td>DB 사용자명 또는 비밀번호 불일치</td></tr>
+          <tr><td>S3 인증 오류</td><td>AWS S3 환경 변수 값 또는 권한 문제</td></tr>
+          <tr><td>JWT secret 관련 오류</td><td><code>JWT_SECRET</code> 누락 또는 설정 바인딩 문제</td></tr>
+          </tbody>
+          </table>
+
+          <h2>DB 연결 확인</h2>
+
+          <p>DB 컨테이너 내부에서 PostgreSQL 준비 상태를 확인한다.</p>
+
+<pre><code class="language-bash">docker compose exec db sh -c 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"'</code></pre>
+          <p>테이블 목록도 확인한다.</p>
+
+<pre><code class="language-bash">docker compose exec db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "\dt"'</code></pre>
+          <p>DB가 정상인데 앱만 실패한다면 앱의 JDBC URL, 사용자명, 비밀번호를 다시 본다. 컨테이너 앱의 DB URL은 <code>localhost</code>가 아니라 <code>db</code>여야 한다.</p>
+
+          <h2>앱 접근 확인</h2>
+
+          <p>Compose에서 앱 포트를 <code>${APP_PORT:-8081}:80</code>로 두었다면 호스트에서는 다음 주소로 접근한다.</p>
+
+<pre><code class="language-text">http://localhost:8081</code></pre>
+          <p>PowerShell에서는 상태 코드만 간단히 확인할 수 있다.</p>
+
+<pre><code class="language-powershell">Invoke-WebRequest http://localhost:8081 -UseBasicParsing</code></pre>
+          <p>Actuator health가 열려 있다면 다음 주소도 확인할 수 있다.</p>
+
+<pre><code class="language-text">http://localhost:8081/actuator/health</code></pre>
+          <p>보안 설정 때문에 health 엔드포인트가 막혀 있으면 401 또는 403이 나올 수 있다. 이 경우에는 컨테이너가 죽었다는 뜻이 아니라 접근 권한 정책 문제일 수 있다. 앱 로그와 <code>docker compose ps</code>를 함께 본다.</p>
+
+          <h2>자주 나는 문제와 처리</h2>
+
+          <table>
+          <thead>
+          <tr><th>증상</th><th>원인 후보</th><th>확인 명령</th></tr>
+          </thead>
+          <tbody>
+          <tr><td><code>version</code> 경고</td><td>Compose 파일에 <code>version</code>이 남아 있음</td><td><code>docker compose config</code></td></tr>
+          <tr><td>DB 포트 충돌</td><td>호스트 5432를 이미 사용 중</td><td><code>docker compose ps</code>, Docker Desktop</td></tr>
+          <tr><td>앱이 DB 연결 실패</td><td>JDBC URL이 <code>localhost</code>이거나 DB가 unhealthy</td><td><code>docker compose logs app</code>, <code>docker compose logs db</code></td></tr>
+          <tr><td>수정한 <code>schema.sql</code>이 반영되지 않음</td><td>기존 <code>postgres_data</code> 볼륨이 이미 초기화됨</td><td><code>docker volume ls</code></td></tr>
+          <tr><td>컨테이너가 JAR을 못 찾음</td><td>Dockerfile의 JAR 파일명 고정값 불일치</td><td><code>docker compose logs app</code></td></tr>
+          <tr><td><code>.env</code> 값을 바꿨는데 그대로임</td><td>컨테이너 재생성 또는 config 확인 누락</td><td><code>docker compose config</code>, <code>docker compose up -d</code></td></tr>
+          </tbody>
+          </table>
+
+          <h2>정리 명령</h2>
+
+          <p>컨테이너와 네트워크만 내린다.</p>
+
+<pre><code class="language-bash">docker compose down</code></pre>
+          <p>DB 데이터까지 지우고 완전히 새로 시작한다.</p>
+
+<pre><code class="language-bash">docker compose down -v</code></pre>
+          <p>이미지까지 다시 빌드한다.</p>
+
+<pre><code class="language-bash">docker compose up -d --build</code></pre>
+          <p>캐시 없이 앱 이미지를 다시 빌드한다.</p>
+
+<pre><code class="language-bash">docker compose build --no-cache app
+docker compose up -d</code></pre>
+          <p><code>down -v</code>와 <code>--no-cache</code>는 강한 명령이다. 전자는 데이터를 지우고, 후자는 빌드 캐시를 버린다. 문제를 좁힌 뒤 필요한 경우에만 쓴다.</p>
+
+          <h2>최종 검증 체크리스트</h2>
+
+          <ul class="task-list">
+            <li><input type="checkbox" disabled> <code>docker compose config</code>에서 구조와 변수 보간을 확인했다.</li>
+            <li><input type="checkbox" disabled> <code>docker compose up -d --build</code>로 전체 환경을 실행했다.</li>
+            <li><input type="checkbox" disabled> <code>docker compose ps</code>에서 DB 상태를 확인했다.</li>
+            <li><input type="checkbox" disabled> <code>docker compose logs -f db</code>와 <code>docker compose logs -f app</code>로 실패 지점을 분리할 수 있다.</li>
+            <li><input type="checkbox" disabled> 앱이 DB에 <code>db:5432</code>로 접속한다는 점을 확인했다.</li>
+            <li><input type="checkbox" disabled> <code>down</code>과 <code>down -v</code>를 구분해서 사용할 수 있다.</li>
+          </ul>
+
+          <p>이 루틴이 손에 익으면 Compose 파일은 더 이상 무서운 설정 파일이 아니다. 문제가 생겼을 때 어디서부터 볼지 정해진 실행 환경이 된다.</p>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Docker_Compose</span>
+          <span>#문제해결</span>
+          <span>#실습</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="docker-compose-8-postgresql.html">&larr; 이전 글</a>
+          <a href="../pages/nbuntu.html">목록으로 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Kotlin] 3. Spring Boot에서의 Kotlin (코프링) - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Kotlin] 3. Spring Boot에서의 Kotlin (코프링)</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Java 개발자를 위한 Kotlin (3/4)</div>
+            <p>이전 편: <a href="kotlin-java-2-advanced.html">[Kotlin] 2. 고급 기능</a></p>
+            <p>다음 편: <a href="kotlin-java-4-test.html">[Kotlin] 4. 코프링 테스트 가이드</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">Java 개발자를 위한 Kotlin 시리즈</div>
+            <p>이전 문서: <a href="kotlin-java-2-advanced.html">고급 기능</a></p>
+            <p>이 문서에서는 Spring Boot + Kotlin 조합에서 알아야 할 실전 지식을 다룬다.</p>
+          </div>
+
+          <h2>Gradle 플러그인 세팅</h2>
+
+          <p>코프링 프로젝트에서 반드시 필요한 Gradle 플러그인이 있다. start.spring.io에서 Kotlin을 선택하면 자동으로 추가되지만, 왜 필요한지 알아야 한다.</p>
+
+<pre><code class="language-kotlin">// build.gradle.kts
+plugins {
+    kotlin("jvm") version "2.1.0"
+    kotlin("plugin.spring") version "2.1.0"     // all-open
+    kotlin("plugin.jpa") version "2.1.0"         // no-arg
+    id("org.springframework.boot") version "3.5.0"
+    id("io.spring.dependency-management") version "1.1.7"
+}</code></pre>
+          <h3>kotlin-spring (all-open)</h3>
+
+          <p>Kotlin 클래스는 기본이 <code>final</code>이다. 그런데 Spring은 <strong>프록시를 만들어야</strong> 하는 곳이 많다.</p>
+
+          <ul>
+            <li><code>@Component</code>, <code>@Service</code>, <code>@Repository</code> → CGLIB 프록시</li>
+            <li><code>@Transactional</code> → AOP 프록시</li>
+            <li><code>@Configuration</code> → CGLIB로 빈 메서드 가로채기</li>
+          </ul>
+
+          <p>매번 <code>open</code> 키워드를 붙이면 귀찮으니까, <code>kotlin-spring</code> 플러그인이 Spring 어노테이션이 붙은 클래스를 <mark>자동으로 <code>open</code></mark>으로 만들어준다.</p>
+
+          <p>자동으로 <code>open</code>이 되는 어노테이션:</p>
+
+          <ul>
+            <li><code>@Component</code> (하위: <code>@Service</code>, <code>@Repository</code>, <code>@Controller</code>)</li>
+            <li><code>@Configuration</code></li>
+            <li><code>@Transactional</code></li>
+            <li><code>@Async</code></li>
+            <li><code>@Cacheable</code></li>
+          </ul>
+
+          <h3>kotlin-jpa (no-arg)</h3>
+
+          <p>JPA 엔티티는 <strong>기본 생성자(no-arg constructor)</strong>가 필요하다. Kotlin의 클래스는 주 생성자에 파라미터가 있으면 기본 생성자가 없다.</p>
+
+          <p><code>kotlin-jpa</code> 플러그인이 <code>@Entity</code>, <code>@Embeddable</code>, <code>@MappedSuperclass</code>가 붙은 클래스에 <mark>기본 생성자를 자동 생성</mark>해준다.</p>
+
+          <p>이 두 플러그인이 없으면 코프링은 제대로 동작하지 않는다. 왜 필요한지 이해하고 넘어가자.</p>
+
+          <h2>JPA 엔티티 작성</h2>
+
+          <p>코프링에서 가장 까다로운 부분이다. 규칙이 좀 있다.</p>
+
+<pre><code class="language-kotlin">@Entity
+class Post(
+
+    @Column(nullable = false)
+    var title: String,
+
+    @Column(columnDefinition = "TEXT", nullable = false)
+    var content: String,
+
+    var thumbnail: String? = null,
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "category_id")
+    var category: Category? = null,
+
+    var viewCount: Int = 0,
+
+    var isPublished: Boolean = false,
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    val id: Long = 0L
+
+) : BaseTimeEntity()</code></pre>
+          <p>여기서 주의할 점을 하나씩 짚으면 이렇다.</p>
+
+          <h4>data class 쓰지 않기</h4>
+
+          <p><code>data class</code>는 <code>equals()</code>, <code>hashCode()</code>를 모든 프로퍼티로 만든다. JPA에서는 프록시 비교, lazy loading 등에서 문제가 생긴다. 그냥 일반 <code>class</code>를 쓴다.</p>
+
+          <h4><code>id</code>를 마지막에 두기</h4>
+
+          <p><code>id</code>는 DB가 생성하는 값이니까 기본값 <code>0L</code>을 주고 마지막에 둔다. 객체 생성 시 나머지 필드만 넘기면 된다.</p>
+
+<pre><code class="language-kotlin">val post = Post(
+    title = "제목",
+    content = "&lt;p&gt;내용&lt;/p&gt;",
+    isPublished = true
+)
+// id는 0L, save 후 DB가 채워줌</code></pre>
+          <h4><code>var</code> vs <code>val</code></h4>
+
+          <ul>
+            <li>변경될 수 있는 필드: <code>var</code> (title, content, viewCount 등)</li>
+            <li>변경 안 되는 필드: <code>val</code> (id, createdAt)</li>
+          </ul>
+
+          <h4>nullable은 <code>?</code> 타입으로</h4>
+
+          <p>카테고리처럼 null일 수 있는 관계는 <code>Category?</code>로 선언하고 기본값 <code>null</code>을 준다.</p>
+
+          <h3>BaseTimeEntity</h3>
+
+<pre><code class="language-kotlin">@MappedSuperclass
+@EntityListeners(AuditingEntityListener::class)
+abstract class BaseTimeEntity {
+
+    @CreatedDate
+    @Column(updatable = false)
+    var createdAt: LocalDateTime = LocalDateTime.now()
+        protected set
+
+    @LastModifiedDate
+    var updatedAt: LocalDateTime = LocalDateTime.now()
+        protected set
+}</code></pre>
+          <p><code>protected set</code>으로 외부에서 직접 수정하는 걸 막는다. JPA Auditing이 알아서 값을 넣어준다.</p>
+
+          <h2>의존성 주입</h2>
+
+          <h3>생성자 주입 (추천)</h3>
+
+<pre><code class="language-kotlin">@Service
+class PostService(
+    private val postRepository: PostRepository,
+    private val categoryRepository: CategoryRepository,
+    private val tagRepository: TagRepository
+)</code></pre>
+          <p>Kotlin은 주 생성자 문법이 간결하니까 <strong><code>@Autowired</code> 없이 생성자 주입</strong>이 자연스럽다. Java에서 Lombok의 <code>@RequiredArgsConstructor</code>가 하던 역할을 언어 차원에서 해결한다.</p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">lateinit 필드 주입은 피하기</div>
+            <p>```kotlin</p>
+            <p>// 이거 하지 말 것</p>
+            <p>@Autowired</p>
+            <p>lateinit var postRepository: PostRepository</p>
+            <p>```</p>
+            <p>테스트에서 주입 누락을 잡기 어렵고, 불변성도 깨진다. 생성자 주입을 쓰자.</p>
+          </div>
+
+          <h2>Controller</h2>
+
+<pre><code class="language-kotlin">@RestController
+@RequestMapping("/api/posts")
+class PostController(
+    private val postService: PostService
+) {
+
+    @GetMapping
+    fun getPosts(
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "10") size: Int,
+        @RequestParam(required = false) category: Long?
+    ): ResponseEntity&lt;Page&lt;PostListResponse&gt;&gt; {
+        val posts = postService.getPosts(page, size, category)
+        return ResponseEntity.ok(posts)
+    }
+
+    @PostMapping
+    fun createPost(
+        @Valid @RequestBody request: PostCreateRequest
+    ): ResponseEntity&lt;Map&lt;String, Long&gt;&gt; {
+        val id = postService.createPost(request)
+        return ResponseEntity.status(HttpStatus.CREATED)
+            .body(mapOf("id" to id))
+    }
+}</code></pre>
+          <p>Java랑 거의 똑같다. 어노테이션도 동일하고, 생성자 주입이 간결해진 것 외에는 큰 차이 없다.</p>
+
+          <h2>DTO</h2>
+
+          <p>코프링에서 DTO는 <code>data class</code>의 천국이다.</p>
+
+<pre><code class="language-kotlin">// 요청
+data class PostCreateRequest(
+    @field:NotBlank(message = "제목은 필수입니다")
+    val title: String,
+
+    @field:NotBlank(message = "내용은 필수입니다")
+    val content: String,
+
+    val thumbnail: String? = null,
+    val categoryId: Long? = null,
+    val tagNames: List&lt;String&gt; = emptyList(),
+    val isPublished: Boolean = true
+)
+
+// 응답
+data class PostResponse(
+    val id: Long,
+    val title: String,
+    val content: String,
+    val thumbnail: String?,
+    val category: CategoryResponse?,
+    val tags: List&lt;String&gt;,
+    val viewCount: Int,
+    val isPublished: Boolean,
+    val createdAt: LocalDateTime,
+    val updatedAt: LocalDateTime
+)</code></pre>
+          <div class="callout callout-warning">
+            <div class="callout-title">Validation 어노테이션은 <code>@field:</code> 접두사 필요</div>
+            <p>Kotlin의 주 생성자 파라미터는 생성자 파라미터이자 프로퍼티이자 필드다. <code>@NotBlank</code>만 쓰면 생성자 파라미터에 붙어서 Validation이 안 먹는다. <mark>반드시 <code>@field:NotBlank</code></mark>로 써야 한다. 코프링에서 가장 흔한 실수.</p>
+          </div>
+
+          <h2>Service</h2>
+
+<pre><code class="language-kotlin">@Service
+@Transactional(readOnly = true)
+class PostService(
+    private val postRepository: PostRepository,
+    private val categoryRepository: CategoryRepository,
+    private val tagRepository: TagRepository
+) {
+
+    fun getPosts(page: Int, size: Int, categoryId: Long?): Page&lt;PostListResponse&gt; {
+        val pageable = PageRequest.of(page, size, Sort.by("createdAt").descending())
+
+        val posts = categoryId?.let {
+            postRepository.findByCategory_IdAndIsPublishedTrue(it, pageable)
+        } ?: postRepository.findByIsPublishedTrue(pageable)
+
+        return posts.map { it.toListResponse() }
+    }
+
+    @Transactional
+    fun createPost(request: PostCreateRequest): Long {
+        val category = request.categoryId?.let {
+            categoryRepository.findByIdOrNull(it)
+                ?: throw BusinessException("카테고리를 찾을 수 없습니다", HttpStatus.NOT_FOUND)
+        }
+
+        val post = Post(
+            title = request.title,
+            content = request.content,
+            thumbnail = request.thumbnail,
+            category = category,
+            isPublished = request.isPublished
+        )
+
+        postRepository.save(post)
+
+        // 태그 처리
+        request.tagNames.forEach { tagName -&gt;
+            val tag = tagRepository.findByName(tagName)
+                ?: tagRepository.save(Tag(name = tagName))
+            post.addTag(tag)
+        }
+
+        return post.id
+    }
+}</code></pre>
+          <p><code>?.let</code>과 <code>?:</code> 조합으로 null 처리가 깔끔해진다. Java에서 <code>if (categoryId != null)</code> 분기하던 걸 한 줄로 쓸 수 있다.</p>
+
+          <h3>엔티티 → DTO 변환</h3>
+
+          <p>확장 함수를 쓰면 깔끔하다.</p>
+
+<pre><code class="language-kotlin">// Post 엔티티의 확장 함수
+fun Post.toListResponse() = PostListResponse(
+    id = id,
+    title = title,
+    thumbnail = thumbnail,
+    category = category?.toResponse(),
+    tags = postTags.map { it.tag.name },
+    viewCount = viewCount,
+    createdAt = createdAt
+)
+
+fun Post.toResponse() = PostResponse(
+    id = id,
+    title = title,
+    content = content,
+    // ...
+)</code></pre>
+          <p>Java에서 별도 Mapper 클래스를 만들던 걸 확장 함수로 깔끔하게 처리할 수 있다.</p>
+
+          <h2>Repository</h2>
+
+<pre><code class="language-kotlin">interface PostRepository : JpaRepository&lt;Post, Long&gt; {
+
+    fun findByIsPublishedTrue(pageable: Pageable): Page&lt;Post&gt;
+
+    fun findByCategory_IdAndIsPublishedTrue(categoryId: Long, pageable: Pageable): Page&lt;Post&gt;
+}</code></pre>
+          <p>Spring Data JPA의 쿼리 메서드는 Java와 완전히 동일하다. 인터페이스 문법만 Kotlin으로 바뀐 것.</p>
+
+          <h3>findByIdOrNull</h3>
+
+          <p>Spring Data JPA의 <code>findById()</code>는 <code>Optional&lt;T&gt;</code>을 반환한다. Kotlin에서 <code>Optional</code>은 어울리지 않는다 — Kotlin에 이미 null safety가 있으니까.</p>
+
+<pre><code class="language-kotlin">// Optional 대신 이걸 쓴다
+import org.springframework.data.repository.findByIdOrNull
+
+val post = postRepository.findByIdOrNull(id)
+    ?: throw BusinessException("글을 찾을 수 없습니다", HttpStatus.NOT_FOUND)</code></pre>
+          <p><code>findByIdOrNull</code>은 Spring Data가 제공하는 Kotlin 확장 함수다. <code>Post?</code>를 반환한다.</p>
+
+          <h2>Spring Security Kotlin DSL</h2>
+
+<pre><code class="language-kotlin">@Configuration
+@EnableWebSecurity
+class SecurityConfig(
+    private val jwtFilter: JwtFilter
+) {
+
+    @Bean
+    fun securityFilterChain(http: HttpSecurity): SecurityFilterChain {
+        http {
+            csrf { disable() }
+            sessionManagement {
+                sessionCreationPolicy = SessionCreationPolicy.STATELESS
+            }
+            authorizeHttpRequests {
+                authorize(HttpMethod.GET, "/api/posts/**", permitAll)
+                authorize(HttpMethod.GET, "/api/categories/**", permitAll)
+                authorize(HttpMethod.GET, "/api/tags/**", permitAll)
+                authorize("/api/posts/*/comments", permitAll)
+                authorize(HttpMethod.DELETE, "/api/comments/*", permitAll)
+                authorize("/api/auth/**", permitAll)
+                authorize(anyRequest, authenticated)
+            }
+            addFilterBefore&lt;UsernamePasswordAuthenticationFilter&gt;(jwtFilter)
+        }
+        return http.build()
+    }
+
+    @Bean
+    fun passwordEncoder() = BCryptPasswordEncoder()
+}</code></pre>
+          <p>Java의 체이닝 방식보다 <mark>구조가 눈에 확 들어온다.</mark> 이게 Kotlin DSL의 힘이다.</p>
+
+          <h2>예외 처리</h2>
+
+<pre><code class="language-kotlin">// Sealed class로 비즈니스 예외 정의
+class BusinessException(
+    override val message: String,
+    val status: HttpStatus = HttpStatus.BAD_REQUEST
+) : RuntimeException(message)
+
+@RestControllerAdvice
+class GlobalExceptionHandler {
+
+    @ExceptionHandler(BusinessException::class)
+    fun handleBusiness(e: BusinessException): ResponseEntity&lt;Map&lt;String, String&gt;&gt; {
+        return ResponseEntity
+            .status(e.status)
+            .body(mapOf("message" to e.message))
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException::class)
+    fun handleValidation(e: MethodArgumentNotValidException): ResponseEntity&lt;Map&lt;String, String&gt;&gt; {
+        val message = e.bindingResult.fieldErrors.first().defaultMessage ?: "잘못된 요청입니다"
+        return ResponseEntity.badRequest()
+            .body(mapOf("message" to message))
+    }
+}</code></pre>
+          <h2>코프링에서 Lombok은 필요 없다</h2>
+
+          <table>
+          <thead>
+          <tr><th>Java + Lombok</th><th>Kotlin</th></tr>
+          </thead>
+          <tbody>
+          <tr><td><code>@Getter</code>, <code>@Setter</code></td><td>프로퍼티가 기본 제공</td></tr>
+          <tr><td><code>@RequiredArgsConstructor</code></td><td>주 생성자가 기본</td></tr>
+          <tr><td><code>@Builder</code></td><td>Named argument + 기본값</td></tr>
+          <tr><td><code>@Data</code></td><td><code>data class</code></td></tr>
+          <tr><td><code>@ToString</code></td><td><code>data class</code>가 자동 생성</td></tr>
+          <tr><td><code>@Slf4j</code></td><td><code>companion object</code>에 직접 선언</td></tr>
+          </tbody>
+          </table>
+
+          <p>Kotlin을 쓰면 Lombok 의존성을 빼도 된다. build.gradle에서 Lombok 관련 설정을 제거해도 좋다.</p>
+
+          <h3>로깅</h3>
+
+<pre><code class="language-kotlin">// 방법 1: companion object에 직접
+@Service
+class PostService {
+    companion object {
+        private val log = LoggerFactory.getLogger(PostService::class.java)
+    }
+}
+
+// 방법 2: 확장 함수로 유틸 만들기
+inline fun &lt;reified T&gt; T.logger(): Logger =
+    LoggerFactory.getLogger(T::class.java)
+
+@Service
+class PostService {
+    private val log = logger()
+}</code></pre>
+          <p>방법 2가 더 깔끔하다. 프로젝트 공통 유틸로 하나 만들어두면 모든 클래스에서 <code>logger()</code>만 호출하면 된다.</p>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Kotlin</span>
+          <span>#Spring-Boot</span>
+          <span>#코프링</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="kotlin-java-2-advanced.html">&larr; 이전 글</a>
+          <a href="kotlin-java-4-test.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

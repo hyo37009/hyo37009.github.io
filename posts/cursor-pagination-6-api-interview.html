@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[스프링] 6. API 통합과 면접 대비 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[스프링] 6. API 통합과 면접 대비</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">커서 기반 페이지네이션 (6/6)</div>
+            <p>이전 편: <a href="cursor-pagination-5-sort-filter.html">[스프링] 5. 동적 정렬과 필터링</a></p>
+            <p>이 문서가 시리즈의 마지막 편입니다.</p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">시리즈</div>
+            <p>1. <a href="cursor-pagination-2-offset-limit.html">Offset의 한계와 Cursor의 등장</a></p>
+            <p>2. <a href="cursor-pagination-3-design.html">커서 설계 전략</a></p>
+            <p>3. <a href="cursor-pagination-4-querydsl.html">QueryDSL 커서 조회 구현</a></p>
+            <p>4. <a href="cursor-pagination-5-sort-filter.html">동적 정렬과 필터링</a></p>
+            <p>5. <a href="cursor-pagination-6-api-interview.html">API 통합과 면접 대비</a> ← 현재 편</p>
+          </div>
+
+          <p>Repository에서 커서 조회를 구현했으니, 이제 Service에서 응답을 조립하고 Controller에서 API로 노출하는 과정을 다룬다. 마지막으로 면접에서 자주 나오는 질문을 정리한다.</p>
+
+          <h2>Service 레이어 조립</h2>
+
+          <p>Service는 Repository에서 받은 결과를 가공해서 응답 DTO로 변환한다. 핵심은 limit+1 패턴의 후처리와 커서 값 추출이다.</p>
+
+<pre><code class="language-java">@Override
+@Transactional(readOnly = true)
+public FeedGetResponse getFeedsByCursor(FeedGetRequest request) {
+    List&lt;Feed&gt; feeds = feedRepository.searchFeeds(request);
+    long totalCount = feedRepository.count();
+
+    boolean hasNext = feeds.size() &gt; request.limit();
+    if (hasNext) {
+        feeds.removeLast();
+    }
+
+    String nextCursor = null;
+    String nextIdAfter = null;
+
+    if (!feeds.isEmpty() &amp;&amp; hasNext) {
+        Feed lastFeed = feeds.getLast();
+        nextCursor = lastFeed.getCreatedAt().toString();
+        nextIdAfter = lastFeed.getId().toString();
+    }
+
+    List&lt;FeedDto&gt; data = feeds.stream()
+            .map(this::toFeedDto)
+            .toList();
+
+    return new FeedGetResponse(
+            data, nextCursor, nextIdAfter, hasNext, totalCount,
+            request.sortBy(), request.sortDirection()
+    );
+}</code></pre>
+          <p>흐름을 정리하면 이렇다.</p>
+
+          <ol>
+            <li>Repository에서 <code>limit + 1</code>개를 조회한다</li>
+            <li>결과가 <code>limit</code>보다 많으면 <code>hasNext = true</code>이고 마지막 항목을 제거한다</li>
+            <li>남은 결과의 마지막 항목에서 커서 값을 추출한다</li>
+            <li>DTO로 변환해서 응답을 조립한다</li>
+          </ol>
+
+<div class="mermaid">
+graph TD
+    A[Repository 조회<br>limit + 1] --> B{조회 결과 > limit?}
+    B -- Yes --> C["hasNext = true<br>마지막 항목(N+1) 제거"]
+    B -- No --> D[hasNext = false]
+    C --> E[남은 결과 중<br>마지막 항목에서 커서 추출]
+    D --> E
+    E --> F[응답 DTO 조립]
+</div>
+          <h3>nextCursor 추출 시점</h3>
+
+          <p>커서 값은 <mark>마지막 항목을 제거한 뒤</mark> 남은 목록의 마지막에서 추출해야 한다. limit+1번째 항목의 값을 커서로 쓰면, 다음 페이지 요청 시 그 항목이 누락된다.</p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">hasNext가 false일 때 커서 처리</div>
+            <p>마지막 페이지에서는 <code>nextCursor</code>와 <code>nextIdAfter</code>를 <code>null</code>로 반환해야 한다. 값을 넣어 반환하면 클라이언트가 다음 페이지를 요청했을 때 빈 결과가 돌아와서 혼란을 줄 수 있다.</p>
+          </div>
+
+          <h2>요청 DTO 설계</h2>
+
+          <p>커서 조회의 요청 파라미터는 Offset 방식보다 종류가 많다.</p>
+
+<pre><code class="language-java">public record FeedGetRequest(
+        String cursor,
+        String idAfter,
+        @NotNull int limit,
+        @NotNull SortBy sortBy,
+        @NotNull SortDirection sortDirection,
+        String keywordLike,
+        SkyStatus skyStatusEqual,
+        PrecipitationType precipitationTypeEqual,
+        UUID authorIdEqual
+) {}</code></pre>
+          <p>파라미터를 역할별로 분류하면 세 가지다.</p>
+
+          <ul>
+            <li><strong>페이징</strong> : <code>cursor</code>, <code>idAfter</code>, <code>limit</code> — 어디서부터 몇 개를 가져올지</li>
+            <li><strong>정렬</strong> : <code>sortBy</code>, <code>sortDirection</code> — 어떤 순서로 정렬할지</li>
+            <li><strong>필터</strong> : <code>keywordLike</code>, <code>skyStatusEqual</code> 등 — 어떤 조건으로 걸러낼지</li>
+          </ul>
+
+<div class="mermaid">
+graph LR
+    REQ((FeedGetRequest)) --- P[페이징]
+    REQ --- S[정렬]
+    REQ --- F[필터]
+    
+    P --- P1(cursor)
+    P --- P2(idAfter)
+    P --- P3(limit)
+    
+    S --- S1(sortBy)
+    S --- S2(sortDirection)
+    
+    F --- F1(keywordLike)
+    F --- F2(...Equal)
+</div>
+          <p>커서 관련 필드는 첫 페이지 요청 시 null이 들어오므로 <code>@NotNull</code>을 붙이지 않는다.</p>
+
+          <h3>필터 파라미터 네이밍 컨벤션</h3>
+
+          <p>필터 이름에 비교 연산을 명시하면 API 사용자가 동작을 직관적으로 이해할 수 있다.</p>
+
+          <ul>
+            <li><code>keywordLike</code> → LIKE 검색</li>
+            <li><code>skyStatusEqual</code> → 정확히 일치</li>
+            <li><code>authorIdEqual</code> → 정확히 일치</li>
+          </ul>
+
+          <p>"keyword"만 쓰면 정확히 일치하는지, 포함하는지, 시작하는지 알 수 없다. 접미사로 의도를 드러내는 게 좋다.</p>
+
+          <h2>응답 DTO 설계</h2>
+
+          <p>응답에는 데이터뿐 아니라 페이징 메타데이터가 포함되어야 한다.</p>
+
+<pre><code class="language-java">public record FeedGetResponse(
+        List&lt;FeedDto&gt; data,
+        String nextCursor,
+        String nextIdAfter,
+        boolean hasNext,
+        Long totalCount,
+        SortBy sortBy,
+        SortDirection sortDirection
+) {}</code></pre>
+          <p>클라이언트가 다음 페이지를 요청하려면 <code>nextCursor</code>와 <code>nextIdAfter</code>를 그대로 보내면 된다. <code>hasNext</code>가 <code>false</code>면 더 이상 요청할 필요가 없다.</p>
+
+          <p><code>sortBy</code>와 <code>sortDirection</code>을 응답에 포함하는 이유는, 클라이언트가 현재 어떤 정렬로 조회 중인지 확인할 수 있게 하기 위해서다.</p>
+
+          <h3>커서 값의 타입</h3>
+
+          <p><code>nextCursor</code>와 <code>nextIdAfter</code>는 <code>String</code>으로 선언한다. <code>Instant</code>나 <code>UUID</code>를 그대로 쓰면 직렬화 형식을 서버가 결정하게 되는데, 문자열로 통일하면 클라이언트가 타입을 몰라도 그대로 돌려보내기만 하면 된다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">커서는 클라이언트에게 불투명 토큰이다</div>
+            <p>클라이언트는 커서 값을 해석할 필요가 없다. 받은 그대로 다음 요청에 담아 보내면 된다. 이 원칙을 지키면 서버 쪽 커서 구조를 자유롭게 변경할 수 있다.</p>
+          </div>
+
+          <h2>Controller 설계</h2>
+
+          <p>GET 요청에서 조회 파라미터를 받는 방법은 두 가지다.</p>
+
+          <h3>@ModelAttribute 방식</h3>
+
+<pre><code class="language-java">@GetMapping
+public ResponseEntity&lt;FeedGetResponse&gt; getFeeds(
+        @ModelAttribute @Valid FeedGetRequest request) {
+    return ResponseEntity.ok(feedService.getFeedsByCursor(request));
+}</code></pre>
+          <p>쿼리 파라미터를 DTO에 바인딩한다. GET 요청의 표준적인 방법이다.</p>
+
+<pre><code>GET /api/feeds?limit=10&amp;sortBy=CREATED_AT&amp;sortDirection=DESCENDING</code></pre>
+          <h3>@RequestBody 방식</h3>
+
+<pre><code class="language-java">@GetMapping
+public ResponseEntity&lt;FeedGetResponse&gt; getFeeds(
+        @RequestBody @Valid FeedGetRequest request) {
+    return ResponseEntity.ok(feedService.getFeedsByCursor(request));
+}</code></pre>
+          <p>JSON 바디로 파라미터를 받는다. 필터 조건이 복잡할 때 적합하지만, <mark>GET 요청에 body를 넣는 것은 HTTP 스펙상 권장되지 않는다.</mark></p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">GET + @RequestBody의 문제</div>
+            <p>HTTP/1.1 스펙은 GET 요청의 body에 의미를 부여하지 않는다. 일부 HTTP 클라이언트나 프록시가 GET body를 무시하거나 제거할 수 있다. 브라우저의 fetch API도 GET에 body를 보내지 않는다. 가능하면 <code>@ModelAttribute</code>를 사용하는 게 안전하다.</p>
+          </div>
+
+          <h2>전체 흐름 정리</h2>
+
+          <p>요청부터 응답까지의 데이터 흐름이다.</p>
+
+          <ol>
+            <li>클라이언트가 <code>GET /api/feeds?limit=10&amp;sortBy=CREATED_AT&amp;sortDirection=DESCENDING</code>을 요청한다</li>
+            <li>Controller가 <code>FeedGetRequest</code>로 바인딩한다. cursor와 idAfter는 null이다</li>
+            <li>Service가 Repository의 <code>searchFeeds</code>를 호출한다. limit+1인 11개를 조회한다</li>
+            <li>Repository가 QueryDSL로 커서 조건, 필터, 정렬 쿼리를 실행한다</li>
+            <li>Service가 11개 중 마지막 1개를 제거하고, 10번째의 커서 값을 추출한다</li>
+            <li><code>FeedGetResponse</code>를 조립해서 반환한다</li>
+            <li>클라이언트가 <code>nextCursor</code>와 <code>nextIdAfter</code>를 다음 요청에 담아 보낸다</li>
+            <li><code>hasNext</code>가 false가 될 때까지 2~7을 반복한다</li>
+          </ol>
+
+<div class="mermaid">
+sequenceDiagram
+    participant C as Client
+    participant Ctrl as Controller
+    participant S as Service
+    participant R as Repository
+    participant DB as Database
+
+    C->>Ctrl: GET /api/feeds (limit=10)
+    Ctrl->>S: getFeedsByCursor(request)
+    S->>R: searchFeeds(limit + 1)
+    R->>DB: SQL Execution (WHERE/ORDER BY)
+    DB-->>R: 11 Items
+    R-->>S: List of Feeds (11)
+    Note over S: 1. check size > 10 (hasNext=true)<br>2. remove 11th item<br>3. extract cursor from 10th item
+    S-->>Ctrl: FeedGetResponse
+    Ctrl-->>C: JSON Response (data, nextCursor, hasNext)
+</div>
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">totalCount에 매번 전체 COUNT 쿼리 실행</div>
+            <p>커서 조회를 할 때마다 <code>SELECT COUNT(*)</code>를 날리면 대량 데이터에서 성능이 저하된다. 전체 건수가 꼭 필요한 게 아니라면 <code>totalCount</code>를 생략하거나, 첫 페이지에서만 계산하는 것을 고려해야 한다.</p>
+            <p>[!DANGER] limit+1번째 항목에서 커서 추출</p>
+            <p><code>removeLast()</code> 하기 전에 커서를 추출하면 제거될 항목의 값이 커서가 된다. 다음 페이지 요청 시 그 항목이 빠져서 데이터가 1건 누락된다. 반드시 제거 후 남은 마지막 항목에서 추출해야 한다.</p>
+            <p>[!DANGER] 커서가 null인데 빈 응답 반환</p>
+            <p>첫 페이지 요청에서 커서가 null이면 전체 데이터의 첫 부분을 반환해야 한다. null 체크를 잘못해서 빈 목록을 반환하는 실수가 있다. Repository에서 커서 조건이 null이면 조건을 무시하도록 구현되어 있는지 확인하자.</p>
+          </div>
+
+          <h2>면접 대비</h2>
+
+<div class="mermaid">
+graph LR
+    subgraph Offset ["Offset Pagination (O(N))"]
+    O1[데이터 스캔 및 스킵] --> O2[N개 반환]
+    O1 -. "페이지가 뒤로 갈수록<br>버리는 비용 증가" .-> O1
+    end
+    
+    subgraph Cursor ["Cursor Pagination (O(log N))"]
+    C1[인덱스로 시작점 Seek] --> C2[N개 반환]
+    C1 -. "데이터가 많아도<br>성능 일정 유지" .-> C1
+    end
+</div>
+          <div class="callout callout-question">
+            <div class="callout-title">Offset 페이지네이션의 단점을 설명해주세요</div>
+            <p>두 가지 핵심 문제가 있다. 첫째, OFFSET은 데이터를 건너뛰는 게 아니라 읽고 버리는 연산이라 페이지가 뒤로 갈수록 성능이 저하된다. 둘째, 조회 사이에 데이터가 삽입·삭제되면 행의 위치가 밀려서 중복 조회나 누락이 발생한다.</p>
+            <p>[!QUESTION] 커서 페이지네이션은 왜 성능이 일정한가요?</p>
+            <p>WHERE 절로 범위를 제한하고 인덱스를 타기 때문이다. <code>WHERE created_at &lt; :cursor</code>는 B-Tree 인덱스에서 O(log N)으로 시작점을 찾고, 거기서 limit개만 읽으면 끝난다. 데이터 총량과 무관하게 일정한 비용이다.</p>
+            <p>[!QUESTION] 커서로 created_at만 쓰면 어떤 문제가 있나요?</p>
+            <p>동시에 생성된 데이터가 같은 created_at을 가질 수 있다. 이 경우 <code>&lt;</code>로 비교하면 동점 행이 누락되고, <code>&lt;=</code>로 비교하면 중복된다. id 같은 고유 값을 보조 키로 추가해서 복합 커서를 구성해야 한다.</p>
+            <p>[!QUESTION] 커서 페이지네이션의 단점은 무엇인가요?</p>
+            <p>임의 페이지 접근이 불가능하다. "37페이지로 이동" 같은 UI를 만들 수 없고, 순차적으로만 탐색할 수 있다. 또한 구현이 Offset보다 복잡하고, 정렬 기준이 바뀌면 커서를 초기화해야 한다.</p>
+            <p>[!QUESTION] limit+1 패턴이 뭔가요?</p>
+            <p>클라이언트가 N개를 요청하면 N+1개를 조회해서, N+1번째가 존재하면 다음 페이지가 있다고 판단하는 패턴이다. COUNT 쿼리는 전체 테이블을 스캔해야 하지만, limit+1은 추가 쿼리 없이 1개만 더 읽으면 되므로 훨씬 효율적이다.</p>
+            <p>[!QUESTION] 정렬 기준이 바뀌면 커서를 어떻게 처리하나요?</p>
+            <p>커서를 null로 초기화해서 첫 페이지부터 다시 조회해야 한다. 이전 정렬 기준의 커서 값을 새 정렬 기준에 사용하면 비교 대상이 달라져서 결과가 엉망이 된다. idAfter도 함께 초기화해야 한다는 점을 놓치기 쉽다.</p>
+            <p>[!QUESTION] GET 요청에 @RequestBody를 쓰면 안 되는 이유는?</p>
+            <p>HTTP/1.1 스펙이 GET 요청의 body에 의미를 부여하지 않기 때문이다. 일부 클라이언트나 프록시가 GET body를 무시하거나 제거할 수 있고, 브라우저의 fetch API도 GET에 body를 보내지 않는다. 조회 파라미터는 쿼리 스트링으로 받는 게 표준이다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#스프링</span>
+          <span>#API설계</span>
+          <span>#DTO</span>
+          <span>#커서</span>
+          <span>#페이지네이션</span>
+          <span>#면접</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="cursor-pagination-5-sort-filter.html">&larr; 이전 글</a>
+          <a href="../pages/nbuntu.html">목록으로 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Instancio] 4. 고급 기능 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Instancio] 4. 고급 기능</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Instancio (4/5)</div>
+            <p>이전 편: <a href="instancio-3-collection-model.html">[Instancio] 3. 컬렉션과 Model</a></p>
+            <p>다음 편: <a href="instancio-5-practical.html">[Instancio] 5. 실전 활용과 면접 대비</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">Instancio 시리즈</div>
+            <p>1. <a href="instancio-1-intro.html">테스트 객체, 직접 만들지 마라</a></p>
+            <p>2. <a href="instancio-2-selector.html">셀렉터와 커스터마이징</a></p>
+            <p>3. <a href="instancio-3-collection-model.html">컬렉션과 Model</a></p>
+            <p>4. <strong>고급 기능</strong> <em>(현재 편)</em></p>
+            <p>5. <a href="instancio-5-practical.html">실전 활용과 면접 대비</a></p>
+          </div>
+
+          <p>지금까지 배운 API만으로도 대부분의 테스트 데이터를 만들 수 있다. 하지만 "주문 상태가 CANCELLED면 취소 사유도 있어야 한다"처럼 <mark>필드 간에 논리적 관계</mark>가 있는 데이터가 필요할 때가 있다. 이번 편에서는 이런 복잡한 요구사항을 처리하는 고급 API를 다룬다.</p>
+
+          <h2>assign() — 조건부 할당</h2>
+
+          <p><code>assign()</code>은 한 필드의 값에 따라 다른 필드의 값을 결정하는 API다. "A가 이 값이면, B는 저 값이어야 한다"는 규칙을 선언적으로 표현할 수 있다.</p>
+
+          <h3>Assign.given() — 조건부 분기</h3>
+
+<pre><code class="language-java">List&lt;Order&gt; orders = Instancio.ofList(Order.class)
+    .size(10)
+    .assign(Assign.given(field(Order::getStatus))
+        .is(OrderStatus.CANCELLED)
+        .set(field(Order::getCancellationReason), "고객 요청")
+        .set(field(Order::isRefundIssued), true))
+    .assign(Assign.given(field(Order::getStatus))
+        .is(OrderStatus.SHIPPED)
+        .generate(field(Order::getTrackingNumber), gen -&gt; gen.text().pattern("#U#U#d#d#d#d#d#d#d#d")))
+    .create();</code></pre>
+          <p><code>given(origin).is(value).set(target, value)</code> 패턴이다. 주문 상태가 <code>CANCELLED</code>이면 취소 사유와 환불 여부가 세팅되고, <code>SHIPPED</code>면 운송장 번호가 생성된다. 나머지 상태에서는 해당 필드가 랜덤 값으로 채워진다.</p>
+
+          <h3>Assign.valueOf() — 값 복사와 변환</h3>
+
+          <p>한 필드의 값을 다른 필드에 복사하거나 변환해서 넣을 때 사용한다.</p>
+
+<pre><code class="language-java">Person person = Instancio.of(Person.class)
+    .assign(Assign.valueOf(field(Person::getFirstName))
+        .to(field(Person::getDisplayName)))
+    .create();
+// displayName == firstName</code></pre>
+          <p>조건을 붙일 수도 있다.</p>
+
+<pre><code class="language-java">Person person = Instancio.of(Person.class)
+    .assign(Assign.valueOf(field(Person::getFirstName))
+        .to(field(Person::getNickname))
+        .when((String name) -&gt; name.length() &gt; 5))
+    .create();
+// firstName이 5자 초과일 때만 nickname에 복사</code></pre>
+          <h3>다중 조건과 else</h3>
+
+          <p><code>given()</code>에 여러 조건을 체이닝하고, 어디에도 해당하지 않는 경우를 <code>elseSet()</code>이나 <code>elseGenerate()</code>로 처리한다.</p>
+
+<pre><code class="language-java">Person person = Instancio.of(Person.class)
+    .assign(Assign.given(field(Address::getCountry), field(Phone::getCountryCode))
+        .set(When.is("한국"), "+82")
+        .set(When.is("미국"), "+1")
+        .set(When.is("일본"), "+81")
+        .elseGenerate(gen -&gt; gen.ints().range(1, 999).as(code -&gt; "+" + code)))
+    .create();</code></pre>
+          <p>이 형태는 origin 필드와 destination 필드를 명시적으로 분리한다. 국가가 "한국"이면 전화 국가코드를 "+82"로, 매칭되지 않으면 랜덤 코드를 생성한다.</p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">assign()은 실험적 기능이다</div>
+            <p><code>assign()</code>은 3.0.0에서 추가된 실험적 API다. 강력하지만 향후 시그니처가 변경될 수 있다. 안정 버전이 아닌 기능을 프로젝트 전체에 광범위하게 사용하는 것은 주의가 필요하다.</p>
+          </div>
+
+          <h2>filter() — 생성 값 필터링</h2>
+
+          <p>생성된 값이 특정 조건을 만족하지 않으면 버리고 다시 생성하는 API다.</p>
+
+<pre><code class="language-java">List&lt;Integer&gt; evenNumbers = Instancio.ofList(Integer.class)
+    .size(10)
+    .filter(allInts(), (Integer n) -&gt; n % 2 == 0)
+    .create();
+// 모든 요소가 짝수</code></pre>
+          <p><code>filter()</code>는 Predicate가 <code>true</code>를 반환할 때까지 값을 재생성한다. 조건을 만족하는 값이 나올 때까지 <mark>최대 1,000번</mark> 시도하고, 그래도 안 되면 예외를 던진다.</p>
+
+<pre><code class="language-java">Person person = Instancio.of(Person.class)
+    .filter(field(Person::getName), (String name) -&gt; name.startsWith("A"))
+    .create();</code></pre>
+          <div class="callout callout-warning">
+            <div class="callout-title">filter()보다 generate()를 우선 사용</div>
+            <p><code>filter()</code>는 "생성 → 검증 → 폐기 → 재생성" 사이클을 반복하므로 비효율적이다. <code>generate()</code>로 원하는 범위를 직접 지정할 수 있다면 그쪽이 훨씬 낫다. <code>filter()</code>는 내장 생성기로 표현할 수 없는 복잡한 조건에만 사용하자.</p>
+          </div>
+
+          <h2>withUnique() — 고유 값 보장</h2>
+
+          <p>컬렉션의 특정 필드가 모두 다른 값이어야 할 때 사용한다.</p>
+
+<pre><code class="language-java">List&lt;User&gt; users = Instancio.ofList(User.class)
+    .size(100)
+    .withUnique(field(User::getEmail))
+    .create();
+// 100명 모두 이메일이 다르다</code></pre>
+          <p>여러 필드에 동시에 적용할 수도 있다.</p>
+
+<pre><code class="language-java">List&lt;Product&gt; products = Instancio.ofList(Product.class)
+    .size(50)
+    .withUnique(field(Product::getSku))
+    .withUnique(field(Product::getName))
+    .create();</code></pre>
+          <div class="callout callout-tip">
+            <div class="callout-title">withUnique()와 크기의 관계</div>
+            <p>고유 값이 가능한 범위보다 <code>size()</code>가 크면 예외가 발생한다. 예를 들어 Boolean 필드에 <code>withUnique()</code>를 걸고 <code>size(3)</code>을 주면, <code>true</code>와 <code>false</code> 두 가지밖에 없으므로 세 번째에서 실패한다.</p>
+          </div>
+
+          <h2>Blank 객체</h2>
+
+          <h3>createBlank() — 빈 껍데기 생성</h3>
+
+          <p>모든 값 필드가 초기화되지 않은 "빈" 객체를 만든다. 참조 타입은 <code>null</code>, primitive는 기본값이다. 단, 중첩 POJO는 인스턴스가 생성된다.</p>
+
+<pre><code class="language-java">Person person = Instancio.createBlank(Person.class);
+// person.getName() == null
+// person.getAge() == 0
+// person.getAddress() != null (Address 인스턴스는 존재)
+// person.getAddress().getCity() == null</code></pre>
+          <p>"테스트에 필요한 필드만 직접 세팅하고, 나머지는 비워두고 싶다"는 요구에 적합하다.</p>
+
+          <p><code>ofBlank()</code>로 특정 필드만 세팅할 수도 있다.</p>
+
+<pre><code class="language-java">Person person = Instancio.ofBlank(Person.class)
+    .set(field(Person::getName), "홍길동")
+    .set(field(Address::getCity), "서울")
+    .create();
+// name과 city만 값이 있고, 나머지는 전부 빈 상태</code></pre>
+          <div class="callout callout-tip">
+            <div class="callout-title">createBlank() vs ignore()</div>
+            <p><code>ignore()</code>는 특정 필드를 제외하는 것이고, <code>createBlank()</code>는 전체를 비우고 필요한 것만 채우는 접근이다. "대부분 비워야 한다"면 Blank가, "대부분 채우되 일부만 빼야 한다"면 ignore()가 적합하다.</p>
+          </div>
+
+          <h2>fill() — 기존 객체 채우기</h2>
+
+          <p>이미 존재하는 객체의 빈 필드를 Instancio로 채우는 API다. 직접 세팅한 값은 유지하면서, 나머지를 랜덤으로 채운다.</p>
+
+<pre><code class="language-java">Person person = new Person();
+person.setName("홍길동");
+person.setDateOfBirth(LocalDate.of(1990, 1, 1));
+
+Instancio.fill(person);
+// name == "홍길동" (유지)
+// dateOfBirth == 1990-01-01 (유지)
+// age, email, address 등 == 랜덤 값 (새로 채워짐)</code></pre>
+          <p>Builder API로 추가 커스터마이징도 가능하다.</p>
+
+<pre><code class="language-java">Instancio.ofObject(person)
+    .generate(field(Person::getEmail), gen -&gt; gen.net().email())
+    .fill();</code></pre>
+          <p><code>fill()</code>이 어떤 필드를 채울지 결정하는 <code>FillType</code> 옵션이 있다.</p>
+
+          <ul>
+            <li><strong>POPULATE_NULLS</strong> : null인 필드만 채운다. 기본값이다</li>
+            <li><strong>POPULATE_NULLS_AND_DEFAULT_PRIMITIVES</strong> : null 필드 + 기본값 상태의 primitive(0, false 등)도 채운다</li>
+            <li><strong>APPLY_SELECTORS</strong> : 셀렉터로 지정한 필드만 적용하고, 나머지는 건드리지 않는다</li>
+          </ul>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">fill()은 실험적 기능이다</div>
+            <p><code>fill()</code>은 5.3.0에서 추가된 실험적 API다. 특히 <code>FillType</code>의 동작이 향후 변경될 수 있다.</p>
+          </div>
+
+          <h2>subtype() — 추상 타입을 구현체로 매핑</h2>
+
+          <p>인터페이스나 추상 클래스를 Instancio가 생성하려면 어떤 구현체를 쓸지 알려줘야 한다.</p>
+
+<pre><code class="language-java">Person person = Instancio.of(Person.class)
+    .subtype(all(Pet.class), Cat.class)
+    .subtype(all(Collection.class), ArrayList.class)
+    .create();</code></pre>
+          <p><code>Pet</code> 인터페이스가 나오면 <code>Cat</code>으로, <code>Collection</code>이 나오면 <code>ArrayList</code>로 인스턴스를 만든다.</p>
+
+          <p>필드 단위로도 지정할 수 있다.</p>
+
+<pre><code class="language-java">.subtype(field(Person::getPet), Dog.class)</code></pre>
+          <div class="callout callout-tip">
+            <div class="callout-title">Settings로 전역 설정</div>
+            <p>매번 <code>subtype()</code>을 호출하기 번거롭다면 Settings에 등록해두면 된다. Settings는 <a href="instancio-5-practical.html">5편</a>에서 자세히 다룬다.</p>
+            <p>```java</p>
+            <p>Settings settings = Settings.create()</p>
+            <p>.mapType(Pet.class, Cat.class)</p>
+            <p>.mapType(Collection.class, TreeSet.class);</p>
+            <p>```</p>
+          </div>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">assign()에서 순환 의존</div>
+            <p><code>given(A).set(B)</code>, <code>given(B).set(A)</code> 처럼 두 필드가 서로를 참조하면 예외가 발생한다. assign의 의존 관계는 항상 단방향이어야 한다.</p>
+            <p>[!DANGER] filter()로 확률이 극히 낮은 조건 걸기</p>
+            <p><code>filter(allStrings(), s -&gt; s.equals("특정값"))</code> 같은 조건은 랜덤 문자열이 정확히 일치할 확률이 사실상 0이므로 1,000번 재시도 후 예외가 발생한다. 이런 경우는 <code>filter()</code> 대신 <code>set()</code>으로 직접 값을 지정하자.</p>
+            <p>[!DANGER] fill()로 불변 객체를 채우려는 시도</p>
+            <p><code>fill()</code>은 setter나 필드 접근으로 값을 주입한다. Java Record처럼 생성 후 변경이 불가능한 객체에는 사용할 수 없다. 불변 객체는 <code>Instancio.of()</code>로 처음부터 생성하자.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Instancio</span>
+          <span>#assign</span>
+          <span>#filter</span>
+          <span>#fill</span>
+          <span>#고급기능</span>
+          <span>#Java</span>
+          <span>#테스트</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="instancio-3-collection-model.html">&larr; 이전 글</a>
+          <a href="instancio-5-practical.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

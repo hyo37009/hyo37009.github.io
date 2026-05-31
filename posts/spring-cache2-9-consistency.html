@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[캐시 가이드] 9. 캐시 일관성과 갱신 전략 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[캐시 가이드] 9. 캐시 일관성과 갱신 전략</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">스프링 캐시 심화 (9/11)</div>
+            <p>이전 편: <a href="spring-cache2-8-redis.html">[캐시 가이드] 8. Redis 분산 캐시</a></p>
+            <p>다음 편: <a href="spring-cache2-10-antipatterns.html">[캐시 가이드] 10. 안티패턴과 트러블슈팅</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">캐시 가이드 시리즈</div>
+            <p><strong>01 캐시 기초</strong></p>
+            <p>- <a href="spring-cache2-1-concept.html">캐시의 개념과 동작 원리</a></p>
+            <p>- <a href="spring-cache2-2-layers.html">캐시 계층과 유형</a></p>
+            <p>- <a href="spring-cache2-3-patterns.html">캐시 전략과 패턴</a></p>
+            <p><strong>02 Spring Cache 핵심</strong></p>
+            <p>- <a href="spring-cache2-4-abstraction.html">Spring Cache 추상화</a></p>
+            <p>- <a href="spring-cache2-5-annotations.html">캐시 어노테이션 완전 정복</a></p>
+            <p>- <a href="spring-cache2-6-key-strategy.html">캐시 키 전략과 조건부 캐싱</a></p>
+            <p><strong>03 캐시 저장소</strong></p>
+            <p>- <a href="spring-cache2-7-caffeine.html">CacheManager와 Caffeine</a></p>
+            <p>- <a href="spring-cache2-8-redis.html">Redis 분산 캐시</a></p>
+            <p><strong>04 실전과 운영</strong></p>
+            <p>- <mark>캐시 일관성과 갱신 전략</mark> ← 현재 편</p>
+            <p>- <a href="spring-cache2-10-antipatterns.html">안티패턴과 트러블슈팅</a></p>
+            <p>- <a href="spring-cache2-11-interview.html">면접 대비</a></p>
+          </div>
+
+          <p>캐시를 도입하면 필연적으로 마주하는 문제가 있다. <mark>원본 데이터가 변경되었을 때, 캐시를 어떻게 갱신할 것인가?</mark> 이 질문에 대한 답이 곧 캐시 갱신 전략이다. 잘못 선택하면 사용자에게 오래된 데이터를 보여주거나, DB에 불필요한 부하를 주게 된다.</p>
+
+          <h2>캐시 일관성 문제란</h2>
+
+          <p>DB에는 최신 데이터가 있는데, 캐시에는 아직 옛날 데이터가 남아 있는 상태를 <mark>stale data</mark>라고 부른다. 캐시를 사용하는 한 이 문제는 완전히 피할 수 없다.</p>
+
+          <p>예를 들어보자. 피드의 내용을 수정했다고 하자.</p>
+
+          <ol>
+            <li>사용자 A가 피드를 수정한다 → DB에 새 내용이 저장된다</li>
+            <li>사용자 B가 같은 피드를 조회한다 → 캐시에 옛날 내용이 남아 있다</li>
+            <li>사용자 B는 수정 전 내용을 본다</li>
+          </ol>
+
+          <p>이 시간차를 <mark>불일치 윈도우</mark>라고 부른다. 캐시 갱신 전략의 목표는 이 불일치 윈도우를 <mark>허용 가능한 범위로 줄이는 것</mark>이다. 0으로 만드는 것이 아니다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    participant A as 사용자 A
+    participant DB as DB
+    participant Cache as 캐시
+    participant B as 사용자 B
+
+    A->>DB: 피드 수정
+    Note over DB: DB에 최신 데이터
+    Note over Cache: 캐시에 옛날 데이터
+    B->>Cache: 피드 조회
+    Cache-->>B: 옛날 데이터 반환
+    Note over Cache,DB: 불일치 윈도우
+</div>
+          <div class="callout callout-warning">
+            <div class="callout-title">완벽한 일관성은 환상이다</div>
+            <p>캐시와 DB의 완벽한 일관성을 유지하려면 캐시의 이점을 거의 포기해야 한다. 모든 쓰기에서 캐시를 동기적으로 갱신하면 성능이 캐시 없는 것과 비슷해진다. <mark>어느 정도의 불일치는 의도적으로 허용</mark>하는 것이 올바른 캐시 설계다.</p>
+          </div>
+
+          <h2>갱신 전략의 종류</h2>
+
+          <p>캐시 갱신 전략은 크게 네 가지로 분류된다. 각각의 동작 방식, 장단점, 적합한 상황이 다르다.</p>
+
+          <h4>Cache-Aside</h4>
+
+          <p><a href="spring-cache2-1-concept.html">1편</a>에서 소개한 패턴이다. <mark>애플리케이션이 캐시와 DB를 직접 관리</mark>한다. Spring Cache의 <code>@Cacheable</code>이 이 패턴을 구현한다.</p>
+
+          <p>읽기 흐름은 다음과 같다.</p>
+
+          <ol>
+            <li>캐시 조회 → Hit이면 반환</li>
+            <li>Miss면 DB 조회 → 캐시 저장 → 반환</li>
+          </ol>
+
+          <p>쓰기 흐름은 다음과 같다.</p>
+
+          <ol>
+            <li>DB에 데이터를 쓴다</li>
+            <li>캐시를 무효화한다 (<code>@CacheEvict</code>)</li>
+          </ol>
+
+          <p>Cache-Aside의 장점은 구현이 단순하고 이해하기 쉽다는 것이다. 캐시 장애 시에도 DB에서 직접 조회하면 되므로 복원력이 높다. 단점은 첫 요청(Cold Start)이 항상 느리다는 것이다. 캐시가 비어 있으면 DB를 거쳐야 한다.</p>
+
+          <h4>Read-Through</h4>
+
+          <p>Cache-Aside와 비슷하지만, <mark>캐시가 직접 DB를 조회</mark>한다는 점이 다르다. 애플리케이션은 항상 캐시에게만 요청하고, 캐시가 Miss일 때 스스로 DB에서 데이터를 가져와 저장한다.</p>
+
+          <p>애플리케이션 코드에서 DB 조회 로직이 사라지므로 코드가 깔끔해진다. 하지만 캐시 라이브러리가 이 기능을 지원해야 하며, Spring Cache에서는 <code>@Cacheable</code>이 사실상 Read-Through처럼 동작한다. 메서드 자체가 DB 조회 로직이고, 캐시 Miss일 때 자동으로 실행되기 때문이다.</p>
+
+          <h4>Write-Through</h4>
+
+          <p>데이터를 쓸 때 <mark>DB와 캐시를 동시에 갱신</mark>하는 전략이다.</p>
+
+          <ol>
+            <li>애플리케이션이 데이터를 쓴다</li>
+            <li>캐시에 먼저 저장한다</li>
+            <li>캐시가 DB에도 저장한다</li>
+          </ol>
+
+          <p>캐시와 DB가 항상 동기화되므로 <mark>읽기 시 항상 최신 데이터</mark>를 보장한다. 하지만 쓰기 성능이 떨어진다. 모든 쓰기가 캐시와 DB 두 곳을 거쳐야 하기 때문이다.</p>
+
+          <p>Spring Cache에서는 <code>@CachePut</code>이 Write-Through와 유사하게 동작한다. 메서드 실행 결과를 캐시에 즉시 저장한다.</p>
+
+          <h4>Write-Behind (Write-Back)</h4>
+
+          <p>Write-Through의 성능 문제를 개선한 전략이다. <mark>캐시에만 먼저 쓰고, DB에는 나중에 비동기로 반영</mark>한다.</p>
+
+          <ol>
+            <li>애플리케이션이 캐시에 데이터를 쓴다</li>
+            <li>쓰기 완료를 바로 반환한다 (빠르다)</li>
+            <li>백그라운드에서 일정 주기로 캐시의 변경사항을 DB에 반영한다</li>
+          </ol>
+
+          <p>쓰기 성능이 매우 빠르지만, <mark>캐시가 죽으면 아직 DB에 반영되지 않은 데이터가 유실</mark>된다. 데이터 유실을 감수할 수 있는 경우에만 사용한다. Spring Cache에서는 기본적으로 지원하지 않으며, 직접 구현하거나 Redis Streams 같은 별도의 인프라가 필요하다.</p>
+
+<div class="mermaid">
+flowchart TB
+    subgraph "Cache-Aside"
+        CA1["앱이 캐시/DB 직접 관리"]
+    end
+    subgraph "Read-Through"
+        RT1["캐시가 DB 자동 조회"]
+    end
+    subgraph "Write-Through"
+        WT1["캐시와 DB 동시 쓰기"]
+    end
+    subgraph "Write-Behind"
+        WB1["캐시만 쓰고 DB 비동기 반영"]
+    end
+
+    CA1 --- P1["구현 단순 | 복원력 높음"]
+    RT1 --- P2["코드 깔끔 | 캐시 의존"]
+    WT1 --- P3["항상 최신 | 쓰기 느림"]
+    WB1 --- P4["쓰기 빠름 | 유실 위험"]
+</div>
+          <h2>Spring Cache에서의 갱신 패턴</h2>
+
+          <p>실무에서 Spring Cache를 사용할 때 가장 흔한 갱신 패턴은 두 가지다.</p>
+
+          <h4>패턴 A — Evict 후 Lazy Loading</h4>
+
+          <p>데이터가 변경되면 캐시를 <mark>삭제만</mark> 하고, 다음 읽기 요청 시 자연스럽게 갱신된다.</p>
+
+<pre><code class="language-java">@Cacheable(value = "feed", unless = "#result == null")
+public FeedResponse getFeed(Long feedId) {
+    return feedRepository.findById(feedId)
+        .map(FeedResponse::from)
+        .orElse(null);
+}
+
+@CacheEvict(value = "feed", key = "#feedId")
+public FeedResponse updateFeed(Long feedId, FeedUpdateRequest request) {
+    Feed feed = feedRepository.findById(feedId)
+        .orElseThrow(() -&gt; new EntityNotFoundException("Feed not found"));
+    feed.updateContent(request.getContent());
+    return FeedResponse.from(feed);
+}</code></pre>
+          <p>수정 시 <code>@CacheEvict</code>로 캐시를 제거한다. 다음에 누군가 이 피드를 조회하면 <code>@Cacheable</code>이 DB에서 새로운 데이터를 가져와 캐시에 저장한다.</p>
+
+          <p>이 패턴의 장점은 단순하다는 것이다. 단점은 갱신 직후 첫 조회가 DB를 거쳐야 하므로 약간 느리다.</p>
+
+          <h4>패턴 B — 즉시 갱신</h4>
+
+          <p>데이터 변경 시 <mark>캐시를 새로운 값으로 즉시 교체</mark>한다.</p>
+
+<pre><code class="language-java">@Cacheable(value = "feed", unless = "#result == null")
+public FeedResponse getFeed(Long feedId) {
+    return feedRepository.findById(feedId)
+        .map(FeedResponse::from)
+        .orElse(null);
+}
+
+@CachePut(value = "feed", key = "#feedId")
+public FeedResponse updateFeed(Long feedId, FeedUpdateRequest request) {
+    Feed feed = feedRepository.findById(feedId)
+        .orElseThrow(() -&gt; new EntityNotFoundException("Feed not found"));
+    feed.updateContent(request.getContent());
+    return FeedResponse.from(feed);
+}</code></pre>
+          <p><code>@CachePut</code>은 메서드를 항상 실행하고 결과를 캐시에 저장한다. 수정 직후에도 캐시에 최신 데이터가 들어 있으므로, 다음 조회가 즉시 캐시에서 반환된다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">어떤 패턴을 선택할까</div>
+            <p>- <strong>수정 후 즉시 읽기가 많다면</strong> → 패턴 B (즉시 갱신). 수정 직후 DB 조회를 피한다.</p>
+            <p>- <strong>수정 후 즉시 읽기가 드물다면</strong> → 패턴 A (Evict). 더 단순하고 실수할 여지가 적다.</p>
+            <p>- <strong>확신이 없다면</strong> → 패턴 A부터 시작하라. 단순한 것이 대부분 옳다.</p>
+          </div>
+
+          <h2>목록 캐시 무효화</h2>
+
+          <p>단건 캐시는 키가 명확하므로 무효화가 쉽다. 하지만 <mark>목록 캐시</mark>는 복잡하다.</p>
+
+          <p>피드 목록을 캐시한다고 생각해보자.</p>
+
+<pre><code class="language-java">@Cacheable("feeds")
+public List&lt;FeedResponse&gt; getFeedList(int page, int size) {
+    return feedRepository.findAll(PageRequest.of(page, size))
+        .map(FeedResponse::from)
+        .getContent();
+}</code></pre>
+          <p>새 피드가 생성되면 목록이 변경된다. 그런데 어떤 키의 캐시를 제거해야 할까? 페이지별로 캐시가 따로 있으므로, 첫 페이지만 무효화하면 되는지, 전체를 무효화해야 하는지 판단이 어렵다.</p>
+
+          <h4>전략 A — allEntries로 전체 무효화</h4>
+
+<pre><code class="language-java">@Caching(evict = {
+    @CacheEvict(value = "feed", key = "#result.id"),
+    @CacheEvict(value = "feeds", allEntries = true)
+})
+public FeedResponse createFeed(FeedCreateRequest request) {
+    Feed feed = feedRepository.save(request.toEntity());
+    return FeedResponse.from(feed);
+}</code></pre>
+          <p>가장 단순하다. 새 피드가 생성되면 목록 캐시를 모두 날린다. 단점은 불필요한 캐시까지 날린다는 것이다.</p>
+
+          <h4>전략 B — TTL에 의존</h4>
+
+          <p>목록 캐시의 TTL을 짧게 설정하고, 별도의 무효화를 하지 않는다.</p>
+
+<pre><code class="language-java">// CacheConfig에서 feeds 캐시의 TTL을 2분으로 설정
+buildCache("feeds", 200, 2)</code></pre>
+          <p>최대 2분간 오래된 목록이 보일 수 있지만, 코드가 단순해진다. 피드 목록처럼 약간의 지연이 허용되는 경우에 적합하다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">목록 캐시는 가성비를 따져라</div>
+            <p>목록 캐시의 무효화 로직은 복잡해지기 쉽다. "새 글이 추가되면 첫 페이지만 바뀌니까 첫 페이지만 무효화하자"같은 최적화는 버그의 원인이 된다. <mark>목록 캐시는 짧은 TTL + 필요시 allEntries 무효화</mark>가 실무에서 가장 안전한 조합이다.</p>
+          </div>
+
+          <h2>Cache Stampede 문제</h2>
+
+          <p>캐시가 만료되는 순간에 <mark>동시에 많은 요청</mark>이 들어오면, 모든 요청이 캐시 미스를 경험하고 동시에 DB를 조회한다. 이것을 Cache Stampede 또는 Thundering Herd라고 부른다.</p>
+
+          <p>100명의 사용자가 동시에 같은 날씨 데이터를 요청하는 상황을 생각해보자.</p>
+
+          <ol>
+            <li>캐시의 TTL이 만료된다</li>
+            <li>100개의 요청이 거의 동시에 도착한다</li>
+            <li>모두 Cache Miss → 100개의 DB 쿼리 또는 API 호출이 발생한다</li>
+            <li>DB나 외부 API에 순간적으로 엄청난 부하가 걸린다</li>
+          </ol>
+
+<div class="mermaid">
+sequenceDiagram
+    participant R1 as 요청 1
+    participant R2 as 요청 2
+    participant R3 as 요청 N
+    participant Cache as 캐시
+    participant DB as DB
+
+    Note over Cache: TTL 만료!
+    R1->>Cache: 조회 → Miss
+    R2->>Cache: 조회 → Miss
+    R3->>Cache: 조회 → Miss
+    R1->>DB: DB 조회
+    R2->>DB: DB 조회
+    R3->>DB: DB 조회
+    Note over DB: 순간 부하 폭증!
+</div>
+          <h4>해결 방법 — sync 옵션</h4>
+
+<pre><code class="language-java">@Cacheable(value = "weather", sync = true)
+public WeatherResponse getWeather(String city) {
+    return weatherApi.fetch(city);
+}</code></pre>
+          <p><code>sync = true</code>를 설정하면 <mark>같은 키에 대해 하나의 스레드만 메서드를 실행</mark>하고, 나머지는 결과를 기다린다. 100개의 요청 중 1개만 실제로 API를 호출하고, 99개는 그 결과를 공유한다.</p>
+
+          <h4>해결 방법 — 사전 갱신</h4>
+
+          <p>캐시가 만료되기 <mark>직전에 미리 갱신</mark>하는 방법이다. 스케줄러를 사용하여 주기적으로 캐시를 워밍한다.</p>
+
+<pre><code class="language-java">@Scheduled(fixedRate = 240_000) // 4분마다 실행 (TTL 5분보다 짧게)
+public void warmUpWeatherCache() {
+    List&lt;String&gt; popularCities = List.of("서울", "부산", "대구", "인천");
+    for (String city : popularCities) {
+        WeatherResponse weather = weatherApi.fetch(city);
+        cacheManager.getCache("weather").put(city, weather);
+    }
+}</code></pre>
+          <p>TTL이 5분이면 4분마다 캐시를 미리 갱신한다. 캐시가 만료되는 순간이 없으므로 Stampede가 원천적으로 차단된다. 다만 인기 있는 키를 미리 알아야 하고, 스케줄러 코드가 추가되는 단점이 있다.</p>
+
+          <h2>분산 환경에서의 일관성</h2>
+
+          <p>서버가 여러 대일 때 캐시 일관성은 더 복잡해진다.</p>
+
+          <h4>로컬 캐시의 문제</h4>
+
+          <p>서버 A에서 데이터를 수정하고 로컬 캐시를 무효화해도, <mark>서버 B의 로컬 캐시에는 여전히 옛날 데이터</mark>가 남아 있다. 로컬 캐시만으로는 분산 환경의 일관성을 보장할 수 없다.</p>
+
+          <p>해결 방법은 다음과 같다.</p>
+
+          <ul>
+            <li><strong>분산 캐시(Redis) 사용</strong> : 모든 서버가 같은 캐시를 바라보므로 일관성이 자연스럽게 보장된다.</li>
+            <li><strong>로컬 캐시의 TTL을 짧게 설정</strong> : 완벽한 일관성은 아니지만, 불일치 윈도우를 수초 이내로 줄인다.</li>
+            <li><strong>캐시 무효화 이벤트 전파</strong> : Redis Pub/Sub을 사용하여 한 서버에서 캐시를 무효화하면 다른 서버에도 알린다.</li>
+          </ul>
+
+<div class="mermaid">
+flowchart TB
+    Client["클라이언트"]
+    Client --> S1["서버 A"]
+    Client --> S2["서버 B"]
+
+    S1 --> L1A["L1: 로컬 캐시\nTTL 1-2분"]
+    S2 --> L1B["L1: 로컬 캐시\nTTL 1-2분"]
+
+    L1A -->|Miss| L2["L2: Redis\nTTL 10-30분"]
+    L1B -->|Miss| L2
+
+    L2 -->|Miss| DB[(DB)]
+</div>
+          <div class="callout callout-tip">
+            <div class="callout-title">L1/L2 캐시 조합</div>
+            <p>로컬 캐시(L1)와 Redis(L2)를 함께 사용하면, 로컬 캐시의 <mark>빠른 응답 속도</mark>와 Redis의 <mark>일관성</mark>을 모두 얻을 수 있다. 로컬 캐시의 TTL을 매우 짧게 (1~2분) 잡고, Redis의 TTL은 길게 (10~30분) 잡는다. 대부분의 읽기는 로컬 캐시에서 처리되고, 로컬 캐시 미스 시 Redis에서 가져온다.</p>
+          </div>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">DB 업데이트와 캐시 무효화의 순서를 잘못 잡기</div>
+            <p>"캐시 먼저 삭제 → DB 업데이트"를 하면, 캐시 삭제 직후 다른 스레드가 아직 업데이트되지 않은 DB 데이터를 캐시에 다시 넣을 수 있다. <mark>DB를 먼저 업데이트하고, 그 다음에 캐시를 무효화</mark>하는 순서가 안전하다. Spring Cache의 <code>@CacheEvict</code>는 기본적으로 메서드 실행 <mark>후</mark>에 캐시를 제거하므로 이 순서를 지킨다.</p>
+            <p>[!DANGER] 목록 캐시 무효화를 "정확하게" 하려고 시도하기</p>
+            <p>"첫 페이지만 무효화", "해당 카테고리만 무효화" 등 세밀한 무효화를 구현하면 코드가 매우 복잡해지고 버그가 발생하기 쉽다. <mark>목록 캐시는 TTL을 짧게 잡고 allEntries로 단순하게</mark> 처리하는 것이 실무에서 더 안전하다.</p>
+            <p>[!DANGER] Cache Stampede를 무시하기</p>
+            <p>트래픽이 적을 때는 문제없지만, 인기 있는 데이터의 캐시가 동시에 만료되면 DB에 순간적인 부하 폭탄이 떨어진다. 특히 <mark>외부 API 호출을 캐시하는 경우</mark> Stampede가 발생하면 API 호출 제한에 걸릴 수 있다. 트래픽이 많은 키에는 <code>sync = true</code>를 반드시 설정하라.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#캐시가이드</span>
+          <span>#캐시일관성</span>
+          <span>#갱신전략</span>
+          <span>#CacheStampede</span>
+          <span>#CacheAside</span>
+          <span>#WriteThrough</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="spring-cache2-8-redis.html">&larr; 이전 글</a>
+          <a href="spring-cache2-10-antipatterns.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

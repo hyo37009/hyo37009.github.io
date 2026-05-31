@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Spring Batch] 5. 실행 제어와 흐름 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Spring Batch] 5. 실행 제어와 흐름</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Spring Batch (5/8)</div>
+            <p>이전 편: <a href="spring-batch-4-readers-writers.html">[Spring Batch] 4. 다양한 Reader와 Writer</a></p>
+            <p>다음 편: <a href="spring-batch-6-retry-skip.html">[Spring Batch] 6. 재시도와 건너뛰기</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">Spring Batch 가이드 시리즈</div>
+            <p><strong>01 배치 기초</strong></p>
+            <p>- <a href="spring-batch-1-what-is-batch.html">배치 처리란 무엇인가</a></p>
+            <p>- <a href="spring-batch-2-job-step.html">Job과 Step 구조</a></p>
+            <p><strong>02 Chunk 처리</strong></p>
+            <p>- <a href="spring-batch-3-chunk.html">Chunk 기반 처리</a></p>
+            <p>- <a href="spring-batch-4-readers-writers.html">다양한 Reader와 Writer</a></p>
+            <p><strong>03 실행 제어</strong></p>
+            <p>- <mark>실행 제어와 흐름</mark> ← 현재 편</p>
+            <p>- <a href="spring-batch-6-retry-skip.html">재시도와 건너뛰기</a></p>
+            <p><strong>04 운영과 면접</strong></p>
+            <p>- <a href="spring-batch-7-scheduling.html">스케줄링과 운영</a></p>
+            <p>- <a href="spring-batch-8-interview.html">면접 대비</a></p>
+          </div>
+
+          <p>지금까지는 Step이 순서대로 실행되는 단순한 흐름만 봤다. 실무에서는 "이 Step이 실패하면 다른 Step을 실행하라", "조건에 따라 분기하라" 같은 복잡한 흐름 제어가 필요하다. Spring Batch의 Flow API가 이 역할을 담당한다.</p>
+
+          <h2>순차 실행</h2>
+
+          <p>가장 기본적인 흐름이다. Step이 순서대로 실행되고, 하나라도 실패하면 Job 전체가 실패한다.</p>
+
+<pre><code class="language-java">@Bean
+public Job simpleJob(JobRepository jobRepository,
+                      Step stepA, Step stepB, Step stepC) {
+    return new JobBuilder("simpleJob", jobRepository)
+            .start(stepA)
+            .next(stepB)
+            .next(stepC)
+            .build();
+}</code></pre>
+
+<div class="mermaid">
+flowchart LR
+    A["Step A"] -->|성공| B["Step B"]
+    B -->|성공| C["Step C"]
+    C -->|성공| D(["COMPLETED"])
+    A -->|실패| F(["FAILED"])
+    B -->|실패| F
+    C -->|실패| F
+
+    style D fill:#E8F8E8,stroke:#4CAF50
+    style F fill:#FFE6E6,stroke:#F44336
+</div>
+          <h2>조건부 분기</h2>
+
+          <p>Step의 결과에 따라 다음에 실행할 Step을 결정한다. ExitStatus 값을 기준으로 분기한다.</p>
+
+<pre><code class="language-java">@Bean
+public Job conditionalJob(JobRepository jobRepository,
+                            Step validateStep, Step processStep,
+                            Step errorStep, Step notifyStep) {
+    return new JobBuilder("conditionalJob", jobRepository)
+            .start(validateStep)
+                .on("FAILED").to(errorStep)     // 검증 실패 → 에러 처리
+                .from(validateStep)
+                .on("*").to(processStep)         // 그 외 → 정상 처리
+                .from(processStep)
+                .on("*").to(notifyStep)          // 처리 완료 → 알림
+            .end()
+            .build();
+}</code></pre>
+
+<div class="mermaid">
+flowchart TD
+    V["validateStep"]
+    V -->|FAILED| E["errorStep"]
+    V -->|"* (성공)"| P["processStep"]
+    P --> N["notifyStep"]
+    N --> DONE(["COMPLETED"])
+    E --> DONE
+
+    style V fill:#FFF3E0,stroke:#FF9800
+    style E fill:#FFE6E6,stroke:#F44336
+    style P fill:#E8F8E8,stroke:#4CAF50
+    style N fill:#E8F4F8,stroke:#2196F3
+</div>
+          <p><code>on("FAILED")</code>은 ExitStatus가 "FAILED"일 때 매칭된다. <code>on("*")</code>은 <mark>와일드카드</mark>로 모든 상태에 매칭된다. 매칭 순서가 중요한데, 먼저 선언된 조건이 우선한다.</p>
+
+          <h4>ExitStatus vs BatchStatus</h4>
+
+          <p>혼동하기 쉬운 두 가지 상태가 있다.</p>
+
+          <ul>
+            <li><strong>BatchStatus</strong> : Spring Batch가 관리하는 실행 상태다. <code>COMPLETED</code>, <code>FAILED</code>, <code>STOPPED</code> 등 고정된 값이다.</li>
+            <li><strong>ExitStatus</strong> : Step이 반환하는 종료 코드다. 개발자가 <mark>커스텀 값</mark>을 만들 수 있다.</li>
+          </ul>
+
+<pre><code class="language-java">@Bean
+public Step validateStep(JobRepository jobRepository,
+                          PlatformTransactionManager transactionManager) {
+    return new StepBuilder("validateStep", jobRepository)
+            .tasklet((contribution, chunkContext) -&gt; {
+                boolean isValid = validateData();
+                if (!isValid) {
+                    contribution.setExitStatus(new ExitStatus("INVALID"));
+                }
+                return RepeatStatus.FINISHED;
+            }, transactionManager)
+            .build();
+}</code></pre>
+          <p><code>ExitStatus("INVALID")</code>처럼 커스텀 상태를 만들어서 분기에 활용할 수 있다.</p>
+
+          <h2>ExecutionContext — Step 간 데이터 공유</h2>
+
+          <p>Step 사이에서 데이터를 주고받아야 할 때 <code>ExecutionContext</code>를 사용한다. 키-값 저장소처럼 동작하며, <mark>메타데이터 테이블에 영속화</mark>되므로 재시작 후에도 값이 유지된다.</p>
+
+<pre><code class="language-java">// Step 1에서 데이터 저장
+@Bean
+public Step countStep(JobRepository jobRepository,
+                       PlatformTransactionManager transactionManager) {
+    return new StepBuilder("countStep", jobRepository)
+            .tasklet((contribution, chunkContext) -&gt; {
+                int count = orderRepository.countPending();
+                chunkContext.getStepContext()
+                    .getStepExecution()
+                    .getJobExecution()
+                    .getExecutionContext()
+                    .putInt("totalCount", count);
+                return RepeatStatus.FINISHED;
+            }, transactionManager)
+            .build();
+}
+
+// Step 2에서 데이터 읽기
+@Bean
+@StepScope
+public ItemReader&lt;Order&gt; orderReader(
+        @Value("#{jobExecutionContext['totalCount']}") int totalCount) {
+    log.info("처리할 총 건수: {}", totalCount);
+    // ...
+}</code></pre>
+          <p><code>jobExecutionContext</code>는 Job 전체에서 공유되는 컨텍스트다. <code>stepExecutionContext</code>는 해당 Step 내에서만 유효하다.</p>
+
+<div class="mermaid">
+flowchart TD
+    subgraph Job["Job ExecutionContext (Job 전체 공유)"]
+        S1["Step 1"] -->|"put('totalCount', 5000)"| CTX["ExecutionContext"]
+        CTX -->|"get('totalCount')"| S2["Step 2"]
+        S2 --> S3["Step 3"]
+    end
+
+    style CTX fill:#E8F4F8,stroke:#2196F3
+</div>
+          <div class="callout callout-warning">
+            <div class="callout-title">ExecutionContext에 큰 데이터를 넣지 마라</div>
+            <p>ExecutionContext는 <mark>메타데이터 테이블에 직렬화</mark>되어 저장된다. 큰 리스트나 복잡한 객체를 넣으면 직렬화 비용과 DB 저장 비용이 크다. 건수, ID, 파일 경로 같은 <mark>작은 메타 정보</mark>만 넣어야 한다.</p>
+          </div>
+
+          <h2>Flow — 재사용 가능한 Step 묶음</h2>
+
+          <p>여러 Job에서 동일한 Step 시퀀스를 재사용하고 싶을 때 Flow로 묶는다.</p>
+
+<pre><code class="language-java">@Bean
+public Flow validationFlow(Step schemaCheck, Step dataCheck) {
+    return new FlowBuilder&lt;SimpleFlow&gt;("validationFlow")
+            .start(schemaCheck)
+            .next(dataCheck)
+            .build();
+}
+
+@Bean
+public Job job1(JobRepository jobRepository,
+                 Flow validationFlow, Step processStep) {
+    return new JobBuilder("job1", jobRepository)
+            .start(validationFlow)
+            .next(processStep)
+            .end()
+            .build();
+}
+
+@Bean
+public Job job2(JobRepository jobRepository,
+                 Flow validationFlow, Step exportStep) {
+    return new JobBuilder("job2", jobRepository)
+            .start(validationFlow)
+            .next(exportStep)
+            .end()
+            .build();
+}</code></pre>
+          <p><code>validationFlow</code>를 두 Job에서 재사용한다. 검증 로직이 변경되면 Flow만 수정하면 된다.</p>
+
+          <h2>병렬 실행</h2>
+
+          <p>독립적인 Step을 동시에 실행해서 처리 시간을 단축할 수 있다. Split을 사용한다.</p>
+
+<pre><code class="language-java">@Bean
+public Job parallelJob(JobRepository jobRepository,
+                        Flow flow1, Flow flow2, Step finalStep) {
+    return new JobBuilder("parallelJob", jobRepository)
+            .start(new FlowBuilder&lt;SimpleFlow&gt;("splitFlow")
+                    .split(new SimpleAsyncTaskExecutor())
+                    .add(flow1, flow2)
+                    .build())
+            .next(finalStep)
+            .end()
+            .build();
+}</code></pre>
+
+<div class="mermaid">
+flowchart TD
+    START(["시작"]) --> SPLIT{"Split"}
+    SPLIT -->|스레드 1| F1["Flow 1<br/>주문 집계"]
+    SPLIT -->|스레드 2| F2["Flow 2<br/>결제 집계"]
+    F1 --> JOIN{"Join"}
+    F2 --> JOIN
+    JOIN --> FINAL["finalStep<br/>결과 병합"]
+    FINAL --> END(["완료"])
+
+    style SPLIT fill:#FFF3E0,stroke:#FF9800
+    style JOIN fill:#FFF3E0,stroke:#FF9800
+    style F1 fill:#E8F8E8,stroke:#4CAF50
+    style F2 fill:#E8F8E8,stroke:#4CAF50
+</div>
+          <p>flow1과 flow2가 별도 스레드에서 동시에 실행되고, 둘 다 완료되면 finalStep이 실행된다.</p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">병렬 실행 시 데이터 의존성 주의</div>
+            <p>병렬로 실행되는 Step 간에 <mark>데이터 의존성이 없어야</mark> 한다. 같은 테이블을 동시에 읽고 쓰면 데드락이나 데이터 정합성 문제가 발생할 수 있다.</p>
+          </div>
+
+          <h2>Decider — 프로그래밍 방식의 분기</h2>
+
+          <p>ExitStatus 문자열 비교보다 복잡한 분기 로직이 필요할 때 <code>JobExecutionDecider</code>를 사용한다.</p>
+
+<pre><code class="language-java">public class DayOfWeekDecider implements JobExecutionDecider {
+
+    @Override
+    public FlowExecutionStatus decide(JobExecution jobExecution,
+                                       StepExecution stepExecution) {
+        DayOfWeek day = LocalDate.now().getDayOfWeek();
+        if (day == DayOfWeek.MONDAY) {
+            return new FlowExecutionStatus("WEEKLY");
+        }
+        return new FlowExecutionStatus("DAILY");
+    }
+}</code></pre>
+
+<pre><code class="language-java">@Bean
+public Job deciderJob(JobRepository jobRepository,
+                       Step dailyStep, Step weeklyStep) {
+    JobExecutionDecider decider = new DayOfWeekDecider();
+
+    return new JobBuilder("deciderJob", jobRepository)
+            .start(decider)
+                .on("DAILY").to(dailyStep)
+                .from(decider)
+                .on("WEEKLY").to(weeklyStep)
+            .end()
+            .build();
+}</code></pre>
+          <p>월요일에는 주간 집계, 나머지 날에는 일일 집계를 실행하는 패턴이다.</p>
+
+<div class="mermaid">
+flowchart TD
+    D{"DayOfWeekDecider"}
+    D -->|DAILY| DS["dailyStep<br/>일일 집계"]
+    D -->|WEEKLY| WS["weeklyStep<br/>주간 집계"]
+    DS --> DONE(["COMPLETED"])
+    WS --> DONE
+
+    style D fill:#FFF3E0,stroke:#FF9800
+</div>
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">on() 패턴의 순서를 잘못 배치하기</div>
+            <p><code>on("*")</code>은 와일드카드라서 모든 상태에 매칭된다. 이것을 <code>on("FAILED")</code> 앞에 배치하면 <mark>FAILED도 와일드카드에 먼저 매칭</mark>되어 에러 분기가 동작하지 않는다. 구체적인 패턴을 먼저, 와일드카드를 나중에 배치하라.</p>
+            <p>[!DANGER] ExecutionContext로 대량 데이터를 전달하기</p>
+            <p>Step A에서 조회한 리스트를 ExecutionContext에 넣고 Step B에서 꺼내 쓰는 패턴은 위험하다. 리스트가 크면 <mark>직렬화 비용과 DB 저장 비용</mark>이 폭증한다. 대량 데이터는 임시 테이블이나 파일을 통해 전달하고, ExecutionContext는 메타 정보만 담아라.</p>
+            <p>[!DANGER] 병렬 Step에서 같은 DB 테이블을 동시에 수정하기</p>
+            <p>두 Flow가 같은 테이블에 동시에 INSERT/UPDATE를 하면 <mark>데드락이나 unique constraint 위반</mark>이 발생할 수 있다. 병렬 실행할 Step은 반드시 서로 다른 데이터 영역을 다루도록 설계하라.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#SpringBatch</span>
+          <span>#조건분기</span>
+          <span>#ExecutionContext</span>
+          <span>#Flow</span>
+          <span>#병렬실행</span>
+          <span>#Decider</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="spring-batch-4-readers-writers.html">&larr; 이전 글</a>
+          <a href="spring-batch-6-retry-skip.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

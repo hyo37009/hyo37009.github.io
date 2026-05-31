@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Spring Batch] 8. 면접 대비 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Spring Batch] 8. 면접 대비</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Spring Batch (8/8)</div>
+            <p>이전 편: <a href="spring-batch-7-scheduling.html">[Spring Batch] 7. 스케줄링과 운영</a></p>
+            <p>이 문서가 시리즈의 마지막 편입니다.</p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">Spring Batch 가이드 시리즈</div>
+            <p><strong>01 배치 기초</strong></p>
+            <p>- <a href="spring-batch-1-what-is-batch.html">배치 처리란 무엇인가</a></p>
+            <p>- <a href="spring-batch-2-job-step.html">Job과 Step 구조</a></p>
+            <p><strong>02 Chunk 처리</strong></p>
+            <p>- <a href="spring-batch-3-chunk.html">Chunk 기반 처리</a></p>
+            <p>- <a href="spring-batch-4-readers-writers.html">다양한 Reader와 Writer</a></p>
+            <p><strong>03 실행 제어</strong></p>
+            <p>- <a href="spring-batch-5-flow.html">실행 제어와 흐름</a></p>
+            <p>- <a href="spring-batch-6-retry-skip.html">재시도와 건너뛰기</a></p>
+            <p><strong>04 운영과 면접</strong></p>
+            <p>- <a href="spring-batch-7-scheduling.html">스케줄링과 운영</a></p>
+            <p>- <mark>면접 대비</mark> ← 현재 편</p>
+          </div>
+
+          <h2>기본 개념</h2>
+
+          <div class="callout callout-question">
+            <div class="callout-title">Q. 배치 처리란 무엇이고, 실시간 처리와 어떤 차이가 있나요?</div>
+            <p>배치 처리는 대량의 데이터를 모아서 한꺼번에 처리하는 방식이다. 실시간 처리는 사용자 요청에 즉시 응답하지만, 배치는 정해진 시점에 일괄적으로 실행된다. 정산, 통계 집계, 데이터 마이그레이션처럼 즉시 응답이 필요 없고 대량 데이터를 다루는 작업에 적합하다.</p>
+            <p>[!QUESTION] Q. Spring Batch가 해결하는 문제는 무엇인가요?</p>
+            <p>대량 데이터를 chunk 단위로 나눠서 메모리 효율적으로 처리하고, 실패 시 재시작/재시도를 지원하고, 실행 이력을 자동으로 기록하는 것이다. 직접 구현하면 복잡해지는 트랜잭션 관리, Skip 정책, 병렬 처리 같은 기능을 프레임워크 차원에서 제공한다.</p>
+            <p>[!QUESTION] Q. Spring Batch는 스케줄러인가요?</p>
+            <p>아니다. Spring Batch는 배치 "처리"를 담당하지, "언제 실행할지"는 관여하지 않는다. 실행 시점은 <code>@Scheduled</code>, Quartz, Jenkins, K8s CronJob 같은 외부 스케줄러가 결정한다.</p>
+          </div>
+
+          <h2>Job과 Step</h2>
+
+          <div class="callout callout-question">
+            <div class="callout-title">Q. Job, Step, Chunk의 관계를 설명해주세요.</div>
+            <p>Job은 하나의 완전한 배치 작업이고, 내부에 하나 이상의 Step을 포함한다. Step은 실제 작업을 수행하는 단위로 Chunk 모델 또는 Tasklet 모델을 사용한다. Chunk 모델에서는 데이터를 일정 크기(chunk)로 나눠서 Reader → Processor → Writer를 반복한다.</p>
+            <p>[!QUESTION] Q. JobInstance와 JobExecution의 차이는 무엇인가요?</p>
+            <p>JobInstance는 Job + JobParameters의 논리적 조합이다. "정산 Job + 2024-01-15"가 하나의 JobInstance다. JobExecution은 그 JobInstance의 실제 실행 시도다. 첫 번째 실행이 실패하고 재시작하면, 같은 JobInstance에 두 개의 JobExecution이 생긴다. 이미 성공한 JobInstance를 같은 파라미터로 다시 실행할 수 없다.</p>
+            <p>[!QUESTION] Q. Chunk 모델과 Tasklet 모델은 언제 각각 사용하나요?</p>
+            <p>Chunk는 대량 데이터를 건 by 건으로 읽고 가공할 때 사용한다. Reader → Processor → Writer 파이프라인이 필요한 경우다. Tasklet은 SQL 하나로 끝나는 단순 작업, 파일 삭제, 테이블 정리 같은 단발성 작업에 사용한다.</p>
+          </div>
+
+          <h2>Chunk 처리</h2>
+
+          <div class="callout callout-question">
+            <div class="callout-title">Q. chunk 크기는 어떻게 결정하나요?</div>
+            <p>기본값으로 1,000부터 시작하고 실제 환경에서 측정해서 조정한다. 너무 작으면 커밋 오버헤드가 크고, 너무 크면 메모리 부담과 롤백 비용이 커진다. 아이템 크기가 크면(이미지, 대용량 텍스트) chunk를 줄이고, Writer가 JDBC Batch를 사용하면 batch size와 맞추는 것이 좋다.</p>
+            <p>[!QUESTION] Q. Processor에서 null을 반환하면 어떻게 되나요?</p>
+            <p>해당 아이템이 필터링되어 Writer에 전달되지 않는다. 1,000건을 읽어서 200건이 null이 되면 Writer는 800건만 받는다. 조건에 맞지 않는 데이터를 걸러내는 용도로 사용한다.</p>
+            <p>[!QUESTION] Q. JpaPagingItemReader와 JpaCursorItemReader의 차이는?</p>
+            <p>페이징은 OFFSET/LIMIT으로 페이지 단위로 쿼리를 반복하고, 커서는 DB 커서를 열어두고 한 건씩 스트리밍한다. 페이징은 OFFSET이 커질수록 느려지지만 멀티스레드에 안전하다. 커서는 쿼리 1회로 끝나지만 처리가 끝날 때까지 DB 커넥션을 점유한다.</p>
+          </div>
+
+          <h2>장애 처리</h2>
+
+          <div class="callout callout-question">
+            <div class="callout-title">Q. 배치가 중간에 실패하면 어떻게 되나요? 처음부터 다시 실행해야 하나요?</div>
+            <p>아니다. Spring Batch는 각 Step의 상태를 메타데이터 테이블에 기록하므로, 실패한 지점부터 이어서 재시작할 수 있다. 이미 COMPLETED인 Step은 건너뛰고 FAILED인 Step부터 다시 실행한다. 이것이 메타데이터 테이블의 핵심 역할이다.</p>
+            <p>[!QUESTION] Q. Skip과 Retry의 차이와 사용 시나리오를 설명해주세요.</p>
+            <p>Retry는 일시적 오류에 대해 같은 아이템을 다시 처리하는 것이다. 네트워크 타임아웃이나 DB 락 충돌처럼, 재시도하면 성공할 수 있는 오류에 사용한다. Skip은 특정 아이템을 건너뛰고 나머지를 계속 처리하는 것이다. 데이터 포맷 오류처럼 재시도해도 같은 결과인 오류에 사용한다. 실무에서는 Retry를 먼저 시도하고, 재시도를 소진하면 Skip하는 조합을 가장 많이 쓴다.</p>
+            <p>[!QUESTION] Q. Skip이 발생하면 트랜잭션은 어떻게 되나요?</p>
+            <p>chunk 처리 중 Skip이 발생하면 해당 chunk 전체가 롤백된다. 그 후 Skip 대상 아이템을 제외하고 나머지 아이템으로 chunk를 재구성해서 다시 처리한다. 1,000건 chunk에서 1건을 skip하면 999건으로 다시 chunk가 실행된다.</p>
+          </div>
+
+          <h2>운영</h2>
+
+          <div class="callout callout-question">
+            <div class="callout-title">Q. 멱등성이란 무엇이고, 배치에서 왜 중요한가요?</div>
+            <p>같은 배치를 여러 번 실행해도 결과가 동일한 성질이다. 배치는 장애 복구, 수동 재처리 등으로 재실행될 수 있다. 멱등성이 없으면 데이터 중복, 이중 결제 같은 문제가 발생한다. DELETE + INSERT, UPSERT, 처리 전 기존 데이터 삭제 같은 패턴으로 멱등성을 확보한다.</p>
+            <p>[!QUESTION] Q. 분산 환경에서 배치를 어떻게 운영하나요?</p>
+            <p>서버가 여러 대이면 같은 배치가 동시에 실행되는 것을 방지해야 한다. 방법은 세 가지다. 첫째, 배치 전용 서버를 분리한다. 둘째, ShedLock 같은 분산 락을 사용한다. 셋째, Jenkins나 K8s CronJob처럼 단일 실행을 보장하는 스케줄러를 사용한다.</p>
+            <p>[!QUESTION] Q. 배치 성능을 개선하는 방법은?</p>
+            <p>chunk 크기 튜닝, Reader의 pageSize와 chunk 크기 일치, WHERE/ORDER BY에 인덱스 확인, JPA 대신 JDBC Batch Insert 사용이 기본이다. 더 나아가면 Step 병렬 실행(Split), 파티셔닝(데이터를 분할해서 병렬 처리), 원격 청킹(여러 서버에 분산)을 고려한다.</p>
+          </div>
+
+          <h2>함정 질문</h2>
+
+          <div class="callout callout-question">
+            <div class="callout-title">Q. Spring Batch에서 @Transactional을 직접 사용해야 하나요?</div>
+            <p>사용하면 안 된다. Spring Batch는 <mark>chunk 단위로 자체적인 트랜잭션을 관리</mark>한다. Reader → Processor → Writer 사이클 하나가 하나의 트랜잭션이다. 여기에 <code>@Transactional</code>을 추가로 붙이면 트랜잭션 경계가 꼬여서 예상치 못한 동작이 발생한다. Spring Batch의 트랜잭션 관리에 맡겨라.</p>
+            <p>[!QUESTION] Q. Job 안에서 다른 Job을 호출해도 되나요?</p>
+            <p>가능하지만 권장하지 않는다. Job 내에서 <code>JobLauncher.run()</code>으로 다른 Job을 실행하면 메타데이터 관리가 복잡해지고, 바깥 Job과 안쪽 Job의 트랜잭션이 독립적이어서 원자적 처리가 안 된다. 대신 <mark>공통 로직을 Step이나 Flow로 추출</mark>해서 여러 Job에서 재사용하는 패턴이 올바르다.</p>
+            <p>[!QUESTION] Q. chunk 크기를 1로 설정하면 어떻게 되나요?</p>
+            <p>기술적으로 동작한다. 1건 읽고 → 1건 가공 → 1건 쓰고 → 커밋. 하지만 <mark>커밋 오버헤드가 건 수만큼 발생</mark>해서 성능이 극도로 나빠진다. 10만 건이면 10만 번 커밋이다. Batch Insert의 이점도 완전히 사라진다. chunk 크기 1은 Tasklet과 사실상 동일하며, 이 경우 Tasklet을 사용하는 것이 의도가 명확하다.</p>
+            <p>[!QUESTION] Q. 배치에서 캐시를 사용하면 좋은가요?</p>
+            <p>조심해야 한다. 배치는 대량 데이터를 순차 처리하므로 <mark>같은 데이터를 반복 조회하는 패턴이 적다</mark>. 캐시를 도입해도 적중률이 낮을 수 있다. 다만 Processor에서 코드 테이블이나 환율 같은 <mark>참조 데이터를 반복 조회</mark>하는 경우에는 효과적이다. 처리 데이터 자체를 캐시하는 것은 대부분 불필요하다.</p>
+            <p>[!QUESTION] Q. 배치 처리 중에 서버가 죽으면 어떻게 되나요?</p>
+            <p>현재 chunk의 트랜잭션이 롤백된다. 이미 커밋된 chunk는 안전하다. 서버를 다시 시작하고 같은 파라미터로 Job을 실행하면, Spring Batch가 메타데이터를 확인해서 마지막으로 성공한 chunk 이후부터 재처리한다. 단, <mark>메타데이터 테이블이 영속적인 DB에 있어야</mark> 재시작이 가능하다. H2 인메모리 DB를 사용하면 이력이 사라져서 재시작할 수 없다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#SpringBatch</span>
+          <span>#면접</span>
+          <span>#QA</span>
+          <span>#배치설계</span>
+          <span>#멱등성</span>
+          <span>#트랜잭션</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="spring-batch-7-scheduling.html">&larr; 이전 글</a>
+          <a href="../pages/nbuntu.html">목록으로 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

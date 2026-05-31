@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Spring Batch] 6. 재시도와 건너뛰기 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Spring Batch] 6. 재시도와 건너뛰기</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Spring Batch (6/8)</div>
+            <p>이전 편: <a href="spring-batch-5-flow.html">[Spring Batch] 5. 실행 제어와 흐름</a></p>
+            <p>다음 편: <a href="spring-batch-7-scheduling.html">[Spring Batch] 7. 스케줄링과 운영</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">Spring Batch 가이드 시리즈</div>
+            <p><strong>01 배치 기초</strong></p>
+            <p>- <a href="spring-batch-1-what-is-batch.html">배치 처리란 무엇인가</a></p>
+            <p>- <a href="spring-batch-2-job-step.html">Job과 Step 구조</a></p>
+            <p><strong>02 Chunk 처리</strong></p>
+            <p>- <a href="spring-batch-3-chunk.html">Chunk 기반 처리</a></p>
+            <p>- <a href="spring-batch-4-readers-writers.html">다양한 Reader와 Writer</a></p>
+            <p><strong>03 실행 제어</strong></p>
+            <p>- <a href="spring-batch-5-flow.html">실행 제어와 흐름</a></p>
+            <p>- <mark>재시도와 건너뛰기</mark> ← 현재 편</p>
+            <p><strong>04 운영과 면접</strong></p>
+            <p>- <a href="spring-batch-7-scheduling.html">스케줄링과 운영</a></p>
+            <p>- <a href="spring-batch-8-interview.html">면접 대비</a></p>
+          </div>
+
+          <p>10만 건 중 1건이 잘못된 데이터 때문에 배치 전체가 실패하면 나머지 99,999건도 처리되지 않는다. 이런 상황에서 잘못된 데이터를 <mark>건너뛰고</mark> 나머지를 계속 처리하거나, 일시적 오류를 <mark>재시도</mark>해서 복구하는 전략이 필요하다.</p>
+
+          <h2>Skip — 건너뛰기</h2>
+
+          <p>특정 예외가 발생한 아이템을 건너뛰고 나머지를 계속 처리한다. 데이터 품질이 완벽하지 않은 현실에서 매우 유용하다.</p>
+
+<pre><code class="language-java">@Bean
+public Step processStep(JobRepository jobRepository,
+                         PlatformTransactionManager transactionManager) {
+    return new StepBuilder("processStep", jobRepository)
+            .&lt;Order, Settlement&gt;chunk(1000, transactionManager)
+            .reader(orderReader())
+            .processor(settlementProcessor())
+            .writer(settlementWriter())
+            .faultTolerant()
+            .skip(DataFormatException.class)
+            .skipLimit(100)
+            .build();
+}</code></pre>
+          <p><code>faultTolerant()</code>를 호출해야 skip/retry 설정이 활성화된다. <code>skip(DataFormatException.class)</code>는 이 예외가 발생하면 해당 아이템을 건너뛰겠다는 뜻이다. <code>skipLimit(100)</code>은 최대 100건까지 건너뛸 수 있다는 제한이다. 101번째 skip이 발생하면 Step이 실패한다.</p>
+
+          <p>전체 흐름을 보면 이렇다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant R as Reader
+    participant P as Processor
+    participant W as Writer
+
+    rect rgb(232, 248, 232)
+        Note over R,W: 정상 처리
+        R->>P: item #1
+        P->>W: 변환 결과
+    end
+
+    rect rgb(255, 230, 230)
+        Note over R,P: Skip 발생
+        R->>P: item #2
+        P--xP: DataFormatException!
+        Note right of P: skipCount + 1<br/>item #2 건너뜀
+    end
+
+    rect rgb(232, 248, 232)
+        Note over R,W: 계속 처리
+        R->>P: item #3
+        P->>W: 변환 결과
+    end
+</div>
+          <p>분홍 영역에서 예외가 발생하지만 Step이 멈추지 않고, 다음 아이템부터 계속 처리한다.</p>
+
+          <h4>noSkip으로 특정 예외 제외</h4>
+
+<pre><code class="language-java">.faultTolerant()
+.skip(Exception.class)
+.noSkip(FatalException.class)
+.skipLimit(100)</code></pre>
+          <p>모든 예외를 건너뛰되, <code>FatalException</code>은 절대 건너뛰지 않는다. 데이터 포맷 오류는 건너뛰지만, DB 커넥션 실패 같은 치명적 오류는 즉시 실패시키는 패턴이다.</p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">Skip은 chunk 롤백 후 재처리를 수반한다</div>
+            <p>chunk 처리 중 skip이 발생하면, <mark>해당 chunk 전체가 롤백</mark>되고 skip 대상 아이템을 제외한 나머지를 다시 처리한다. 1,000건 chunk에서 1건을 skip하면, 999건으로 다시 chunk가 실행된다. 이 동작을 이해하지 못하면 "왜 같은 데이터가 두 번 처리되지?"라는 혼란에 빠진다.</p>
+          </div>
+
+          <h2>Retry — 재시도</h2>
+
+          <p>일시적 오류에 대해 동일한 아이템을 다시 처리한다. 네트워크 타임아웃, DB 락 충돌 같은 일시적 문제에 효과적이다.</p>
+
+<pre><code class="language-java">@Bean
+public Step apiStep(JobRepository jobRepository,
+                     PlatformTransactionManager transactionManager) {
+    return new StepBuilder("apiStep", jobRepository)
+            .&lt;ExternalData, ProcessedData&gt;chunk(100, transactionManager)
+            .reader(externalReader())
+            .processor(apiProcessor())
+            .writer(resultWriter())
+            .faultTolerant()
+            .retry(TimeoutException.class)
+            .retryLimit(3)
+            .build();
+}</code></pre>
+          <p><code>retry(TimeoutException.class)</code>는 타임아웃이 발생하면 재시도하겠다는 뜻이다. <code>retryLimit(3)</code>은 최대 3번까지 재시도한다. 3번 모두 실패하면 해당 아이템이 최종 실패 처리된다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant P as Processor
+    participant API as 외부 API
+
+    rect rgb(255, 230, 230)
+        Note over P,API: 1차 시도 — 실패
+        P->>API: 요청
+        API--xP: TimeoutException
+    end
+
+    rect rgb(255, 243, 224)
+        Note over P,API: 2차 시도 — 실패
+        P->>API: 재시도
+        API--xP: TimeoutException
+    end
+
+    rect rgb(232, 248, 232)
+        Note over P,API: 3차 시도 — 성공
+        P->>API: 재시도
+        API-->>P: 응답
+    end
+</div>
+          <h4>Skip과 Retry 조합</h4>
+
+          <p>재시도를 다 소진한 후에도 실패하면 건너뛰는 패턴이다. 실무에서 가장 많이 쓰는 조합이다.</p>
+
+<pre><code class="language-java">.faultTolerant()
+.retry(TimeoutException.class)
+.retryLimit(3)
+.skip(TimeoutException.class)
+.skipLimit(50)</code></pre>
+          <p>3번 재시도해도 실패하면 해당 아이템을 건너뛴다. 최대 50건까지 건너뛸 수 있다.</p>
+
+<div class="mermaid">
+flowchart TD
+    E["예외 발생"] --> R{"재시도 가능?<br/>retryLimit 미초과"}
+    R -->|예| RETRY["재시도"]
+    RETRY -->|성공| CONTINUE["계속 처리"]
+    RETRY -->|실패| R
+
+    R -->|아니오| S{"건너뛰기 가능?<br/>skipLimit 미초과"}
+    S -->|예| SKIP["건너뛰고 계속"]
+    S -->|아니오| FAIL["Step 실패"]
+
+    style RETRY fill:#FFF3E0,stroke:#FF9800
+    style SKIP fill:#E8F4F8,stroke:#2196F3
+    style FAIL fill:#FFE6E6,stroke:#F44336
+    style CONTINUE fill:#E8F8E8,stroke:#4CAF50
+</div>
+          <h2>RetryTemplate과 BackOff</h2>
+
+          <p>Spring Batch의 기본 retry는 즉시 재시도한다. 재시도 간격을 두고 싶으면 <code>RetryTemplate</code>에 <code>BackOffPolicy</code>를 설정한다.</p>
+
+<pre><code class="language-java">@Bean
+public Step apiStep(JobRepository jobRepository,
+                     PlatformTransactionManager transactionManager) {
+
+    RetryTemplate retryTemplate = RetryTemplate.builder()
+            .maxAttempts(3)
+            .exponentialBackoff(1000, 2.0, 10000)  // 1초 → 2초 → 4초
+            .retryOn(TimeoutException.class)
+            .build();
+
+    return new StepBuilder("apiStep", jobRepository)
+            .&lt;ExternalData, ProcessedData&gt;chunk(100, transactionManager)
+            .reader(externalReader())
+            .processor(apiProcessor())
+            .writer(resultWriter())
+            .faultTolerant()
+            .retryPolicy(retryTemplate.getRetryPolicy())
+            .backOffPolicy(retryTemplate.getBackOffPolicy())
+            .build();
+}</code></pre>
+          <p><code>exponentialBackoff(1000, 2.0, 10000)</code>은 1초부터 시작해서 2배씩 늘어나며, 최대 10초까지 대기한다. 외부 API가 일시적으로 과부하 상태일 때, 즉시 재시도보다 대기 후 재시도가 성공 확률이 높다.</p>
+
+          <h2>Listener — 이벤트 감지</h2>
+
+          <p>배치 실행의 각 단계에서 이벤트를 감지하고 추가 로직을 실행할 수 있다. 로깅, 알림, 통계 수집에 사용한다.</p>
+
+          <h4>StepExecutionListener</h4>
+
+          <p>Step 시작/종료 시 호출된다.</p>
+
+<pre><code class="language-java">public class LoggingStepListener implements StepExecutionListener {
+
+    @Override
+    public void beforeStep(StepExecution stepExecution) {
+        log.info("Step 시작: {}", stepExecution.getStepName());
+    }
+
+    @Override
+    public ExitStatus afterStep(StepExecution stepExecution) {
+        log.info("Step 완료: {} — 읽기: {}, 쓰기: {}, 스킵: {}",
+                stepExecution.getStepName(),
+                stepExecution.getReadCount(),
+                stepExecution.getWriteCount(),
+                stepExecution.getSkipCount());
+        return stepExecution.getExitStatus();
+    }
+}</code></pre>
+          <h4>SkipListener</h4>
+
+          <p>Skip이 발생할 때마다 호출된다. 건너뛴 데이터를 별도로 기록하는 데 유용하다.</p>
+
+<pre><code class="language-java">public class SkipLoggingListener implements SkipListener&lt;Order, Settlement&gt; {
+
+    @Override
+    public void onSkipInProcess(Order item, Throwable t) {
+        log.warn("Skip 발생 — orderId: {}, 원인: {}", item.getId(), t.getMessage());
+        // 별도 테이블에 기록하거나 Slack 알림 발송
+    }
+}</code></pre>
+
+<pre><code class="language-java">// Step에 Listener 등록
+.listener(new LoggingStepListener())
+.listener(new SkipLoggingListener())</code></pre>
+          <h4>어노테이션 기반 Listener</h4>
+
+          <p>인터페이스 구현 대신 어노테이션으로도 정의할 수 있다.</p>
+
+<pre><code class="language-java">public class JobNotificationListener {
+
+    @BeforeJob
+    public void beforeJob(JobExecution jobExecution) {
+        log.info("Job 시작: {}", jobExecution.getJobInstance().getJobName());
+    }
+
+    @AfterJob
+    public void afterJob(JobExecution jobExecution) {
+        if (jobExecution.getStatus() == BatchStatus.COMPLETED) {
+            log.info("Job 성공");
+        } else {
+            log.error("Job 실패: {}", jobExecution.getExitStatus());
+            // Slack 알림 발송
+        }
+    }
+}</code></pre>
+
+<div class="mermaid">
+flowchart TD
+    subgraph Listeners["Listener 호출 시점"]
+        direction TB
+        BJ["@BeforeJob"] --> BS["@BeforeStep"]
+        BS --> BC["@BeforeChunk"]
+        BC --> PROCESS["Reader → Processor → Writer"]
+        PROCESS --> AC["@AfterChunk"]
+        AC --> AS["@AfterStep"]
+        AS --> AJ["@AfterJob"]
+    end
+
+    SKIP["onSkipInRead<br/>onSkipInProcess<br/>onSkipInWrite"] -.->|"Skip 발생 시"| PROCESS
+
+    style BJ fill:#E8F4F8,stroke:#2196F3
+    style AJ fill:#E8F4F8,stroke:#2196F3
+    style PROCESS fill:#E8F8E8,stroke:#4CAF50
+    style SKIP fill:#FFE6E6,stroke:#F44336
+</div>
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">skipLimit을 무한대로 설정하기</div>
+            <p><code>skipLimit(Integer.MAX_VALUE)</code>로 설정하면 모든 데이터를 건너뛸 수 있다. 극단적인 경우 <mark>10만 건을 모두 스킵하고 0건을 처리한 뒤 "성공"으로 기록</mark>된다. skipLimit은 전체 데이터의 합리적인 비율로 설정하라. 보통 전체 건수의 1~5% 이내가 적절하다.</p>
+            <p>[!DANGER] 재시도 가능한 예외와 그렇지 않은 예외를 구분하지 않기</p>
+            <p><code>NullPointerException</code>을 재시도해봐야 3번 다 같은 결과다. <mark>일시적 오류</mark>(네트워크 타임아웃, DB 락 충돌)만 재시도하고, 영구적 오류(데이터 포맷, NPE)는 건너뛰기로 처리하라.</p>
+            <p>[!DANGER] Skip된 데이터를 추적하지 않기</p>
+            <p>Skip된 데이터는 처리되지 않은 채 사라진다. <mark>SkipListener로 건너뛴 데이터를 별도 테이블에 기록</mark>하고, 나중에 수동으로 보정할 수 있는 체계를 갖춰야 한다. "Skip했으니 끝"이 아니라 "Skip한 이유와 데이터를 남겨서 후속 조치가 가능하게" 해야 한다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#SpringBatch</span>
+          <span>#Skip</span>
+          <span>#Retry</span>
+          <span>#BackOff</span>
+          <span>#Listener</span>
+          <span>#장애처리</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="spring-batch-5-flow.html">&larr; 이전 글</a>
+          <a href="spring-batch-7-scheduling.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

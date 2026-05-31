@@ -271,12 +271,16 @@ document.querySelectorAll('.post-content pre code[class*="language-"]').forEach(
     '<hr class="neo-divider">' +
     '<div class="neo-fetch">' +
       '<div class="neo-cmd">tree ~/nbuntu</div>' +
-      '<a href="' + pagesPrefix + 'nbuntu.html" class="neo-dir"><span><span class="neo-dir-tree">├─</span><span class="neo-dir-name">Spring/</span></span> <span class="neo-dir-count">19</span></a>' +
-      '<a href="' + pagesPrefix + 'nbuntu.html" class="neo-dir"><span><span class="neo-dir-tree">├─</span><span class="neo-dir-name">Java/</span></span> <span class="neo-dir-count">3</span></a>' +
-      '<a href="' + pagesPrefix + 'nbuntu.html" class="neo-dir"><span><span class="neo-dir-tree">├─</span><span class="neo-dir-name">AWS/</span></span> <span class="neo-dir-count">1</span></a>' +
-      '<a href="' + pagesPrefix + 'nbuntu.html" class="neo-dir"><span><span class="neo-dir-tree">├─</span><span class="neo-dir-name">JWT/</span></span> <span class="neo-dir-count">2</span></a>' +
+      '<a href="' + pagesPrefix + 'nbuntu.html" class="neo-dir"><span><span class="neo-dir-tree">├─</span><span class="neo-dir-name">Spring/</span></span> <span class="neo-dir-count">120</span></a>' +
+      '<a href="' + pagesPrefix + 'nbuntu.html" class="neo-dir"><span><span class="neo-dir-tree">├─</span><span class="neo-dir-name">Java/</span></span> <span class="neo-dir-count">43</span></a>' +
+      '<a href="' + pagesPrefix + 'nbuntu.html" class="neo-dir"><span><span class="neo-dir-tree">├─</span><span class="neo-dir-name">Kotlin/</span></span> <span class="neo-dir-count">25</span></a>' +
+      '<a href="' + pagesPrefix + 'nbuntu.html" class="neo-dir"><span><span class="neo-dir-tree">├─</span><span class="neo-dir-name">JWT/</span></span> <span class="neo-dir-count">7</span></a>' +
+      '<a href="' + pagesPrefix + 'nbuntu.html" class="neo-dir"><span><span class="neo-dir-tree">├─</span><span class="neo-dir-name">코딩테스트/</span></span> <span class="neo-dir-count">22</span></a>' +
+      '<a href="' + pagesPrefix + 'nbuntu.html" class="neo-dir"><span><span class="neo-dir-tree">├─</span><span class="neo-dir-name">성능 테스트/</span></span> <span class="neo-dir-count">9</span></a>' +
+      '<a href="' + pagesPrefix + 'nbuntu.html" class="neo-dir"><span><span class="neo-dir-tree">├─</span><span class="neo-dir-name">Docker/</span></span> <span class="neo-dir-count">9</span></a>' +
+      '<a href="' + pagesPrefix + 'nbuntu.html" class="neo-dir"><span><span class="neo-dir-tree">├─</span><span class="neo-dir-name">DB/</span></span> <span class="neo-dir-count">4</span></a>' +
       '<a href="' + pagesPrefix + 'nbuntu.html" class="neo-dir"><span><span class="neo-dir-tree">├─</span><span class="neo-dir-name">도구/</span></span> <span class="neo-dir-count">2</span></a>' +
-      '<a href="' + pagesPrefix + 'nbuntu.html" class="neo-dir"><span><span class="neo-dir-tree">├─</span><span class="neo-dir-name">코딩테스트/</span></span> <span class="neo-dir-count">6</span></a>' +
+      '<a href="' + pagesPrefix + 'nbuntu.html" class="neo-dir"><span><span class="neo-dir-tree">├─</span><span class="neo-dir-name">AWS/</span></span> <span class="neo-dir-count">1</span></a>' +
       '<a href="' + pagesPrefix + 'knitting.html" class="neo-dir"><span><span class="neo-dir-tree">└─</span><span class="neo-dir-name">뜨개 공방/</span></span> <span class="neo-dir-count">1</span></a>' +
     '</div>' +
     '<hr class="neo-divider">' +

@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Spring 테스트] 2. @DataJpaTest로 쿼리 검증하기 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Spring 테스트] 2. @DataJpaTest로 쿼리 검증하기</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Spring 테스트 (2/4)</div>
+            <p>이전 편: <a href="spring-test-1-overview.html">[Spring 테스트] 1. 슬라이스 테스트와 통합 테스트</a></p>
+            <p>다음 편: <a href="spring-test-3-webmvc.html">[Spring 테스트] 3. @WebMvcTest로 API 검증하기</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">Spring 테스트 시리즈</div>
+            <p>- <a href="spring-test-1-overview.html">개요 — 슬라이스 테스트와 통합 테스트</a></p>
+            <p>- <a href="spring-test-2-datajpa.html">1편 — @DataJpaTest로 쿼리 검증하기</a> ← 현재</p>
+            <p>- <a href="spring-test-3-webmvc.html">2편 — @WebMvcTest로 API 검증하기</a></p>
+            <p>- <a href="spring-test-4-springboot.html">3편 — @SpringBootTest로 통합 검증하기</a></p>
+          </div>
+
+          <p>QueryDSL로 작성한 커서 기반 페이지네이션 쿼리가 있다. 유닛 테스트로는 이 쿼리가 DB에서 진짜 의도대로 동작하는지 알 수 없다. <code>@DataJpaTest</code>는 <mark>JPA 관련 빈만 띄우고 내장 DB를 연결</mark>해서 쿼리를 직접 검증할 수 있게 해준다.</p>
+
+          <h2><code>@DataJpaTest</code>가 해주는 일</h2>
+
+          <p>이 어노테이션 하나로 Spring이 알아서 처리하는 것들이 있다.</p>
+
+          <ul>
+            <li>JPA 관련 빈만 로드한다. Service, Controller는 올리지 않는다.</li>
+            <li>내장 H2 DB를 자동으로 띄운다.</li>
+            <li>각 테스트 메서드를 <code>@Transactional</code>로 감싸서 끝나면 자동 롤백한다.</li>
+            <li><code>TestEntityManager</code>를 제공한다.</li>
+          </ul>
+
+          <p>전체 컨텍스트를 올리는 <code>@SpringBootTest</code>보다 훨씬 빠르다. Repository 레이어만 검증할 때는 이걸 쓰면 된다.</p>
+
+<div class="mermaid">
+flowchart TD
+    A(["@DataJpaTest 시작"]) --> B["JPA 빈만 로드"]
+    B --> C["내장 H2 DB 연결"]
+    C --> D["@Transactional 자동 적용"]
+    D --> E["테스트 실행"]
+    E --> F["자동 롤백"]
+
+    style A fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px
+    style B fill:#E8F4F8,stroke:#2196F3,stroke-width:2px
+    style C fill:#E8F4F8,stroke:#2196F3,stroke-width:2px
+    style D fill:#FFF3E0,stroke:#FF9800,stroke-width:2px
+    style F fill:#FFF3E0,stroke:#FF9800,stroke-width:2px
+</div>
+          <p>로드 범위가 좁기 때문에 Service나 Controller에서 쓰는 빈은 포함되지 않는다. 그래서 <code>JPAQueryFactory</code> 같은 커스텀 설정도 직접 가져와야 한다.</p>
+
+          <h2>기본 셋업</h2>
+
+          <h3><code>@Import</code>로 QueryDSL 설정 가져오기</h3>
+
+          <p><code>@DataJpaTest</code>는 <code>@Configuration</code> 클래스를 자동으로 스캔하지 않는다. QueryDSL 커스텀 레포지토리를 테스트하려면 <code>JPAQueryFactory</code> 빈이 필요한데, <code>@Import</code>로 직접 가져와야 한다.</p>
+
+<pre><code class="language-java">@DataJpaTest
+@Import(QueryDslConfig.class)
+class MessageRepositoryCustomImplTest {
+
+    @Autowired
+    private MessageRepository messageRepository;
+
+    @Autowired
+    private TestEntityManager em;
+}</code></pre>
+          <p><code>@Import</code>를 빼면 <code>NoSuchBeanDefinitionException: JPAQueryFactory</code>가 뜬다.</p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title"><code>@Import</code> 대상 확인</div>
+            <p>프로젝트의 <code>QueryDslConfig</code> 클래스에 <code>JPAQueryFactory</code> 빈이 정의되어 있어야 한다. 없다면 테스트 전용 <code>@TestConfiguration</code>으로 만들어도 된다.</p>
+          </div>
+
+          <h3><code>TestEntityManager</code>로 데이터 넣기</h3>
+
+          <p><code>TestEntityManager</code>는 JPA의 <code>EntityManager</code>를 테스트에 맞게 감싼 것이다. <code>persist</code>, <code>flush</code>, <code>clear</code>를 체이닝해서 쓴다.</p>
+
+<pre><code class="language-java">User sender = em.persist(createUser("sender"));
+User receiver = em.persist(createUser("receiver"));
+em.persist(Message.create(sender, receiver, "hello"));
+em.flush();
+em.clear();</code></pre>
+          <p>이 세 단계가 왜 필요한지 흐름으로 보면 명확하다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant Test as 테스트 코드
+    participant PC as 영속성 컨텍스트
+    participant DB as 내장 H2
+
+    rect rgb(232, 248, 232)
+        Note over Test, DB: 데이터 준비
+        Test->>PC: persist(entity)
+        Note right of PC: 1차 캐시에 저장
+        Test->>PC: flush()
+        PC->>DB: INSERT SQL 실행
+    end
+
+    rect rgb(255, 243, 224)
+        Note over Test, PC: 캐시 초기화
+        Test->>PC: clear()
+        Note right of PC: 1차 캐시 비움
+    end
+
+    rect rgb(240, 248, 255)
+        Note over Test, DB: 쿼리 검증
+        Test->>DB: getByCursor(request)
+        DB-->>Test: 결과 반환
+    end
+</div>
+          <p>초록 영역에서 데이터를 DB에 밀어넣고, 주황 영역에서 1차 캐시를 비운다. 파란 영역에서 실제 쿼리를 검증하는데, 이때 <mark>캐시가 비어있으니 진짜 DB 쿼리가 실행</mark>된다.</p>
+
+          <div class="callout callout-info">
+            <div class="callout-title"><code>clear()</code> 빠뜨리면 생기는 일</div>
+            <p>1차 캐시에 엔티티가 남아있으면 Repository 메서드가 DB를 조회하지 않고 캐시에서 꺼내온다. 쿼리에 버그가 있어도 테스트가 통과해버린다. 의미 없는 테스트가 되는 것이다.</p>
+          </div>
+
+          <h2>커서 기반 페이지네이션 테스트</h2>
+
+          <p>실전에서 <code>MessageRepositoryCustomImpl</code>의 커서 조회를 테스트하는 방법이다.</p>
+
+          <h3>첫 페이지 조회</h3>
+
+          <p>커서가 없으면 가장 최신 데이터부터 조회한다. <code>limit + 1</code>개를 요청하는 것이 핵심이다.</p>
+
+<pre><code class="language-java">@Test
+void 커서_없이_첫_페이지를_조회한다() {
+    // given
+    User sender = em.persist(createUser("sender"));
+    User receiver = em.persist(createUser("receiver"));
+    for (int i = 0; i &lt; 5; i++) {
+        em.persist(Message.create(sender, receiver, "msg" + i));
+    }
+    em.flush();
+    em.clear();
+
+    MessageGetRequest request = new MessageGetRequest(
+            sender.getId(), null, null, 3);
+
+    // when
+    List&lt;Message&gt; result = messageRepository.getByCursor(request);
+
+    // then
+    assertThat(result).hasSize(4); // limit(3) + 1
+}</code></pre>
+          <p><code>limit + 1</code>개가 돌아오면 다음 페이지가 있다는 뜻이다. 정확히 <code>limit</code>개 이하면 마지막 페이지다. 이 트릭은 서비스 레이어에서 <code>hasNext</code>를 판정하는 데 쓰인다.</p>
+
+          <h3>다음 페이지 조회</h3>
+
+          <p>첫 페이지의 마지막 항목을 커서로 넘기면 그 이후 데이터를 가져온다.</p>
+
+<pre><code class="language-java">@Test
+void 커서를_이용해_다음_페이지를_조회한다() {
+    // given
+    User sender = em.persist(createUser("sender"));
+    User receiver = em.persist(createUser("receiver"));
+    List&lt;Message&gt; saved = new ArrayList&lt;&gt;();
+    for (int i = 0; i &lt; 5; i++) {
+        saved.add(em.persist(Message.create(sender, receiver, "msg" + i)));
+    }
+    em.flush();
+    em.clear();
+
+    // 첫 페이지 조회
+    MessageGetRequest firstPage = new MessageGetRequest(
+            sender.getId(), null, null, 2);
+    List&lt;Message&gt; firstResult = messageRepository.getByCursor(firstPage);
+
+    // 첫 페이지 마지막 항목을 커서로
+    Message lastOfFirst = firstResult.get(1);
+    MessageGetRequest secondPage = new MessageGetRequest(
+            sender.getId(),
+            lastOfFirst.getCreatedAt(),
+            lastOfFirst.getId(),
+            2);
+
+    // when
+    List&lt;Message&gt; secondResult = messageRepository.getByCursor(secondPage);
+
+    // then
+    assertThat(secondResult).hasSize(3); // 남은 3개 중 limit+1=3
+}</code></pre>
+          <p>커서 조건은 <code>(createdAt, id)</code> 쌍으로 동작한다. <code>createdAt</code>이 같은 데이터가 있을 수 있으니 <code>id</code>로 tie-breaking을 한다.</p>
+
+          <h3>where 조건 검증</h3>
+
+          <p>DM 조회라면 특정 사용자가 참여한 대화만 필터해야 한다. 다른 사용자의 메시지가 섞이지 않는지 검증한다.</p>
+
+<pre><code class="language-java">@Test
+void 해당_사용자의_메시지만_조회한다() {
+    // given
+    User userA = em.persist(createUser("A"));
+    User userB = em.persist(createUser("B"));
+    User userC = em.persist(createUser("C"));
+
+    em.persist(Message.create(userA, userB, "A→B"));
+    em.persist(Message.create(userB, userA, "B→A"));
+    em.persist(Message.create(userB, userC, "B→C")); // 무관한 대화
+    em.flush();
+    em.clear();
+
+    MessageGetRequest request = new MessageGetRequest(
+            userA.getId(), null, null, 10);
+
+    // when
+    List&lt;Message&gt; result = messageRepository.getByCursor(request);
+
+    // then
+    assertThat(result).hasSize(2); // A가 참여한 대화만
+    assertThat(result).allMatch(m -&gt;
+            m.getSender().getId().equals(userA.getId()) ||
+            m.getReceiver().getId().equals(userA.getId()));
+}</code></pre>
+          <div class="callout callout-tip">
+            <p>이 테스트가 실패한다면 쿼리에 <code>userId</code> 필터가 빠져있다는 뜻이다. 테스트를 먼저 작성하고 구현을 고치면 TDD 방식으로 버그를 잡을 수 있다.</p>
+          </div>
+
+          <h2>Fixture 메서드 패턴</h2>
+
+          <p>테스트마다 <code>User</code>, <code>Message</code>를 직접 생성하면 코드가 길어진다. Fixture 메서드로 분리하면 깔끔하다.</p>
+
+<pre><code class="language-java">private User createUser(String name) {
+    User user = User.create(name + "@test.com", "password123", name);
+    return user;
+}
+
+private Message createMessage(User sender, User receiver, String content) {
+    return Message.create(sender, receiver, content);
+}</code></pre>
+          <p>엔티티의 정적 팩터리 메서드를 그대로 활용한다. Fixture 메서드는 <mark>테스트에 필요한 최소한의 파라미터만</mark> 받도록 설계한다. 나머지는 적당한 기본값을 넣는다.</p>
+
+          <div class="callout callout-tip">
+            <p>프로젝트에서 <a href="테스트-객체-직접-만들지-마라.html">Instancio</a>를 도입했다면 Fixture 메서드 대신 <code>Instancio.create(User.class)</code>로 대체할 수 있다. 필드별 커스터마이징이 필요하면 <code>Instancio.of(User.class).set(field("name"), "sender").create()</code>를 쓴다.</p>
+          </div>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title"><code>@Import(QueryDslConfig.class)</code> 누락</div>
+            <p><code>@DataJpaTest</code>는 JPA 관련 빈만 올리기 때문에 <code>JPAQueryFactory</code>가 자동 등록되지 않는다. 커스텀 레포지토리를 테스트하면 <code>NoSuchBeanDefinitionException</code>이 뜬다. <code>@Import</code>로 설정 클래스를 직접 가져와야 한다.</p>
+            <p>[!DANGER] <code>em.flush()</code> 없이 <code>em.clear()</code>만 호출</p>
+            <p><code>flush()</code> 없이 <code>clear()</code>를 하면 INSERT SQL이 DB로 안 나간 채 캐시만 비워진다. 데이터가 없는 상태에서 쿼리를 검증하게 되어 항상 빈 결과가 돌아온다.</p>
+            <p>[!DANGER] 커서 테스트에서 데이터 순서 가정</p>
+            <p><code>createdAt</code>이 밀리초 단위로 같을 수 있다. 정렬에 id를 tie-breaking으로 넣지 않으면 테스트가 때때로 실패하는 Flaky Test가 된다. 쿼리의 <code>orderBy</code>에 <code>createdAt DESC, id DESC</code>를 함께 넣어야 한다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#테스트</span>
+          <span>#DataJpaTest</span>
+          <span>#슬라이스테스트</span>
+          <span>#QueryDSL</span>
+          <span>#커서페이지네이션</span>
+          <span>#Spring</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="spring-test-1-overview.html">&larr; 이전 글</a>
+          <a href="spring-test-3-webmvc.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>4. 04 환경 변수와 시작 순서 설계 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">4. 04 환경 변수와 시작 순서 설계</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Docker Compose 정리 (4/9)</div>
+            <p>이전 편: <a href="docker-compose-3-network-volume.html">3. 03 네트워크와 볼륨이 상태를 만드는 방식</a></p>
+            <p>다음 편: <a href="docker-compose-5-diagnose.html">5. 01 현재 docker-compose.yml 진단하기</a></p>
+          </div>
+
+
+
+          <p>﻿# [Docker Compose 개념] 환경 변수와 시작 순서 설계</p>
+
+          <div class="callout callout-info">
+            <div class="callout-title">Docker Compose 개념편</div>
+            <p>- <a href="docker-compose-1-env-concept.html">Compose 파일이 표현하는 실행 환경</a></p>
+            <p>- <a href="docker-compose-2-service-image-port.html">서비스 이미지 컨테이너 포트의 관계</a></p>
+            <p>- <a href="docker-compose-3-network-volume.html">네트워크와 볼륨이 상태를 만드는 방식</a></p>
+            <p>- <mark>환경 변수와 시작 순서 설계</mark> ← 현재 문서</p>
+          </div>
+
+          <p>Compose 파일에서 가장 많이 헷갈리는 부분은 환경 변수다. <code>.env</code>가 있고, <code>env_file</code>도 있고, <code>environment</code>도 있다. 셋 다 비슷해 보이지만 역할이 다르다.</p>
+
+          <p>예시 프로젝트에서는 이 구분이 특히 중요하다. DB 비밀번호, JWT secret, AWS S3 key, Admin 계정 정보가 모두 <code>.env</code>에 들어 있다. 이 값을 아무 컨테이너에나 통째로 넣으면 "실행은 되지만 관리하기 불편한 상태"가 된다.</p>
+
+          <h2>.env는 Compose 파일을 채우는 값 저장소다</h2>
+
+          <p>Compose는 기본적으로 프로젝트 디렉터리의 <code>.env</code> 파일을 읽어 <code>${...}</code> 자리에 값을 넣을 수 있다.</p>
+
+<pre><code class="language-yaml">environment:
+  SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
+  SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL}</code></pre>
+          <p>이때 <code>.env</code>는 Compose 파일을 해석하는 시점에 쓰인다. 이것을 보간이라고 부른다. <code>.env</code>에 값이 있다고 해서 모든 값이 자동으로 컨테이너 안에 들어가는 것은 아니다. 컨테이너 안으로 넣으려면 <code>environment</code>나 <code>env_file</code>을 통해 전달해야 한다.</p>
+
+          <p>정리하면 다음과 같다.</p>
+
+          <table>
+          <thead>
+          <tr><th>위치</th><th>역할</th><th>컨테이너 안에 자동 주입되는가</th></tr>
+          </thead>
+          <tbody>
+          <tr><td><code>.env</code></td><td>Compose 파일의 <code>${...}</code> 값을 채움</td><td>아니다</td></tr>
+          <tr><td><code>environment</code></td><td>해당 서비스 컨테이너에 환경 변수 주입</td><td>그렇다</td></tr>
+          <tr><td><code>env_file</code></td><td>파일의 변수를 해당 서비스 컨테이너에 통째로 주입</td><td>그렇다</td></tr>
+          </tbody>
+          </table>
+
+          <h2>env_file은 편하지만 넓다</h2>
+
+          <p>현재 Compose 파일은 <code>app</code>과 <code>db</code>에 모두 <code>.env</code>를 연결한다.</p>
+
+<pre><code class="language-yaml">app:
+  env_file: .env
+
+db:
+  env_file:
+    - .env</code></pre>
+          <p>이렇게 하면 <code>.env</code>의 모든 값이 두 컨테이너에 들어간다. 그 결과 DB 컨테이너에도 AWS key, JWT secret, Admin 계정 정보 같은 값이 들어간다. PostgreSQL 컨테이너는 이 값들을 사용할 필요가 없다.</p>
+
+          <p>실행에는 큰 문제가 없어 보일 수 있지만, 좋은 경계는 아니다. 컨테이너마다 필요한 환경 변수만 좁게 전달해야 한다.</p>
+
+<pre><code class="language-yaml">db:
+  environment:
+    POSTGRES_DB: ${POSTGRES_DB}
+    POSTGRES_USER: ${POSTGRES_USER}
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}</code></pre>
+          <p>이렇게 하면 DB 컨테이너에는 PostgreSQL 초기화에 필요한 값만 들어간다.</p>
+
+          <h2>Spring Boot 설정은 환경 변수로 덮어쓸 수 있다</h2>
+
+          <p>현재 <code>application-prod.yml</code>에는 DB URL이 다음처럼 들어 있다.</p>
+
+<pre><code class="language-yaml">spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/discodeit_prod</code></pre>
+          <p>이 값은 컨테이너 환경에서는 맞지 않다. 앱 컨테이너의 <code>localhost</code>는 DB 컨테이너가 아니기 때문이다. Compose에서는 환경 변수로 이 값을 덮어쓴다.</p>
+
+<pre><code class="language-yaml">app:
+  environment:
+    SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB}
+    SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+    SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}</code></pre>
+          <p>Spring Boot는 <code>SPRING_DATASOURCE_URL</code>을 <code>spring.datasource.url</code> 설정으로 해석할 수 있다. 그래서 이미지 안의 설정 파일을 다시 빌드하지 않고도 실행 환경에 맞는 DB 주소를 주입할 수 있다.</p>
+
+          <p>이 방식은 컨테이너에서 특히 중요하다. 이미지는 최대한 환경 독립적으로 만들고, 실제 주소와 비밀번호는 실행 시점에 주입하는 편이 낫다.</p>
+
+          <h2>depends_on은 시작 순서이고 healthcheck는 준비 상태다</h2>
+
+          <p>현재 Compose 파일에는 좋은 설정이 하나 있다.</p>
+
+<pre><code class="language-yaml">app:
+  depends_on:
+    db:
+      condition: service_healthy
+
+db:
+  healthcheck:
+    test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
+    interval: 10s
+    timeout: 5s
+    retries: 5
+    start_period: 10s</code></pre>
+          <p><code>depends_on</code>만 쓰면 DB 컨테이너를 먼저 시작한 뒤 앱 컨테이너를 시작한다. 하지만 PostgreSQL 프로세스가 실제로 연결을 받을 준비가 되었는지는 보장하지 않는다.</p>
+
+          <p><code>condition: service_healthy</code>를 쓰면 DB의 healthcheck가 통과한 뒤 앱 컨테이너가 생성된다. Spring Boot가 시작하자마자 DB에 연결하려다 실패하는 상황을 줄일 수 있다.</p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">완전한 장애 복구는 아니다</div>
+            <p><code>depends_on</code>은 시작 시점의 순서를 제어한다. 실행 중 DB가 죽었다가 살아나는 상황까지 앱의 연결 복구를 완벽하게 보장하지는 않는다. 애플리케이션의 커넥션 풀, 재시도 정책, 로그 확인도 함께 필요하다.</p>
+          </div>
+
+          <h2>현재 프로젝트에 맞는 환경 변수 분리 기준</h2>
+
+          <p>예시 프로젝트의 환경 변수는 용도별로 나누면 이해하기 쉽다.</p>
+
+          <table>
+          <thead>
+          <tr><th>묶음</th><th>변수 예시</th><th>전달 대상</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>PostgreSQL 초기화</td><td><code>POSTGRES_DB</code>, <code>POSTGRES_USER</code>, <code>POSTGRES_PASSWORD</code></td><td><code>db</code></td></tr>
+          <tr><td>Spring DB 접속</td><td><code>SPRING_DATASOURCE_URL</code>, <code>SPRING_DATASOURCE_USERNAME</code>, <code>SPRING_DATASOURCE_PASSWORD</code></td><td><code>app</code></td></tr>
+          <tr><td>Spring 프로필과 JPA</td><td><code>SPRING_PROFILES_ACTIVE</code>, <code>SPRING_JPA_HIBERNATE_DDL_AUTO</code>, <code>SPRING_JPA_SHOW_SQL</code></td><td><code>app</code></td></tr>
+          <tr><td>AWS S3</td><td><code>AWS_S3_ACCESS_KEY</code>, <code>AWS_S3_SECRET_KEY</code>, <code>AWS_S3_REGION</code>, <code>AWS_S3_BUCKET</code></td><td><code>app</code></td></tr>
+          <tr><td>인증과 관리자</td><td><code>JWT_SECRET</code>, <code>ADMIN_EMAIL</code>, <code>ADMIN_USERNAME</code>, <code>ADMIN_PASSWORD</code></td><td><code>app</code></td></tr>
+          <tr><td>JVM</td><td><code>JVM_OPTS</code></td><td><code>app</code></td></tr>
+          </tbody>
+          </table>
+
+          <p>이 표를 기준으로 Compose 파일을 보면 <code>db</code>에 들어갈 값과 <code>app</code>에 들어갈 값이 자연스럽게 갈린다.</p>
+
+          <h2>참고한 공식 문서</h2>
+
+          <ul>
+            <li><a href="https://docs.docker.com/compose/environment-variables/">Environment variables in Docker Compose</a></li>
+            <li><a href="https://docs.docker.com/compose/how-tos/environment-variables/variable-interpolation/">Variable interpolation</a></li>
+            <li><a href="https://docs.docker.com/compose/how-tos/startup-order/">Control startup and shutdown order in Compose</a></li>
+          </ul>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Docker_Compose</span>
+          <span>#환경변수</span>
+          <span>#Healthcheck</span>
+          <span>#SpringBoot</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="docker-compose-3-network-volume.html">&larr; 이전 글</a>
+          <a href="docker-compose-5-diagnose.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

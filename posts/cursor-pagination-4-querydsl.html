@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[스프링] 4. QueryDSL 커서 조회 구현 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[스프링] 4. QueryDSL 커서 조회 구현</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">커서 기반 페이지네이션 (4/6)</div>
+            <p>이전 편: <a href="cursor-pagination-3-design.html">[스프링] 3. 커서 설계 전략</a></p>
+            <p>다음 편: <a href="cursor-pagination-5-sort-filter.html">[스프링] 5. 동적 정렬과 필터링</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">시리즈</div>
+            <p>1. <a href="cursor-pagination-2-offset-limit.html">Offset의 한계와 Cursor의 등장</a></p>
+            <p>2. <a href="cursor-pagination-3-design.html">커서 설계 전략</a></p>
+            <p>3. <a href="cursor-pagination-4-querydsl.html">QueryDSL 커서 조회 구현</a> ← 현재 편</p>
+            <p>4. <a href="cursor-pagination-5-sort-filter.html">동적 정렬과 필터링</a></p>
+            <p>5. <a href="cursor-pagination-6-api-interview.html">API 통합과 면접 대비</a></p>
+          </div>
+
+          <p>커서의 개념과 설계 전략을 이해했으니, 이제 QueryDSL로 실제 커서 조회를 구현한다. Spring Data JPA의 기본 기능으로는 커서 기반 쿼리를 만들 수 없기 때문에, 커스텀 Repository와 QueryDSL 조합이 필요하다.</p>
+
+          <hr>
+
+          <h2>커스텀 Repository 패턴</h2>
+
+          <p>Spring Data JPA의 <code>JpaRepository</code>는 <code>findAll</code>, <code>findById</code> 같은 기본 메서드만 제공한다. 커서 조건이 포함된 동적 쿼리를 실행하려면 커스텀 Repository를 만들어야 한다.</p>
+
+          <p>구조는 세 개의 파일로 나뉜다.</p>
+
+<div class="mermaid">
+classDiagram
+    direction BT
+    class JpaRepository {
+        <<interface>>
+        +save()
+        +findById()
+        +findAll()
+    }
+    class FeedCustomRepository {
+        <<interface>>
+        +searchFeeds(condition)
+    }
+    class FeedRepository {
+        <<interface>>
+    }
+    class FeedCustomRepositoryImpl {
+        -JPAQueryFactory queryFactory
+        +searchFeeds(condition)
+    }
+
+    FeedRepository --|> JpaRepository
+    FeedRepository --|> FeedCustomRepository
+    FeedCustomRepositoryImpl ..|> FeedCustomRepository
+</div>
+          <h3>인터페이스 선언</h3>
+
+<pre><code class="language-java">public interface FeedCustomRepository {
+    List&lt;Feed&gt; searchFeeds(FeedSearchCondition condition);
+}</code></pre>
+          <p>커서 조회에 필요한 메서드를 선언하는 인터페이스다. 이름은 자유지만 관례적으로 <code>Custom</code>을 붙인다.</p>
+
+          <p>기존 <code>FeedRepository</code>에 이 인터페이스를 추가로 상속시킨다.</p>
+
+<pre><code class="language-java">public interface FeedRepository
+        extends JpaRepository&lt;Feed, UUID&gt;, FeedCustomRepository {
+}</code></pre>
+          <p>이렇게 하면 서비스 레이어에서 <code>FeedRepository</code> 하나만 주입받아도 기본 CRUD와 커스텀 쿼리를 모두 사용할 수 있다.</p>
+
+          <h3>구현 클래스</h3>
+
+<pre><code class="language-java">@RequiredArgsConstructor
+public class FeedCustomRepositoryImpl implements FeedCustomRepository {
+
+    private final JPAQueryFactory queryFactory;
+
+    @Override
+    public List&lt;Feed&gt; searchFeeds(FeedSearchCondition condition) {
+        return queryFactory
+                .selectFrom(feed)
+                .join(feed.author, user).fetchJoin()
+                .join(feed.weather, weather).fetchJoin()
+                .where(
+                        cursorCondition(condition.cursor(), condition.idAfter())
+                )
+                .orderBy(feed.createdAt.desc(), feed.id.desc())
+                .limit(condition.limit() + 1)
+                .fetch();
+    }
+}</code></pre>
+          <p>클래스 이름이 중요하다. <mark>반드시 커스텀 인터페이스 이름 + <code>Impl</code></mark>이어야 Spring Data JPA가 자동으로 구현체를 인식한다. <code>FeedCustomRepository</code> + <code>Impl</code> = <code>FeedCustomRepositoryImpl</code>이다.</p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">Impl 명명 규칙</div>
+            <p>Spring Data JPA는 <code>Impl</code> 접미사를 기준으로 구현체를 찾는다. 이름이 틀리면 빈 등록이 안 되고 <code>No qualifying bean</code> 에러가 발생한다. 오타에 주의하자.</p>
+          </div>
+
+          <hr>
+
+          <h2>커서 조건 구현</h2>
+
+          <p>커서 조건은 <code>BooleanExpression</code>을 반환하는 메서드로 분리한다.</p>
+
+          <h3>단순 커서</h3>
+
+          <p><code>created_at</code>만 사용하는 가장 기본적인 형태다.</p>
+
+<pre><code class="language-java">private BooleanExpression cursorCondition(Instant cursor) {
+    if (cursor == null) {
+        return null;
+    }
+    return feed.createdAt.lt(cursor);
+}</code></pre>
+          <p>QueryDSL에서 WHERE 조건에 <code>null</code>을 넘기면 해당 조건이 무시된다. 커서가 없으면 첫 페이지를 반환하는 셈이다.</p>
+
+          <p><code>lt</code>는 less than으로, <code>DESC</code> 정렬에서 "이전 페이지의 마지막 값보다 작은 것"을 의미한다. <code>ASC</code> 정렬이면 <code>gt</code>를 써야 한다.</p>
+
+          <h3>복합 커서</h3>
+
+          <p><a href="cursor-pagination-3-design.html">이전 편</a>에서 다룬 동점 문제를 해결하려면 <code>created_at</code>과 <code>id</code>를 조합해야 한다.</p>
+
+<pre><code class="language-java">private BooleanExpression cursorCondition(Instant cursor, UUID idAfter) {
+    if (cursor == null || idAfter == null) {
+        return null;
+    }
+    return feed.createdAt.lt(cursor)
+            .or(feed.createdAt.eq(cursor)
+                    .and(feed.id.lt(idAfter)));
+}</code></pre>
+          <p>SQL로 풀어쓰면 이렇다.</p>
+
+<pre><code class="language-sql">WHERE created_at &lt; :cursor
+   OR (created_at = :cursor AND id &lt; :idAfter)</code></pre>
+
+<div class="mermaid">
+graph TD
+    Start([조회 시작]) --> IsCursorNull{커서가<br>존재하는가?}
+    IsCursorNull -- No --> FirstPage[첫 페이지 조회<br>WHERE 조건 없음]
+    IsCursorNull -- Yes --> CompositeCond{복합 커서<br>조건 적용}
+    
+    CompositeCond --> Cond1[createdAt < cursor]
+    CompositeCond --> Cond2[createdAt == cursor<br>AND id < idAfter]
+    
+    Cond1 --> Result[BooleanExpression 반환]
+    Cond2 --> Result
+    Result --> End([쿼리 실행])
+</div>
+          <p>"커서 시각보다 이전이거나, 같은 시각이면 id가 더 작은 것"을 가져온다. <code>ORDER BY created_at DESC, id DESC</code>와 짝을 이루는 조건이다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">정렬 방향과 비교 연산자의 관계</div>
+            <p>- <code>DESC</code> 정렬 → <code>lt</code> (다음 페이지는 더 작은 값)</p>
+            <p>- <code>ASC</code> 정렬 → <code>gt</code> (다음 페이지는 더 큰 값)</p>
+            <p>이 관계를 헷갈리면 데이터가 역순으로 나오거나 무한 루프에 빠진다.</p>
+          </div>
+
+          <hr>
+
+          <h2>limit + 1 패턴</h2>
+
+          <p>다음 페이지가 있는지 확인하는 가장 효율적인 방법이다.</p>
+
+          <p>클라이언트가 10개를 요청하면 <mark>11개를 조회</mark>한다. 11개가 돌아왔으면 다음 페이지가 존재하는 것이고, 10개 이하면 마지막 페이지다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant Client
+    participant Service
+    participant Repository
+    participant DB
+
+    Client->>Service: 피드 목록 요청 (limit=10)
+    Service->>Repository: searchFeeds (limit=11)
+    Repository->>DB: SELECT ... LIMIT 11
+    DB-->>Repository: 11개 데이터 반환
+    Repository-->>Service: List&lt;Feed&gt; (size=11)
+    
+    Note over Service: size(11) > limit(10) 이므로<br>hasNext = true 설정
+    Service->>Service: 마지막(11번째) 항목 제거
+    
+    Service-->>Client: 10개 피드 + hasNext: true
+</div>
+
+<pre><code class="language-java">.limit(condition.limit() + 1)</code></pre>
+          <p>Service 레이어에서 11번째 항목을 제거하고 <code>hasNext</code> 플래그를 설정한다.</p>
+
+<pre><code class="language-java">boolean hasNext = feeds.size() &gt; request.limit();
+if (hasNext) {
+    feeds.removeLast();
+}</code></pre>
+          <p>별도의 COUNT 쿼리 없이 다음 페이지 존재 여부를 알 수 있으므로 쿼리가 한 번으로 끝난다. 이때 커서 값은 제거한 여분의 항목이 아니라 <mark>반환된 페이지의 마지막 항목</mark>에서 가져와야 한다. 이 부분이 헷갈리면 <a href="cursor-pagination-1-intro.html">커서는 북마크다</a>를 참고한다.</p>
+
+          <div class="callout callout-info">
+            <div class="callout-title">COUNT 쿼리와의 비교</div>
+            <p>전체 건수가 필요한 경우에는 COUNT 쿼리를 별도로 날려야 한다. 하지만 "다음 페이지가 있는가?"만 판단하면 되는 무한 스크롤 UI에서는 limit+1이 훨씬 효율적이다.</p>
+          </div>
+
+          <hr>
+
+          <h2>fetchJoin과 N+1 방지</h2>
+
+          <p>커서 조회에서도 N+1 문제를 신경 써야 한다. Feed를 조회할 때 작성자 정보나 날씨 정보가 함께 필요하면 <code>fetchJoin</code>을 걸어야 한다.</p>
+
+<div class="mermaid">
+classDiagram
+    direction LR
+    class Feed {
+        +UUID id
+        +String content
+        +Instant createdAt
+        +User author
+        +Weather weather
+    }
+    class User {
+        +UUID id
+        +String nickname
+    }
+    class Weather {
+        +UUID id
+        +SkyStatus sky
+    }
+
+    Feed "N" --> "1" User : fetchJoin 대상
+    Feed "N" --> "1" Weather : fetchJoin 대상
+</div>
+
+<pre><code class="language-java">return queryFactory
+        .selectFrom(feed)
+        .join(feed.author, user).fetchJoin()
+        .join(feed.weather, weather).fetchJoin()
+        .where(/* ... */)
+        .orderBy(feed.createdAt.desc(), feed.id.desc())
+        .limit(condition.limit() + 1)
+        .fetch();</code></pre>
+          <p><code>join</code>만 쓰면 SQL JOIN은 실행되지만 엔티티는 프록시로 남아서 접근 시점에 추가 쿼리가 발생한다. <code>fetchJoin</code>은 한 번의 쿼리로 연관 엔티티까지 함께 로딩한다.</p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">컬렉션 fetchJoin 주의</div>
+            <p><code>@OneToMany</code> 관계를 fetchJoin하면 데이터가 뻥튀기된다. limit과 함께 쓰면 메모리에서 페이징하게 되어 성능이 오히려 나빠진다. 컬렉션은 <code>@BatchSize</code>나 별도 쿼리로 처리하는 게 안전하다.</p>
+          </div>
+
+          <hr>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">limit 없이 커서 조회</div>
+            <p>커서 조건만 걸고 limit을 빠뜨리면 커서 이후의 모든 데이터를 한 번에 가져온다. 데이터가 많으면 OOM이 발생할 수 있다. 커서와 limit은 항상 함께 사용해야 한다.</p>
+            <p>[!DANGER] 정렬과 커서 조건의 불일치</p>
+            <p><code>ORDER BY created_at DESC</code>인데 커서 조건이 <code>created_at &gt; :cursor</code>이면, 이전 페이지 데이터가 다시 나온다. 정렬 방향과 비교 연산자가 반드시 짝을 이루는지 확인해야 한다.</p>
+            <p>[!DANGER] Impl 클래스에 @Repository 추가</p>
+            <p><code>FeedCustomRepositoryImpl</code>에 <code>@Repository</code>를 붙이면 Spring이 두 번 등록을 시도해서 충돌이 날 수 있다. Spring Data JPA가 Impl 접미사로 자동 인식하므로 <mark>별도 어노테이션이 필요 없다.</mark></p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#스프링</span>
+          <span>#QueryDSL</span>
+          <span>#커서</span>
+          <span>#Repository</span>
+          <span>#페이지네이션</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="cursor-pagination-3-design.html">&larr; 이전 글</a>
+          <a href="cursor-pagination-5-sort-filter.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

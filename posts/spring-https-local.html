@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[스프링] 1. HTTPS와 인증서의 이해 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[스프링] 1. HTTPS와 인증서의 이해</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">HTTPS 로컬 개발 환경 시리즈</div>
+            <p><strong>개념</strong></p>
+            <p>- <strong><a href="스프링https-로컬-개발-환경개념01-https와-인증서의-이해.html">HTTPS와 인증서의 이해</a></strong></p>
+            <p>- <a href="스프링https-로컬-개발-환경개념02-리버스-프록시와-ssl-termination.html">리버스 프록시와 SSL Termination</a></p>
+            <p><strong>실습</strong></p>
+            <p>- <a href="스프링https-로컬-개발-환경실습01-mkcert로-spring-boot-https-적용하기.html">mkcert로 Spring Boot HTTPS 적용하기</a></p>
+            <p>- <a href="스프링https-로컬-개발-환경실습02-nginx-리버스-프록시와-docker-배포.html">Nginx 리버스 프록시와 Docker 배포</a></p>
+          </div>
+
+          <p>로컬에서 HTTP로만 개발하다가, 배포 단계에서 HTTPS 관련 이슈를 처음 만나는 경우가 많다. OAuth 콜백, Secure Cookie, 일부 브라우저 API는 HTTPS 환경에서만 동작한다. 설정을 복사 붙여넣기 하는 게 아니라 원리를 이해해야 문제가 생겼을 때 대응할 수 있다.</p>
+
+          <h2>HTTP의 한계</h2>
+
+          <p>HTTP로 데이터를 주고받으면 내용이 <mark>평문</mark>으로 전송된다. 로그인 폼에 입력한 비밀번호가 텍스트 그대로 네트워크를 타고 이동한다.</p>
+
+          <p>같은 카페 와이파이에 접속한 누군가가 패킷 캡처 도구를 켜면 어떻게 될까?</p>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant Client as 브라우저
+    participant Attacker as 도청자
+    participant Server as 웹 서버
+
+    Client->>Server: POST /login (평문)
+    Note over Client, Server: ID: admin<br/>PW: secret123
+
+    rect rgb(255, 230, 230)
+        Note over Attacker: 평문 패킷 캡처<br/>로그인 정보 탈취
+    end
+
+    Server-->>Client: 200 OK + Set-Cookie
+
+    rect rgb(255, 230, 230)
+        Attacker->>Server: 탈취한 쿠키로 요청
+        Note right of Attacker: 세션 하이재킹
+        Server-->>Attacker: 200 OK (인증된 응답)
+    end
+</div>
+          <p>분홍 영역이 위험 구간이다. 비밀번호뿐 아니라 세션 쿠키까지 탈취되면 로그인 없이 계정을 사용할 수 있다.</p>
+
+          <p>HTTP에는 세 가지 근본적인 결함이 있다.</p>
+
+          <ul>
+            <li><strong>기밀성 부재</strong> : 전송 내용을 제3자가 읽을 수 있다</li>
+            <li><strong>무결성 미보장</strong> : 중간에서 데이터가 변조되어도 수신 측이 알 수 없다</li>
+            <li><strong>인증 불가</strong> : 접속한 서버가 진짜 그 서버인지 확인할 방법이 없다</li>
+          </ul>
+
+          <p>HTTPS는 HTTP 위에 SSL/TLS 보안 계층을 얹어서 이 세 가지를 동시에 해결한다.</p>
+
+          <h2>SSL과 TLS</h2>
+
+          <p>SSL. Secure Sockets Layer. 넷스케이프가 1990년대에 만든 보안 프로토콜이다. SSL 3.0까지 발전했지만, POODLE 같은 보안 취약점이 발견되면서 폐기되었다.</p>
+
+          <p>TLS. Transport Layer Security. SSL의 후속 프로토콜이다. 현재는 <mark>TLS 1.2와 TLS 1.3</mark>이 표준으로 사용된다. TLS 1.3은 핸드셰이크 과정을 간소화해서 연결 속도까지 개선했다.</p>
+
+          <p>관습적으로 "SSL 인증서", "SSL 설정"이라고 부르지만, 실제로 동작하는 건 TLS다. 코드나 설정에서는 반드시 TLS 1.2 이상만 활성화해야 한다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">TLS 버전 선택 기준</div>
+            <p>새 프로젝트라면 TLS 1.3만으로 충분하다. 레거시 클라이언트 호환이 필요할 때만 TLS 1.2를 함께 활성화한다. TLS 1.0과 1.1은 2020년부터 주요 브라우저에서 지원이 중단되었다.</p>
+          </div>
+
+          <h2>암호화의 두 축</h2>
+
+          <p>HTTPS의 암호화는 두 가지 방식을 조합한다. 각각의 장단점이 뚜렷하고, TLS는 이 둘을 적재적소에 활용한다.</p>
+
+          <h3>대칭 암호화</h3>
+
+          <p>하나의 열쇠로 상자를 잠그고, 같은 열쇠로 연다. 구조가 단순하고 속도가 빠르다. 문제는 그 열쇠를 상대방에게 어떻게 안전하게 전달하느냐다. 열쇠를 보내는 도중에 누군가 복제하면 암호화가 무의미해진다.</p>
+
+          <p>이 방식을 대칭 암호화라고 부른다. AES가 대표적인 알고리즘이다.</p>
+
+          <h3>비대칭 암호화</h3>
+
+          <p>열려 있는 자물쇠를 상대방에게 보낸다. 상대방이 그 자물쇠로 상자를 잠가서 돌려보내면, 열쇠는 나만 가지고 있으니 나만 열 수 있다. 자물쇠가 도중에 탈취되어도 상관없다. 열 수 있는 건 열쇠를 가진 나뿐이다.</p>
+
+          <p>이 방식을 비대칭 암호화라고 부른다. 자물쇠가 공개키, 열쇠가 개인키에 해당한다. RSA가 대표적이다. 키 교환 문제는 해결되지만, <mark>대칭 암호화보다 수백 배 느리다</mark>.</p>
+
+          <div class="callout callout-info">
+            <div class="callout-title">두 방식의 조합</div>
+            <p>TLS는 비대칭 암호화로 대칭키를 안전하게 교환한 다음, 실제 데이터는 빠른 대칭 암호화로 주고받는다. 비대칭의 안전성과 대칭의 속도를 모두 취하는 방식이다.</p>
+          </div>
+
+          <h2>TLS 핸드셰이크</h2>
+
+          <p>브라우저가 HTTPS 사이트에 처음 접속하면, 데이터를 주고받기 전에 양쪽이 암호화 방식을 합의하는 과정을 거친다. 이걸 TLS 핸드셰이크라고 부른다.</p>
+
+          <p>실제로 어떤 순서로 진행되는지 보면 흐름이 잡힌다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant Client as 브라우저
+    participant Server as 서버
+
+    rect rgb(240, 248, 255)
+        Note over Client, Server: 협상 단계
+        Client->>Server: ClientHello
+        Note right of Client: 지원 TLS 버전<br/>암호화 스위트 목록<br/>클라이언트 랜덤 값
+        Server-->>Client: ServerHello + 인증서
+        Note left of Server: 선택한 TLS 버전<br/>선택한 암호화 스위트<br/>서버 랜덤 값
+    end
+
+    rect rgb(232, 248, 232)
+        Note over Client: 인증서 검증 단계
+        Client->>Client: 내장 CA 목록으로 인증서 검증
+        Note right of Client: 서명 체인 확인<br/>유효기간 확인<br/>도메인 일치 확인
+    end
+
+    rect rgb(255, 243, 224)
+        Note over Client, Server: 키 교환 단계
+        Client->>Server: 암호화된 Pre-Master Secret
+        Note over Client, Server: 양쪽이 동일한 세션키 생성
+    end
+
+    rect rgb(232, 248, 232)
+        Note over Client, Server: 암호화 통신 시작
+        Client->>Server: Finished (세션키로 암호화)
+        Server-->>Client: Finished (세션키로 암호화)
+        Note over Client, Server: 이후 모든 데이터는<br/>세션키로 암호화
+    end
+</div>
+          <p>파란 영역에서 클라이언트와 서버가 사용할 암호화 방식을 합의한다. 클라이언트가 지원 가능한 목록을 보내면 서버가 그중 하나를 고른다.</p>
+
+          <p>첫 번째 초록 영역에서 서버가 보낸 인증서를 검증한다. 브라우저에 내장된 CA 목록으로 서명 체인, 유효기간, 도메인 일치 여부를 확인한다. 여기서 실패하면 "이 연결은 안전하지 않습니다" 경고가 뜬다.</p>
+
+          <p>주황 영역에서 세션키를 생성한다. 서버의 공개키로 암호화한 값을 보내서, 양쪽이 동일한 대칭키를 만들어낸다. 이 대칭키가 이후 실제 데이터 암호화에 사용된다.</p>
+
+          <p>핵심은 <mark>비대칭 암호화로 대칭키를 교환</mark>한다는 점이다. 핸드셰이크가 끝나면 이후 통신은 빠른 대칭 암호화로 진행된다.</p>
+
+          <h2>인증서와 CA</h2>
+
+          <p>인증서는 서버의 신분증이다. "이 서버는 정말 example.com이 맞다"는 걸 제3자가 보증한다. 그 제3자가 CA다. Certificate Authority, 인증 기관이라고 부른다. DigiCert, Let's Encrypt, GlobalSign 같은 기관이 있다.</p>
+
+          <p>인증서에는 다음 정보가 포함된다.</p>
+
+          <ul>
+            <li>서버의 도메인 이름</li>
+            <li>서버의 공개키</li>
+            <li>인증서 유효 기간</li>
+            <li>CA의 디지털 서명</li>
+          </ul>
+
+          <p>브라우저에는 신뢰할 수 있는 Root CA 목록이 내장되어 있다. 서버가 보낸 인증서의 서명을 이 목록으로 검증한다.</p>
+
+          <p>실제로는 Root CA가 직접 서버 인증서에 서명하지 않는다. 중간에 Intermediate CA를 두고 서명 체인이 형성된다.</p>
+
+<div class="mermaid">
+flowchart TD
+    Root["Root CA<br/>(브라우저에 내장)"]
+    Inter["Intermediate CA"]
+    ServerCert["서버 인증서<br/>(example.com)"]
+    Browser["브라우저"]
+
+    Root -->|"서명"| Inter
+    Inter -->|"서명"| ServerCert
+    Browser -->|"Root CA 목록으로 검증"| Root
+
+    style Root fill:#E8F4F8,stroke:#2196F3,stroke-width:2px,color:#000
+    style Inter fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#000
+    style ServerCert fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style Browser fill:#F3E5F5,stroke:#9C27B0,stroke-width:2px,color:#000
+</div>
+          <p>브라우저는 서버 인증서를 받으면 Intermediate CA의 서명을 확인하고, 그 Intermediate CA의 인증서를 다시 Root CA의 서명으로 확인한다. <mark>Root CA가 브라우저의 신뢰 목록에 있으면</mark> 전체 체인이 유효하다고 판단한다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">Let's Encrypt</div>
+            <p>무료 SSL 인증서를 발급하는 CA다. 도메인 소유권만 확인하면 자동으로 인증서를 발급하고, 90일마다 자동 갱신할 수 있다. 운영 환경에서 가장 널리 사용되는 선택지 중 하나다.</p>
+          </div>
+
+          <h2>로컬 개발의 딜레마</h2>
+
+          <p>운영 서버에는 Let's Encrypt나 유료 CA에서 인증서를 발급받으면 된다. 그런데 로컬 개발 환경은 사정이 다르다.</p>
+
+          <p><code>localhost</code>는 공인 도메인이 아니다. 정식 CA에서 인증서를 발급받을 수 없다. 선택지가 두 가지 있다.</p>
+
+          <h3>Self-signed Certificate</h3>
+
+          <p>OpenSSL로 직접 만드는 인증서다. CA의 서명 없이 자기 자신이 서명한다. 당연히 브라우저는 이 인증서를 신뢰하지 않는다.</p>
+
+          <p>접속할 때마다 "이 사이트는 안전하지 않습니다" 경고가 뜨고, 매번 "고급" 버튼을 눌러야 한다. API 호출 코드에서도 인증서 검증을 비활성화하는 옵션을 추가해야 한다. 개발 환경이 실제 운영과 동떨어지게 된다.</p>
+
+          <h3>mkcert</h3>
+
+          <p>mkcert는 <mark>로컬 전용 CA를 만들어서 OS의 인증서 저장소에 등록</mark>하는 도구다. 이 CA가 발급한 인증서는 브라우저가 신뢰하므로 경고가 뜨지 않는다.</p>
+
+          <p>정식 CA와 동일한 신뢰 체인을 로컬에서 재현하는 방식이다. 설치도 간단하고, 인증서 생성도 명령어 한 줄이면 끝난다.</p>
+
+          <p>두 방식의 차이를 그림으로 보면 브라우저 신뢰 관계가 명확해진다.</p>
+
+<div class="mermaid">
+flowchart TD
+    subgraph SelfSigned ["Self-signed"]
+        direction TB
+        SS_Cert["자체 서명 인증서"]
+        SS_Browser["브라우저"]
+        SS_Cert --> SS_Browser
+        SS_Browser -->|"CA 목록에 없음"| SS_Warn["경고 표시"]
+    end
+
+    SelfSigned ~~~ MkcertSub
+
+    subgraph MkcertSub ["mkcert"]
+        direction TB
+        MK_CA["mkcert 로컬 CA"]
+        MK_Cert["localhost 인증서"]
+        MK_Browser["브라우저"]
+        MK_CA -->|"서명"| MK_Cert
+        MK_CA -->|"OS 저장소에 등록"| MK_Browser
+        MK_Cert --> MK_Browser
+        MK_Browser -->|"CA 목록에 있음"| MK_Trust["정상 접속"]
+    end
+
+    style SS_Cert fill:#FFE6E6,stroke:#F44336,stroke-width:2px,color:#000
+    style SS_Warn fill:#FFE6E6,stroke:#F44336,stroke-width:2px,color:#000
+    style SS_Browser fill:#F3E5F5,stroke:#9C27B0,stroke-width:2px,color:#000
+    style MK_CA fill:#E8F4F8,stroke:#2196F3,stroke-width:2px,color:#000
+    style MK_Cert fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style MK_Browser fill:#F3E5F5,stroke:#9C27B0,stroke-width:2px,color:#000
+    style MK_Trust fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style SelfSigned fill:#fff5f5,stroke:#F44336
+    style MkcertSub fill:#f0fff0,stroke:#4CAF50
+</div>
+          <p>왼쪽 Self-signed 방식은 CA 목록에 없으므로 빨간 경고가 뜬다. 오른쪽 mkcert는 로컬 CA를 OS 저장소에 등록하기 때문에, 브라우저가 정식 CA처럼 인식해서 정상 접속된다.</p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">mkcert는 개발 전용</div>
+            <p>mkcert로 만든 CA와 인증서는 절대 운영 환경에서 사용하면 안 된다. 로컬 CA의 루트 인증서가 유출되면 공격자가 어떤 도메인이든 신뢰받는 인증서를 발급할 수 있다.</p>
+          </div>
+
+          <h2>보안 헤더</h2>
+
+          <p>HTTPS를 적용했다고 보안이 완성되는 건 아니다. 서버가 응답에 특정 HTTP 헤더를 포함하면 <mark>브라우저의 보안 정책을 추가로 강화</mark>할 수 있다.</p>
+
+          <p>각 헤더가 어떤 공격을 방어하는지 보면 역할이 명확해진다.</p>
+
+<div class="mermaid">
+flowchart LR
+    subgraph Attacks ["공격 시나리오"]
+        direction TB
+        A1["HTTP 다운그레이드"]
+        A2["MIME 스니핑"]
+        A3["클릭재킹"]
+        A4["XSS"]
+    end
+
+    Attacks ~~~ Headers
+
+    subgraph Headers ["보안 헤더"]
+        direction TB
+        H1["Strict-Transport-Security"]
+        H2["X-Content-Type-Options"]
+        H3["X-Frame-Options"]
+        H4["X-XSS-Protection"]
+    end
+
+    A1 --x H1
+    A2 --x H2
+    A3 --x H3
+    A4 --x H4
+
+    style A1 fill:#FFE6E6,stroke:#F44336,stroke-width:2px,color:#000
+    style A2 fill:#FFE6E6,stroke:#F44336,stroke-width:2px,color:#000
+    style A3 fill:#FFE6E6,stroke:#F44336,stroke-width:2px,color:#000
+    style A4 fill:#FFE6E6,stroke:#F44336,stroke-width:2px,color:#000
+    style H1 fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style H2 fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style H3 fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style H4 fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style Attacks fill:#fff5f5,stroke:#F44336
+    style Headers fill:#f0fff0,stroke:#4CAF50
+</div>
+          <p>빨간 공격 시나리오들이 초록 보안 헤더로 차단된다. 각각을 살펴보자.</p>
+
+          <h4>HSTS</h4>
+
+          <p>Strict-Transport-Security 헤더다. 브라우저에게 "이 사이트는 앞으로 지정된 기간 동안 HTTPS로만 접속하라"고 지시한다.</p>
+
+          <p>사용자가 <code>http://example.com</code>을 입력해도 브라우저가 자동으로 <code>https://</code>로 변환한다. <code>max-age=31536000</code>은 1년을 의미하고, <code>includeSubDomains</code>를 추가하면 하위 도메인에도 적용된다.</p>
+
+          <h4>X-Content-Type-Options</h4>
+
+          <p>값을 <code>nosniff</code>로 설정한다. 브라우저가 응답의 Content-Type을 무시하고 내용을 추측해서 실행하는 MIME 스니핑을 차단한다.</p>
+
+          <p>텍스트 파일로 위장한 JavaScript가 업로드되었을 때, 브라우저가 "이거 사실 JS 아닌가?" 하고 실행해버리는 걸 막는다.</p>
+
+          <h4>X-Frame-Options</h4>
+
+          <p><code>DENY</code>로 설정하면 어떤 사이트도 우리 페이지를 iframe으로 삽입할 수 없다.</p>
+
+          <p>클릭재킹은 투명한 iframe 위에 가짜 버튼을 올려놓고, 사용자가 클릭하면 실제로는 iframe 안의 결제 버튼이 눌리게 만드는 공격이다. 이 헤더로 원천 차단한다.</p>
+
+          <h4>X-XSS-Protection</h4>
+
+          <p><code>1; mode=block</code>으로 설정한다. 브라우저가 XSS 공격 패턴을 감지하면 페이지 렌더링 자체를 차단한다.</p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">X-XSS-Protection의 한계</div>
+            <p>최신 브라우저에서는 이 헤더 대신 CSP를 권장한다. Content-Security-Policy의 줄임말이다. 하지만 레거시 브라우저 호환을 위해 함께 설정하는 것이 일반적이다.</p>
+          </div>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">mkcert 인증서를 운영 환경에 배포</div>
+            <p>mkcert는 로컬 개발 전용 도구다. mkcert가 생성한 루트 CA의 개인키는 로컬 머신에 저장되는데, 이걸 운영 서버에서 사용하면 해당 개인키가 유출될 때 공격자가 어떤 도메인의 인증서든 발급할 수 있다. 운영 환경에서는 Let's Encrypt 같은 정식 CA를 사용해야 한다.</p>
+            <p>[!DANGER] TLS 1.0이나 1.1을 활성화</p>
+            <p>"호환성을 위해" 오래된 TLS 버전을 켜두는 경우가 있다. 이 버전들은 BEAST, POODLE 등의 취약점이 알려져 있고, 주요 브라우저에서도 이미 지원을 중단했다. Spring Boot에서 <code>enabled-protocols</code>를 설정할 때 반드시 <code>TLSv1.2,TLSv1.3</code>만 지정한다.</p>
+            <p>[!WARNING] 로컬에서 HSTS를 긴 max-age로 설정</p>
+            <p>로컬 개발 환경에서 HSTS의 max-age를 길게 잡으면, 나중에 HTTPS 설정을 제거한 후에도 브라우저가 계속 HTTPS로 접속을 시도한다. 개발 환경에서는 짧은 값을 사용하고, 문제가 발생하면 브라우저의 HSTS 캐시를 수동으로 삭제해야 한다. Chrome의 경우 <code>chrome://net-internals/#hsts</code>에서 삭제할 수 있다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#HTTPS</span>
+          <span>#SSL</span>
+          <span>#TLS</span>
+          <span>#인증서</span>
+          <span>#mkcert</span>
+          <span>#보안헤더</span>
+          <span>#스프링</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

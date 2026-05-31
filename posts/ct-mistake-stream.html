@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Java 자료구조] Stream sum과 Collectors - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Java 자료구조] Stream sum과 Collectors</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+
+          <div class="callout callout-warning">
+            <div class="callout-title">기준</div>
+            <p>숫자 합계는 <code>mapToInt(...).sum()</code>으로 구한다. 제출 호환성이 걱정되면 <code>stream().toList()</code>보다 <code>collect(Collectors.toList())</code>를 쓴다.</p>
+          </div>
+
+          <h2>Collection Integer 합계</h2>
+
+          <p><code>Collection&lt;Integer&gt;</code>나 <code>List&lt;Integer&gt;</code>의 합은 다음처럼 구한다.</p>
+
+<pre><code class="language-java">int total = values.stream()
+        .mapToInt(Integer::intValue)
+        .sum();</code></pre>
+          <p><code>Map</code>의 value 합계도 같다.</p>
+
+<pre><code class="language-java">int total = map.values().stream()
+        .mapToInt(Integer::intValue)
+        .sum();</code></pre>
+          <h2>int 배열 합계</h2>
+
+          <p><code>int[]</code>는 <code>Arrays.stream</code>을 쓴다.</p>
+
+<pre><code class="language-java">int total = Arrays.stream(arr).sum();</code></pre>
+          <p>객체 배열 <code>Integer[]</code>는 한 번 더 변환한다.</p>
+
+<pre><code class="language-java">int total = Arrays.stream(arr)
+        .mapToInt(Integer::intValue)
+        .sum();</code></pre>
+          <h2>comparator 안에서 sum 호출</h2>
+
+          <p>정렬 중 comparator는 여러 번 호출된다. 따라서 comparator 안에서 합계를 구하면 같은 계산이 반복될 수 있다.</p>
+
+<pre><code class="language-java">list.sort((a, b) -&gt; {
+    int aSum = a.values().stream().mapToInt(Integer::intValue).sum();
+    int bSum = b.values().stream().mapToInt(Integer::intValue).sum();
+    return Integer.compare(bSum, aSum);
+});</code></pre>
+          <p>입력이 작으면 통과할 수 있지만, 더 안정적인 방식은 합계를 미리 저장하는 것이다.</p>
+
+<pre><code class="language-java">Map&lt;String, Integer&gt; total = new HashMap&lt;&gt;();
+
+for (int i = 0; i &lt; genres.length; i++) {
+    total.put(genres[i], total.getOrDefault(genres[i], 0) + plays[i]);
+}</code></pre>
+          <h2>toList와 Collectors.toList</h2>
+
+          <p><code>Stream.toList()</code>는 Java 16 이후 API다.</p>
+
+<pre><code class="language-java">List&lt;Integer&gt; list = stream.toList();</code></pre>
+          <p>채점 환경이나 컴파일 타깃이 낮으면 인식되지 않을 수 있다. 이때는 <code>Collectors.toList()</code>를 사용한다.</p>
+
+<pre><code class="language-java">import java.util.stream.Collectors;
+
+List&lt;Integer&gt; list = stream.collect(Collectors.toList());</code></pre>
+          <p>프로그래머스 제출에서는 <code>Collectors.toList()</code>가 더 안전한 선택일 때가 있다.</p>
+
+          <h2>외우는 표</h2>
+
+          <table>
+          <thead>
+          <tr><th>대상</th><th>합계 코드</th></tr>
+          </thead>
+          <tbody>
+          <tr><td><code>int[]</code></td><td><code>Arrays.stream(arr).sum()</code></td></tr>
+          <tr><td><code>Integer[]</code></td><td><code>Arrays.stream(arr).mapToInt(Integer::intValue).sum()</code></td></tr>
+          <tr><td><code>List&lt;Integer&gt;</code></td><td><code>list.stream().mapToInt(Integer::intValue).sum()</code></td></tr>
+          <tr><td><code>Collection&lt;Integer&gt;</code></td><td><code>collection.stream().mapToInt(Integer::intValue).sum()</code></td></tr>
+          <tr><td><code>Map&lt;K, Integer&gt;</code> values</td><td><code>map.values().stream().mapToInt(Integer::intValue).sum()</code></td></tr>
+          </tbody>
+          </table>
+
+          <h2>실수 체크</h2>
+
+          <ul class="task-list">
+            <li><input type="checkbox" disabled> <code>sum()</code>을 쓰기 전에 <code>IntStream</code>으로 바꿨는가</li>
+            <li><input type="checkbox" disabled> comparator 안에서 같은 합계를 반복 계산하고 있지 않은가</li>
+            <li><input type="checkbox" disabled> 제출 환경이 애매할 때 <code>Collectors.toList()</code>를 썼는가</li>
+            <li><input type="checkbox" disabled> <code>Collectors</code> import를 추가했는가</li>
+          </ul>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#코딩테스트</span>
+          <span>#자주하는실수</span>
+          <span>#Java</span>
+          <span>#Stream</span>
+          <span>#Collectors</span>
+          <span>#복잡도</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

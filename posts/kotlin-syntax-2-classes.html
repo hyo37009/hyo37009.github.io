@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Kotlin] 2. 클래스와 객체 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Kotlin] 2. 클래스와 객체</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Kotlin 문법 복습 (2/4)</div>
+            <p>이전 편: <a href="kotlin-syntax-1-variables.html">[Kotlin] 1. 변수, 타입, 함수</a></p>
+            <p>다음 편: <a href="kotlin-syntax-3-null-collections.html">[Kotlin] 3. Null Safety와 컬렉션</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">Kotlin 문법 복습 시리즈 (2/4)</div>
+            <p>이전 편: <a href="kotlin-syntax-1-variables.html">1 변수, 타입, 함수</a></p>
+            <p>다음 편: <a href="kotlin-syntax-3-null-collections.html">3 Null Safety와 컬렉션</a></p>
+          </div>
+
+          <p>Java에서 간단한 DTO 하나 만드는 데 필드, 생성자, getter, setter, equals, hashCode, toString — 이걸 다 써야 했다. Lombok으로 줄여도 어노테이션이 덕지덕지 붙는다. Kotlin은 이 문제를 <strong>언어 차원에서</strong> 해결했다. 클래스 하나 선언하는 데 필요한 코드량이 극적으로 줄어든다.</p>
+
+          <p>이 문서에서는 Kotlin의 클래스, 객체, 상속 구조를 복습한다. Java와 비교했을 때 얼마나 달라지는지, 그리고 왜 그렇게 설계됐는지를 함께 짚는다.</p>
+
+          <h2>클래스 기본</h2>
+
+          <h3>주 생성자(Primary Constructor)</h3>
+
+          <p>Kotlin의 클래스 선언에서 가장 먼저 눈에 띄는 차이는 <strong>주 생성자가 클래스 이름 옆에 붙는다</strong>는 것이다.</p>
+
+<pre><code class="language-kotlin">class User(val name: String, val age: Int)</code></pre>
+          <p>이 한 줄이 Java의 아래 코드와 동일하다.</p>
+
+<pre><code class="language-java">public class User {
+    private final String name;
+    private final int age;
+
+    public User(String name, int age) {
+        this.name = name;
+        this.age = age;
+    }
+
+    public String getName() { return name; }
+    public int getAge() { return age; }
+}</code></pre>
+          <ul>
+            <li>주 생성자 파라미터에 <code>val</code>을 붙이면 <strong>프로퍼티 선언 + 생성자 파라미터 + getter</strong>가 한 번에 된다.</li>
+            <li><code>var</code>를 붙이면 getter + setter까지 생성된다.</li>
+            <li><code>val</code>도 <code>var</code>도 안 붙이면 생성자 파라미터일 뿐, 프로퍼티가 아니다.</li>
+          </ul>
+
+          <p>왜 이렇게 했을까? Java에서 필드 선언 → 생성자 파라미터 → 대입 → getter 작성이라는 <strong>똑같은 정보를 4번 반복</strong>하는 게 낭비이기 때문이다. Kotlin은 이걸 한 곳에 모았다.</p>
+
+          <hr>
+
+          <h3>프로퍼티</h3>
+
+          <p>Java는 필드와 getter/setter가 분리되어 있다. Kotlin은 <strong>프로퍼티</strong>라는 개념으로 통합한다.</p>
+
+<pre><code class="language-kotlin">class Post(
+    val id: Long,           // 읽기 전용 (getter만)
+    var title: String,      // 읽기/쓰기 (getter + setter)
+    var viewCount: Int = 0  // 기본값 지정 가능
+)</code></pre>
+          <p>프로퍼티에 접근할 때 getter/setter 메서드를 호출하는 게 아니라, 필드처럼 직접 접근한다.</p>
+
+<pre><code class="language-kotlin">val post = Post(id = 1, title = "첫 글")
+println(post.title)       // getter 호출 (내부적으로)
+post.title = "수정된 제목"  // setter 호출 (내부적으로)</code></pre>
+          <ul>
+            <li>겉보기에는 필드 접근이지만, <mark>내부적으로는 getter/setter가 호출</mark>된다.</li>
+            <li>Java 코드에서 Kotlin 프로퍼티를 쓸 때는 <code>getTitle()</code>, <code>setTitle()</code>로 호출해야 한다.</li>
+          </ul>
+
+          <p>커스텀 getter/setter가 필요하면 직접 정의할 수 있다.</p>
+
+<pre><code class="language-kotlin">class Post(private var _title: String) {
+    var title: String
+        get() = _title
+        set(value) {
+            require(value.isNotBlank()) { "제목은 비어있을 수 없습니다" }
+            _title = value
+        }
+}</code></pre>
+          <ul>
+            <li><code>value</code>는 setter의 기본 파라미터 이름이다.</li>
+            <li><code>require</code>는 조건이 false면 <code>IllegalArgumentException</code>을 던진다.</li>
+          </ul>
+
+          <hr>
+
+          <h3>init 블록과 부 생성자</h3>
+
+          <p>주 생성자에서 복잡한 초기화 로직이 필요하면 <code>init</code> 블록을 쓴다.</p>
+
+<pre><code class="language-kotlin">class User(val name: String, val age: Int) {
+    init {
+        require(name.isNotBlank()) { "이름은 비어있을 수 없습니다" }
+        require(age &gt; 0) { "나이는 양수여야 합니다" }
+    }
+}</code></pre>
+          <ul>
+            <li><code>init</code> 블록은 주 생성자의 일부로, 객체 생성 시 실행된다.</li>
+            <li>여러 개 선언할 수 있고, 위에서 아래 순서로 실행된다.</li>
+          </ul>
+
+          <p>부 생성자(secondary constructor)도 있지만, 실무에서는 거의 쓰지 않는다. 기본값 파라미터와 named argument로 대부분 해결되기 때문이다.</p>
+
+<pre><code class="language-kotlin">class User(val name: String, val age: Int = 0) {
+    // 부 생성자 — 가능하지만 권장하지 않음
+    constructor(name: String) : this(name, 0)
+}
+
+// 이렇게 하면 부 생성자가 필요 없다
+val user = User(name = "관리자")  // age는 기본값 0</code></pre>
+          <div class="callout callout-tip">
+            <div class="callout-title">언제 부 생성자를 쓰나?</div>
+            <p>Java 프레임워크와의 호환성이 필요하거나, 팩토리 메서드 패턴에서 <code>companion object</code>로 처리하기 애매할 때 정도. 대부분의 경우 기본값 파라미터로 충분하다.</p>
+          </div>
+
+          <hr>
+
+          <h2>Data Class</h2>
+
+          <p>Java에서 DTO나 VO를 만들 때마다 <code>equals()</code>, <code>hashCode()</code>, <code>toString()</code>을 구현하거나 Lombok의 <code>@Data</code>를 붙였다. Kotlin은 <code>data</code> 키워드 하나로 이 모든 걸 해결한다.</p>
+
+<pre><code class="language-kotlin">data class PostResponse(
+    val id: Long,
+    val title: String,
+    val content: String,
+    val viewCount: Int
+)</code></pre>
+          <p>이 선언 하나로 자동 생성되는 것들은 다음과 같다.</p>
+
+          <ul>
+            <li><code>equals()</code> — 주 생성자의 모든 프로퍼티를 기준으로 값 비교</li>
+            <li><code>hashCode()</code> — 주 생성자의 모든 프로퍼티를 기준으로 해시 생성</li>
+            <li><code>toString()</code> — <code>PostResponse(id=1, title=첫 글, content=..., viewCount=0)</code> 형태</li>
+            <li><code>copy()</code> — 일부 프로퍼티만 바꿔서 새 객체를 만드는 메서드</li>
+          </ul>
+
+          <p><code>copy()</code>는 특히 유용하다. 불변 객체의 일부만 수정할 때 쓴다.</p>
+
+<pre><code class="language-kotlin">val original = PostResponse(id = 1, title = "원본", content = "내용", viewCount = 0)
+val modified = original.copy(title = "수정됨", viewCount = 100)</code></pre>
+          <ul>
+            <li><code>copy()</code>는 named argument와 함께 쓰면 직관적이다.</li>
+            <li><strong>새 객체</strong>를 반환한다. 원본은 변경되지 않는다.</li>
+          </ul>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">JPA 엔티티에는 data class를 쓰지 말 것</div>
+            <p><code>data class</code>의 <code>equals()</code>/<code>hashCode()</code>는 모든 프로퍼티를 비교한다. JPA에서는 프록시 비교, lazy loading, 영속성 컨텍스트 관리 등에서 문제가 생긴다. 엔티티는 일반 <code>class</code>로, DTO는 <code>data class</code>로 — 이 구분을 지키자. 자세한 이유는 <a href="jpa--kotlin-엔티티-설계.html">코프링 실전 시리즈</a>에서 다룬다.</p>
+          </div>
+
+          <hr>
+
+          <h2>Enum Class</h2>
+
+          <p>Java의 enum과 거의 동일하지만, Kotlin에서는 <code>when</code>과 함께 쓸 때 빛을 발한다.</p>
+
+<pre><code class="language-kotlin">enum class PostStatus {
+    DRAFT, PUBLISHED, ARCHIVED
+}</code></pre>
+          <p>프로퍼티와 메서드를 가질 수 있다는 점도 Java와 같다.</p>
+
+<pre><code class="language-kotlin">enum class HttpStatus(val code: Int, val message: String) {
+    OK(200, "성공"),
+    NOT_FOUND(404, "찾을 수 없음"),
+    INTERNAL_ERROR(500, "서버 에러");
+
+    fun isSuccess() = code in 200..299
+}</code></pre>
+          <ul>
+            <li>enum 상수에 프로퍼티를 전달하려면 괄호 안에 값을 넣는다.</li>
+            <li>마지막 상수 뒤에 <strong>세미콜론</strong>을 찍고 메서드를 선언한다.</li>
+          </ul>
+
+          <p>enum의 진짜 강점은 <code>when</code>과의 조합이다.</p>
+
+<pre><code class="language-kotlin">fun handleStatus(status: PostStatus) = when (status) {
+    PostStatus.DRAFT -&gt; "임시저장 상태입니다"
+    PostStatus.PUBLISHED -&gt; "발행된 글입니다"
+    PostStatus.ARCHIVED -&gt; "보관된 글입니다"
+    // else가 필요 없다 — 모든 케이스를 다뤘으니까
+}</code></pre>
+          <ul>
+            <li>enum의 모든 값을 <code>when</code>에서 처리하면 <mark><code>else</code>가 필요 없다.</mark> 나중에 enum에 새 값을 추가하면 <code>when</code>을 빠뜨린 곳에서 컴파일 에러가 난다. 이게 안전한 이유다.</li>
+          </ul>
+
+          <hr>
+
+          <h2>Object — 싱글톤</h2>
+
+          <p>Java에서 싱글톤을 만들려면 <code>private</code> 생성자, <code>static</code> 인스턴스, thread-safe 초기화를 직접 구현해야 했다. Kotlin은 <code>object</code> 키워드 하나로 끝이다.</p>
+
+<pre><code class="language-kotlin">object BlogConfig {
+    val maxTitleLength = 200
+    val maxContentLength = 50_000
+    val defaultPageSize = 10
+
+    fun isValidTitle(title: String) = title.length &lt;= maxTitleLength
+}</code></pre>
+          <ul>
+            <li><code>object</code>로 선언하면 <mark>클래스 정의와 동시에 싱글톤 인스턴스가 생성</mark>된다.</li>
+            <li>thread-safe하게 lazy 초기화된다.</li>
+            <li>생성자를 호출할 수 없다. 인스턴스가 하나뿐이니까.</li>
+          </ul>
+
+          <p>사용할 때는 클래스 이름을 직접 쓴다.</p>
+
+<pre><code class="language-kotlin">BlogConfig.maxTitleLength
+BlogConfig.isValidTitle("제목")</code></pre>
+          <hr>
+
+          <h2>Companion Object — static 대체</h2>
+
+          <p>Java의 <code>static</code> 멤버는 Kotlin에 없다. 대신 <code>companion object</code>를 쓴다.</p>
+
+<pre><code class="language-kotlin">class Post(val title: String, val content: String) {
+    companion object {
+        const val MAX_TITLE_LENGTH = 200
+
+        fun of(title: String, content: String): Post {
+            require(title.length &lt;= MAX_TITLE_LENGTH)
+            return Post(title, content)
+        }
+    }
+}</code></pre>
+          <ul>
+            <li><code>companion object</code>는 클래스 안에 하나만 존재하는 <strong>싱글톤 객체</strong>다.</li>
+            <li>Java의 <code>static</code> 메서드, <code>static final</code> 상수 역할을 한다.</li>
+          </ul>
+
+          <p>호출 방식은 Java의 static과 동일하다.</p>
+
+<pre><code class="language-kotlin">Post.MAX_TITLE_LENGTH
+Post.of("제목", "내용")</code></pre>
+          <p>왜 <code>static</code> 대신 <code>companion object</code>를 만들었을까? Kotlin의 설계 철학은 <strong>"모든 것은 객체"</strong>다. <code>companion object</code>는 실제 객체이기 때문에 인터페이스를 구현하거나, 변수에 대입하거나, 확장 함수를 붙일 수 있다. Java의 <code>static</code>은 이런 게 불가능하다.</p>
+
+<pre><code class="language-kotlin">// companion object가 인터페이스를 구현하는 예
+class Post(val title: String) {
+    companion object : Comparator&lt;Post&gt; {
+        override fun compare(a: Post, b: Post) =
+            a.title.compareTo(b.title)
+    }
+}</code></pre>
+          <hr>
+
+          <h2>상속</h2>
+
+          <p>Kotlin의 클래스는 <mark>기본이 <code>final</code></mark>이다. Java와 정반대다. 상속을 허용하려면 <code>open</code> 키워드를 명시해야 한다.</p>
+
+<pre><code class="language-kotlin">open class Animal(val name: String) {
+    open fun sound(): String = "..."
+}
+
+class Dog(name: String) : Animal(name) {
+    override fun sound(): String = "멍멍"
+}</code></pre>
+          <ul>
+            <li><code>open</code> — 클래스나 메서드에 붙여야 상속/오버라이드가 가능하다.</li>
+            <li><code>override</code> — Java의 <code>@Override</code>와 같지만, <strong>필수</strong> 키워드다. 안 쓰면 컴파일 에러.</li>
+            <li>상속 문법은 <code>:</code>을 쓴다. <code>extends</code> 키워드가 없다.</li>
+          </ul>
+
+          <p>왜 기본이 <code>final</code>일까? <em>"상속은 캡슐화를 깨뜨린다"</em>는 Effective Java의 가르침을 언어 차원에서 적용한 것이다. 상속을 의도한 클래스만 명시적으로 <code>open</code>을 붙이도록 해서, 의도치 않은 상속으로 인한 문제를 예방한다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">Spring과 open</div>
+            <p>Spring은 <code>@Service</code>, <code>@Configuration</code> 등에 CGLIB 프록시를 만들어야 해서 <code>open</code>이 필요하다. 매번 붙이기 귀찮으니까 <code>kotlin-spring</code> 플러그인이 자동으로 <code>open</code>을 추가해준다. 이건 <a href="spring-boot에서의-kotlin.html">코프링 가이드</a>에서 다룬다.</p>
+          </div>
+
+          <hr>
+
+          <h2>인터페이스</h2>
+
+          <p>Java의 인터페이스와 거의 동일하지만, 문법이 조금 다르다.</p>
+
+<pre><code class="language-kotlin">interface Publishable {
+    val isPublished: Boolean
+
+    fun publish()
+
+    fun unpublish() {
+        // 기본 구현 가능 (Java 8의 default method와 같음)
+        println("발행 취소")
+    }
+}
+
+class Post(
+    val title: String,
+    override var isPublished: Boolean = false
+) : Publishable {
+
+    override fun publish() {
+        isPublished = true
+    }
+}</code></pre>
+          <ul>
+            <li>인터페이스에 <strong>프로퍼티</strong>를 선언할 수 있다. 구현 클래스에서 <code>override</code>로 구현한다.</li>
+            <li>기본 구현이 있는 메서드를 가질 수 있다.</li>
+            <li>상속과 구현 모두 <code>:</code>을 쓴다. <code>implements</code> 키워드가 없다.</li>
+          </ul>
+
+          <p>여러 인터페이스를 구현할 때는 쉼표로 구분한다.</p>
+
+<pre><code class="language-kotlin">class Post : Publishable, Serializable, Comparable&lt;Post&gt; {
+    // ...
+}</code></pre>
+          <hr>
+
+          <h2>심화 분석</h2>
+
+          <h4>abstract class vs interface</h4>
+
+          <p>Kotlin에서 추상 클래스와 인터페이스의 차이는 Java와 동일하다.</p>
+
+<div class="mermaid">
+graph TD
+    A[상태를 가져야 하나?] -->|Yes| B[abstract class]
+    A -->|No| C[여러 개 구현이 필요한가?]
+    C -->|Yes| D[interface]
+    C -->|No| E[abstract class도 가능]
+
+    style B fill:#e1f5fe
+    style D fill:#e8f5e9
+    style E fill:#fff3e0
+</div>
+          <ul>
+            <li><strong>abstract class</strong> — 상태(필드)를 가질 수 있고, 생성자가 있다. 하나만 상속 가능.</li>
+            <li><strong>interface</strong> — 상태를 가질 수 없고(프로퍼티 선언은 가능하지만 backing field 없음), 여러 개 구현 가능.</li>
+          </ul>
+
+          <p>실무에서는 대부분 interface를 쓰고, 공통 상태가 꼭 필요할 때만 abstract class를 쓴다. Spring의 서비스 계층에서 인터페이스를 추출하는 것도 같은 원리다.</p>
+
+          <h4>중첩 클래스와 내부 클래스</h4>
+
+          <p>Java에서 중첩 클래스는 기본이 내부 클래스(inner class, 외부 참조를 가짐)다. Kotlin은 반대로 <mark>기본이 정적 중첩 클래스</mark>다.</p>
+
+<pre><code class="language-kotlin">class Outer {
+    class Nested {
+        // 외부 클래스의 멤버에 접근 불가 (Java의 static inner class)
+    }
+
+    inner class Inner {
+        // inner 키워드를 붙여야 외부 클래스 참조를 가진다
+    }
+}</code></pre>
+          <ul>
+            <li><code>class Nested</code> — Java의 <code>static class Nested</code>와 같다. 외부 참조 없음.</li>
+            <li><code>inner class Inner</code> — Java의 <code>class Inner</code>와 같다. 외부 참조 있음.</li>
+          </ul>
+
+          <p>Java는 <code>static</code>을 안 붙이면 암묵적으로 외부 참조를 가져서 메모리 누수의 원인이 되곤 했다. Kotlin은 기본을 안전한 쪽(정적 중첩)으로 뒤집어서 이 문제를 예방한다.</p>
+
+          <hr>
+
+          <h2>자주 하는 실수</h2>
+
+          <h4>data class의 equals 함정</h4>
+
+          <p><code>data class</code>의 <code>equals()</code>는 <mark>주 생성자의 프로퍼티만</mark> 비교한다. 본문에 선언한 프로퍼티는 비교 대상이 아니다.</p>
+
+<pre><code class="language-kotlin">data class Post(val title: String) {
+    var viewCount: Int = 0   // equals에 포함되지 않음!
+}
+
+val a = Post("제목").apply { viewCount = 100 }
+val b = Post("제목").apply { viewCount = 0 }
+a == b  // true! viewCount가 달라도 title만 비교한다</code></pre>
+          <p><code>equals()</code>에 포함시키고 싶은 프로퍼티는 반드시 주 생성자에 넣어야 한다.</p>
+
+          <h4>open 깜빡하고 상속 시도</h4>
+
+<pre><code class="language-kotlin">class Animal(val name: String)
+
+// 컴파일 에러! Animal은 final이다
+class Dog(name: String) : Animal(name)</code></pre>
+          <p>Java 습관으로 <code>open</code>을 안 붙이는 실수가 잦다. 에러 메시지가 <code>This type is final, so it cannot be inherited from</code>이면 <code>open</code>을 확인하자.</p>
+
+          <h4>companion object와 Java 상호운용</h4>
+
+          <p>Java에서 Kotlin의 <code>companion object</code> 멤버에 접근하면 <code>Companion</code>이 중간에 들어간다.</p>
+
+<pre><code class="language-java">// Java에서 호출할 때
+Post.Companion.of("제목", "내용");     // 기본
+Post.of("제목", "내용");                // @JvmStatic 붙이면</code></pre>
+          <p>Java에서 자연스럽게 쓰려면 <code>@JvmStatic</code>을 붙여야 한다. 이건 <a href="java-상호운용-완전-가이드.html">상호운용 가이드</a>에서 자세히 다룬다.</p>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Kotlin</span>
+          <span>#클래스</span>
+          <span>#객체</span>
+          <span>#상속</span>
+          <span>#인터페이스</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="kotlin-syntax-1-variables.html">&larr; 이전 글</a>
+          <a href="kotlin-syntax-3-null-collections.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

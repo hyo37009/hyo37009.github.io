@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Kotlin] 6. DSL 설계 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Kotlin] 6. DSL 설계</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Kotlin 사고방식 (6/7)</div>
+            <p>이전 편: <a href="kotlin-mindset-5-null-safety.html">[Kotlin] 5. Null Safety 완전 정복</a></p>
+            <p>다음 편: <a href="kotlin-mindset-7-java-interop.html">[Kotlin] 7. Java 상호운용 완전 가이드</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">Kotlin 사고방식 시리즈 (6/7)</div>
+            <p>이전 편: <a href="kotlin-mindset-5-null-safety.html">5 Null Safety 완전 정복</a></p>
+            <p>다음 편: <a href="kotlin-mindset-7-java-interop.html">7 Java 상호운용 완전 가이드</a></p>
+          </div>
+
+          <p>Spring Security 설정을 Kotlin DSL로 작성해본 적이 있다면, Java의 체이닝 방식과 비교했을 때 "이건 대체 어떻게 동작하는 거지?"라는 의문이 들었을 것이다.</p>
+
+<pre><code class="language-kotlin">http {
+    csrf { disable() }
+    authorizeHttpRequests {
+        authorize("/api/posts/**", permitAll)
+        authorize(anyRequest, authenticated)
+    }
+}</code></pre>
+          <p>이건 마법이 아니다. Kotlin의 <strong>수신 객체 람다 + 확장 함수 + 후행 람다</strong> 세 가지가 조합된 결과다. 이 원리를 이해하면 Spring의 DSL이 어떻게 동작하는지 알 수 있고, 나아가 직접 DSL을 설계할 수도 있다.</p>
+
+          <p>이 문서에서는 DSL의 작동 원리를 분해하고, 실전에서 유용한 DSL 패턴을 다룬다.</p>
+
+          <h2>DSL이란</h2>
+
+          <p>DSL(Domain Specific Language)은 <strong>특정 도메인에 특화된 언어</strong>다. SQL이 데이터베이스 조회에 특화되어 있고, HTML이 문서 구조에 특화되어 있듯이, Kotlin DSL은 특정 작업을 위한 <strong>선언적 문법</strong>을 Kotlin 코드 안에서 만드는 것이다.</p>
+
+          <p>핵심은 <mark>코드가 설정 파일처럼 읽힌다</mark>는 것이다. "무엇을 해라"를 명령하는 게 아니라 "무엇이 있다"를 선언하는 느낌.</p>
+
+<pre><code class="language-kotlin">// 명령형 (Java 스타일)
+val html = StringBuilder()
+html.append("&lt;html&gt;")
+html.append("&lt;body&gt;")
+html.append("&lt;h1&gt;제목&lt;/h1&gt;")
+html.append("&lt;/body&gt;")
+html.append("&lt;/html&gt;")
+
+// 선언형 (Kotlin DSL 스타일)
+val html = html {
+    body {
+        h1 { +"제목" }
+    }
+}</code></pre>
+          <p>두 코드의 결과는 같지만, DSL 버전은 HTML의 구조가 코드의 구조에 그대로 반영된다. 들여쓰기가 곧 계층이다.</p>
+
+          <hr>
+
+          <h2>수신 객체 람다 — DSL의 핵심 메커니즘</h2>
+
+          <p>DSL의 핵심은 <a href="kotlin-mindset-3-functions.html">수신 객체가 있는 함수 타입</a>이다. 복습하면, <code>String.() -&gt; Unit</code>은 "String을 수신 객체로 받아서 Unit을 반환하는 함수"다.</p>
+
+          <p>이걸 활용하면 람다 안에서 수신 객체의 멤버를 <code>this</code> 없이 호출할 수 있다. 이것이 DSL이 깔끔해 보이는 이유다.</p>
+
+          <p>단계별로 빌드업 해보자.</p>
+
+          <h4>1단계 — 일반 함수</h4>
+
+<pre><code class="language-kotlin">class HtmlBuilder {
+    private val elements = mutableListOf&lt;String&gt;()
+
+    fun body(content: String) {
+        elements.add("&lt;body&gt;$content&lt;/body&gt;")
+    }
+
+    fun build(): String = elements.joinToString("\n")
+}
+
+// 사용
+val builder = HtmlBuilder()
+builder.body("안녕")
+val html = builder.build()</code></pre>
+          <p>빌더를 만들고, 메서드를 호출하고, 결과를 빌드한다. Java에서 흔히 보는 패턴이다.</p>
+
+          <h4>2단계 — 수신 객체 람다로 감싸기</h4>
+
+<pre><code class="language-kotlin">fun html(block: HtmlBuilder.() -&gt; Unit): String {
+    val builder = HtmlBuilder()
+    builder.block()    // block의 수신 객체가 builder
+    return builder.build()
+}
+
+// 사용
+val result = html {
+    body("안녕")    // this.body("안녕")과 동일. this는 HtmlBuilder.
+}</code></pre>
+          <ul>
+            <li><code>block: HtmlBuilder.() -&gt; Unit</code> — <code>HtmlBuilder</code>를 수신 객체로 받는 람다.</li>
+            <li>람다 안에서 <code>HtmlBuilder</code>의 메서드를 바로 호출할 수 있다.</li>
+            <li><code>html { ... }</code>라고 쓰면 마치 새로운 문법처럼 보인다.</li>
+          </ul>
+
+          <p><mark>이것이 DSL의 전부다.</mark> 빌더 클래스 + 수신 객체 람다를 받는 팩토리 함수. 이 패턴을 중첩하면 복잡한 DSL이 된다.</p>
+
+          <h4>3단계 — 중첩</h4>
+
+<pre><code class="language-kotlin">class HtmlBuilder {
+    private val elements = mutableListOf&lt;String&gt;()
+
+    fun body(block: BodyBuilder.() -&gt; Unit) {
+        val bodyBuilder = BodyBuilder()
+        bodyBuilder.block()
+        elements.add("&lt;body&gt;${bodyBuilder.build()}&lt;/body&gt;")
+    }
+
+    fun build() = "&lt;html&gt;${elements.joinToString("")}&lt;/html&gt;"
+}
+
+class BodyBuilder {
+    private val elements = mutableListOf&lt;String&gt;()
+
+    fun h1(block: () -&gt; String) {
+        elements.add("&lt;h1&gt;${block()}&lt;/h1&gt;")
+    }
+
+    fun p(text: String) {
+        elements.add("&lt;p&gt;$text&lt;/p&gt;")
+    }
+
+    fun build() = elements.joinToString("")
+}</code></pre>
+          <p><code>HtmlBuilder.body()</code>가 <code>BodyBuilder.() -&gt; Unit</code> 람다를 받는 구조다. 이제 사용하면 이렇게 된다.</p>
+
+<pre><code class="language-kotlin">val result = html {         // this: HtmlBuilder
+    body {                  // this: BodyBuilder
+        h1 { "제목" }
+        p("본문 내용")
+    }
+}</code></pre>
+          <p>각 중괄호 안에서 <code>this</code>가 해당 빌더를 가리키기 때문에, 그 빌더의 메서드만 호출할 수 있다. 이것이 DSL의 <strong>계층 구조</strong>를 만드는 원리다.</p>
+
+          <hr>
+
+          <h2>@DslMarker — 스코프 제어</h2>
+
+          <p>중첩 DSL에서 한 가지 문제가 있다. 안쪽 람다에서 바깥쪽 빌더의 메서드도 호출할 수 있다.</p>
+
+<pre><code class="language-kotlin">html {                     // this: HtmlBuilder
+    body {                 // this: BodyBuilder
+        body { }           // 이것도 됨! 바깥 HtmlBuilder의 body()를 호출
+    }
+}</code></pre>
+          <p><code>body</code> 안에서 다시 <code>body</code>를 호출하는 건 의도하지 않은 것이다. <code>@DslMarker</code>로 이걸 막을 수 있다.</p>
+
+<pre><code class="language-kotlin">@DslMarker
+annotation class HtmlDsl
+
+@HtmlDsl
+class HtmlBuilder { /* ... */ }
+
+@HtmlDsl
+class BodyBuilder { /* ... */ }</code></pre>
+          <p>같은 <code>@DslMarker</code>가 붙은 클래스끼리는, <mark>가장 가까운 수신 객체의 멤버만 접근</mark>할 수 있다. 바깥 스코프의 멤버에 접근하려면 명시적으로 <code>this@html.body { }</code>처럼 레이블을 써야 한다.</p>
+
+          <p>Spring의 Security DSL도 이런 방식으로 스코프를 제어한다. <code>authorizeHttpRequests { }</code> 안에서 <code>csrf { }</code>를 호출할 수 없는 이유가 이것이다.</p>
+
+          <hr>
+
+          <h2>실전 DSL 패턴</h2>
+
+          <h3>테스트 픽스처 DSL</h3>
+
+          <p>테스트에서 객체를 생성할 때 DSL을 쓰면 가독성이 좋아진다.</p>
+
+<pre><code class="language-kotlin">class PostFixtureBuilder {
+    var title: String = "테스트 글"
+    var content: String = "&lt;p&gt;내용&lt;/p&gt;"
+    var isPublished: Boolean = true
+    var viewCount: Int = 0
+    private val tags = mutableListOf&lt;String&gt;()
+
+    fun tags(vararg names: String) {
+        tags.addAll(names)
+    }
+
+    fun build() = Post(
+        title = title,
+        content = content,
+        isPublished = isPublished,
+        viewCount = viewCount
+    ).also { post -&gt;
+        tags.forEach { post.addTag(Tag(name = it)) }
+    }
+}
+
+fun post(block: PostFixtureBuilder.() -&gt; Unit): Post {
+    return PostFixtureBuilder().apply(block).build()
+}</code></pre>
+          <p>사용하면 이렇다.</p>
+
+<pre><code class="language-kotlin">val testPost = post {
+    title = "DSL 가이드"
+    isPublished = true
+    viewCount = 100
+    tags("Kotlin", "DSL")
+}</code></pre>
+          <p>named argument로도 충분하지만, 객체 생성이 복잡하거나 부가 작업(태그 추가 등)이 있을 때 DSL이 빛을 발한다.</p>
+
+          <hr>
+
+          <h3>설정 DSL</h3>
+
+          <p>애플리케이션 설정을 코드로 표현하는 DSL이다.</p>
+
+<pre><code class="language-kotlin">class ServerConfig {
+    var port: Int = 8080
+    var host: String = "localhost"
+    private var _database: DatabaseConfig? = null
+
+    fun database(block: DatabaseConfig.() -&gt; Unit) {
+        _database = DatabaseConfig().apply(block)
+    }
+
+    val database: DatabaseConfig get() = _database ?: error("Database not configured")
+}
+
+class DatabaseConfig {
+    var url: String = ""
+    var username: String = ""
+    var password: String = ""
+    var maxPoolSize: Int = 10
+}
+
+fun server(block: ServerConfig.() -&gt; Unit): ServerConfig =
+    ServerConfig().apply(block)</code></pre>
+          <p>사용하면 YAML 설정 파일과 비슷한 형태가 된다.</p>
+
+<pre><code class="language-kotlin">val config = server {
+    port = 3000
+    host = "0.0.0.0"
+
+    database {
+        url = "jdbc:postgresql://localhost:5432/blog"
+        username = "admin"
+        password = "secret"
+        maxPoolSize = 20
+    }
+}</code></pre>
+          <p>YAML이나 properties 파일과 비슷하게 읽히지만, <strong>타입 안전성</strong>과 <strong>IDE 자동완성</strong>이 있다는 점이 장점이다.</p>
+
+          <hr>
+
+          <h2>Spring에서의 DSL 이해</h2>
+
+          <p>Spring의 Kotlin DSL도 같은 원리로 동작한다. Security DSL을 해부해보자.</p>
+
+<pre><code class="language-kotlin">http {
+    csrf { disable() }
+    authorizeHttpRequests {
+        authorize("/api/posts/**", permitAll)
+    }
+}</code></pre>
+          <p>이 코드가 동작하는 원리는 이렇다.</p>
+
+          <ol>
+            <li><code>http</code>는 <code>HttpSecurity</code>의 확장 함수다. <code>HttpSecurityDsl.() -&gt; Unit</code> 람다를 받는다.</li>
+            <li><code>csrf</code>는 <code>HttpSecurityDsl</code>의 메서드다. <code>CsrfDsl.() -&gt; Unit</code> 람다를 받는다.</li>
+            <li><code>disable()</code>은 <code>CsrfDsl</code>의 메서드다.</li>
+            <li><code>authorizeHttpRequests</code>도 같은 패턴. <code>AuthorizeHttpRequestsDsl.() -&gt; Unit</code> 람다를 받는다.</li>
+          </ol>
+
+          <p>각 중괄호는 <strong>다른 빌더의 수신 객체 람다</strong>다. 그래서 각 블록에서 쓸 수 있는 메서드가 다르다. <code>csrf { }</code> 안에서는 <code>disable()</code>을 쓸 수 있고, <code>authorizeHttpRequests { }</code> 안에서는 <code>authorize()</code>를 쓸 수 있다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">DSL을 이해하는 가장 좋은 방법</div>
+            <p>IDE에서 <code>Ctrl+클릭</code>으로 DSL 함수의 시그니처를 들여다보자. <code>block: SomeDsl.() -&gt; Unit</code> 형태를 찾으면 "아, 이 블록에서는 <code>SomeDsl</code>의 메서드를 쓸 수 있구나"를 바로 알 수 있다.</p>
+          </div>
+
+          <hr>
+
+          <h2>심화 분석</h2>
+
+          <h4>infix 함수와 DSL</h4>
+
+          <p><code>infix</code> 함수를 쓰면 DSL을 더 자연스럽게 만들 수 있다.</p>
+
+<pre><code class="language-kotlin">infix fun String.to(value: Any) = Pair(this, value)
+
+// 일반 호출
+Pair("key", "value")
+
+// infix 호출 — 더 읽기 좋다
+"key" to "value"</code></pre>
+          <p>Kotlin 표준 라이브러리의 <code>to</code>가 대표적인 infix 함수다. <code>mapOf("key" to "value")</code>에서 쓰인다.</p>
+
+          <p>테스트 DSL에서도 활용할 수 있다.</p>
+
+<pre><code class="language-kotlin">infix fun &lt;T&gt; T.shouldBe(expected: T) {
+    if (this != expected) throw AssertionError("Expected $expected but was $this")
+}
+
+// 사용
+result shouldBe "expected value"</code></pre>
+          <h4>operator 오버로딩과 DSL</h4>
+
+          <p>HTML DSL에서 흔히 보는 <code>+"텍스트"</code> 패턴은 operator 오버로딩이다.</p>
+
+<pre><code class="language-kotlin">class TagBuilder {
+    private val children = mutableListOf&lt;String&gt;()
+
+    operator fun String.unaryPlus() {
+        children.add(this)
+    }
+
+    // ...
+}
+
+// 사용
+h1 { +"제목" }   // String의 unaryPlus가 호출됨</code></pre>
+          <p>이것은 <code>String</code>에 <code>unaryPlus</code> 연산자를 확장 함수로 추가한 것이다. 수신 객체 람다 안에서만 동작하기 때문에, <code>TagBuilder</code> 스코프 밖에서는 <code>+"문자열"</code>이 동작하지 않는다.</p>
+
+          <hr>
+
+          <h2>자주 하는 실수</h2>
+
+          <h4>DSL 남용</h4>
+
+          <p>DSL이 강력하다고 모든 것을 DSL로 만들면 안 된다. DSL이 적합한 경우는 이렇다.</p>
+
+          <ul>
+            <li><strong>구조가 계층적</strong>일 때 (HTML, 설정, UI 레이아웃)</li>
+            <li><strong>같은 패턴이 반복</strong>될 때 (테스트 픽스처)</li>
+            <li><strong>선언적 표현</strong>이 명령적 표현보다 읽기 좋을 때</li>
+          </ul>
+
+          <p>단순한 객체 생성에는 named argument로 충분하다. DSL은 <strong>읽는 사람에게 이점이 있을 때만</strong> 만들자.</p>
+
+          <h4>apply와 DSL의 혼동</h4>
+
+<pre><code class="language-kotlin">// 이건 DSL이 아니다 — 단순한 apply
+val post = Post().apply {
+    title = "제목"
+    content = "내용"
+}</code></pre>
+          <p><code>apply</code>는 DSL의 구성 요소이지만, <code>apply</code>를 쓴다고 DSL인 것은 아니다. DSL은 <strong>도메인의 의미를 표현하는 구조화된 빌더</strong>다. <code>apply</code>는 단순히 객체 초기화를 깔끔하게 해주는 스코프 함수다.</p>
+
+          <h4>@DslMarker 빠뜨리기</h4>
+
+          <p><code>@DslMarker</code>를 빠뜨리면 중첩 블록에서 바깥 스코프의 메서드를 호출할 수 있어서 실수가 생긴다. DSL을 만들 때는 반드시 <code>@DslMarker</code>를 붙여서 스코프를 제한하자.</p>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Kotlin</span>
+          <span>#DSL</span>
+          <span>#빌더패턴</span>
+          <span>#수신객체람다</span>
+          <span>#Spring</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="kotlin-mindset-5-null-safety.html">&larr; 이전 글</a>
+          <a href="kotlin-mindset-7-java-interop.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

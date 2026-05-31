@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Java 자료구조] Comparable과 compareTo - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Java 자료구조] Comparable과 compareTo</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">작성 정보</div>
+            <p>- <strong>작성일</strong> : 2026-05-29</p>
+            <p>- <strong>관련 문제</strong> : <a href="코딩테스트문제-풀이프로그래머스pg42579-베스트-앨범00-복습-인덱스.html">PG42579 베스트 앨범</a></p>
+            <p>- <strong>관련 문서</strong> : <a href="comparator-정렬-기준.html">Comparator 정렬 기준</a>, <a href="map-정렬과-computeifabsent.html">Map 정렬과 computeIfAbsent</a></p>
+          </div>
+
+          <p><code>Comparable</code>은 객체가 자기 자신의 기본 정렬 기준을 가지게 만드는 인터페이스다. <code>Song</code>끼리는 어떤 순서로 놓을지, <code>Genre</code>끼리는 어떤 순서로 놓을지를 객체 안에 직접 정의할 때 사용한다.</p>
+
+          <h2>Comparable을 쓰는 기준</h2>
+
+          <p>객체에 자연스럽고 대표적인 정렬 기준이 하나 있다면 <code>Comparable</code>을 고려한다.</p>
+
+          <table>
+          <thead>
+          <tr><th>상황</th><th>선택</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>객체의 기본 정렬 기준이 분명하다</td><td><code>Comparable</code></td></tr>
+          <tr><td>상황마다 정렬 기준이 바뀐다</td><td><code>Comparator</code></td></tr>
+          <tr><td>정렬이 한 번만 필요하고 간단하다</td><td>람다 <code>Comparator</code></td></tr>
+          <tr><td>같은 타입을 여러 기준으로 정렬한다</td><td><code>Comparator</code>를 여러 개 만든다</td></tr>
+          </tbody>
+          </table>
+
+          <p>베스트 앨범에서는 <code>Song</code>의 정렬 기준이 문제 안에서 거의 고정된다. 재생 횟수 내림차순, 동률이면 고유 번호 오름차순이다. 그래서 <code>Song implements Comparable&lt;Song&gt;</code>로 둘 수 있다.</p>
+
+          <h2>compareTo 반환값</h2>
+
+          <p><code>compareTo</code>도 <code>Comparator</code>와 같은 반환 규칙을 가진다.</p>
+
+<pre><code class="language-text">this.compareTo(other)가 음수면 this가 앞에 온다
+this.compareTo(other)가 양수면 other가 앞에 온다
+this.compareTo(other)가 0이면 같은 순서다</code></pre>
+          <p>예를 들어 <code>Song</code>에서 재생 횟수가 큰 노래가 앞에 와야 한다면 다음처럼 쓴다.</p>
+
+<pre><code class="language-java">@Override
+public int compareTo(Song other) {
+    return Integer.compare(other.playCount, this.playCount);
+}</code></pre>
+          <p><code>this.playCount</code>가 100이고 <code>other.playCount</code>가 300이면 <code>Integer.compare(300, 100)</code>은 양수다. 양수면 <code>other</code>가 앞에 온다. 그래서 재생 횟수 내림차순이 된다.</p>
+
+          <h2>동률 조건 넣기</h2>
+
+          <p>정렬 기준이 여러 개면 우선순위가 높은 조건부터 비교한다.</p>
+
+<pre><code class="language-java">@Override
+public int compareTo(Song other) {
+    if (this.playCount != other.playCount) {
+        return Integer.compare(other.playCount, this.playCount);
+    }
+    return Integer.compare(this.index, other.index);
+}</code></pre>
+          <table>
+          <thead>
+          <tr><th>조건</th><th>방향</th><th>코드</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>재생 횟수</td><td>내림차순</td><td><code>Integer.compare(other.playCount, this.playCount)</code></td></tr>
+          <tr><td>고유 번호</td><td>오름차순</td><td><code>Integer.compare(this.index, other.index)</code></td></tr>
+          </tbody>
+          </table>
+
+          <p>동률 조건을 빼먹으면 예제는 맞아도 숨은 테스트에서 틀릴 수 있다.</p>
+
+          <h2>Comparable 객체끼리 비교하기</h2>
+
+          <p><code>Comparable</code>을 구현한 객체는 직접 비교할 수 있다.</p>
+
+<pre><code class="language-java">Song a = new Song(0, 500);
+Song b = new Song(1, 300);
+
+int result = a.compareTo(b);</code></pre>
+          <p><code>result</code>가 음수면 <code>a</code>가 앞이다. 양수면 <code>b</code>가 앞이다.</p>
+
+          <p>정렬 API도 내부적으로 이 기준을 사용한다.</p>
+
+<pre><code class="language-java">songs.sort(Song::compareTo);
+Collections.sort(songs);</code></pre>
+          <p><code>Map.Entry.comparingByValue()</code>도 value가 <code>Comparable</code>이면 그 기준을 사용한다.</p>
+
+<pre><code class="language-java">genreMap.entrySet().stream()
+        .sorted(Map.Entry.comparingByValue());</code></pre>
+          <p>여기서 value인 <code>Genre</code>가 <code>Comparable&lt;Genre&gt;</code>를 구현하고 있어야 자연스럽게 정렬된다.</p>
+
+          <h2>주의할 점</h2>
+
+          <p><code>compareTo</code>에서 뺄셈을 쓰는 습관은 피한다.</p>
+
+<pre><code class="language-java">return other.playCount - this.playCount;</code></pre>
+          <p>이 방식은 짧지만 값 범위가 커지면 오버플로우 위험이 있고, 정렬 방향도 헷갈리기 쉽다.</p>
+
+          <p>대신 다음처럼 쓴다.</p>
+
+<pre><code class="language-java">return Integer.compare(other.playCount, this.playCount);</code></pre>
+          <h2>실수 체크</h2>
+
+          <ul class="task-list">
+            <li><input type="checkbox" disabled> 객체의 기본 정렬 기준이 하나로 고정되는가</li>
+            <li><input type="checkbox" disabled> <code>this.compareTo(other)</code>가 음수면 <code>this</code>가 앞이라는 기준을 기억했는가</li>
+            <li><input type="checkbox" disabled> 내림차순이면 <code>Integer.compare(other, this)</code> 방향인지 확인했는가</li>
+            <li><input type="checkbox" disabled> 동률 조건을 문제에 나온 순서대로 처리했는가</li>
+            <li><input type="checkbox" disabled> 뺄셈 비교 대신 <code>Integer.compare</code>를 썼는가</li>
+          </ul>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#코딩테스트</span>
+          <span>#자주하는실수</span>
+          <span>#Java</span>
+          <span>#Comparable</span>
+          <span>#compareTo</span>
+          <span>#정렬</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

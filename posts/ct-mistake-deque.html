@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Java 자료구조] Deque Stack Queue 사용 시 자주 틀리는 사례 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Java 자료구조] Deque Stack Queue 사용 시 자주 틀리는 사례</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+
+          <div class="callout callout-warning">
+            <div class="callout-title">기준</div>
+            <p><code>Deque</code>는 스택과 큐를 모두 만들 수 있다. 그래서 타입보다 먼저 <mark>넣는 쪽과 빼는 쪽이 같은가, 다른가</mark>를 고정해야 한다.</p>
+          </div>
+
+          <h2>메서드 세트 지도</h2>
+
+          <table>
+          <thead>
+          <tr><th>의도</th><th>넣기</th><th>보기</th><th>빼기</th><th>방향</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>스택</td><td><code>push</code></td><td><code>peek</code></td><td><code>pop</code></td><td>head에서 넣고 head에서 뺌</td></tr>
+          <tr><td>큐</td><td><code>offer</code></td><td><code>peek</code></td><td><code>poll</code></td><td>tail에 넣고 head에서 뺌</td></tr>
+          <tr><td>덱</td><td><code>offerFirst</code>, <code>offerLast</code></td><td><code>peekFirst</code>, <code>peekLast</code></td><td><code>pollFirst</code>, <code>pollLast</code></td><td>양쪽을 명시</td></tr>
+          </tbody>
+          </table>
+
+<div class="mermaid">
+flowchart TD
+    Problem["문제에서 꺼내야 하는 값"] --> Recent{"가장 최근 값인가"}
+    Recent -->|예| Stack["스택: push peek pop"]
+    Recent -->|아니오| Oldest{"가장 오래된 값인가"}
+    Oldest -->|예| Queue["큐: offer peek poll"]
+    Oldest -->|아니오| Both{"양쪽 모두 필요한가"}
+    Both -->|예| Deque["덱: First Last 명시"]
+    Both -->|아니오| Recheck["문제 조건 다시 확인"]
+</div>
+          <h2>스택 의도인데 큐 메서드를 사용</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">발생 장면</div>
+            <p><code>BOJ3986 좋은 단어</code>에서 가장 최근 글자와 비교해야 했는데, <code>add</code> / <code>peek</code> / <code>poll</code>을 써서 가장 오래된 글자와 비교했다.</p>
+          </div>
+
+<pre><code class="language-java">Queue&lt;String&gt; deque = new ArrayDeque&lt;&gt;();
+
+deque.add(ab);   // tail에 삽입
+deque.peek();    // head 조회
+deque.poll();    // head 제거</code></pre>
+          <p>이 조합은 FIFO다. 스택이 아니라 큐다.</p>
+
+          <h4>고치는 기준</h4>
+
+<pre><code class="language-java">Deque&lt;String&gt; stack = new ArrayDeque&lt;&gt;();
+
+stack.push(ab);  // head에 삽입
+stack.peek();    // head 조회
+stack.pop();     // head 제거</code></pre>
+          <p>상세: <a href="deque의-queue-메서드와-stack-메서드-혼용.html">Deque의 Queue 메서드와 Stack 메서드 혼용</a></p>
+
+          <h2>괄호 종류가 하나뿐인데 스택을 크게 만듦</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">발생 장면</div>
+            <p><code>PG12909 올바른 괄호</code>에서 실제 괄호 문자를 저장하는 스택을 직접 만들었다.</p>
+          </div>
+
+          <p>괄호 종류가 <code>(</code>, <code>)</code> 하나뿐이고 유효성만 판단하면 열린 괄호 개수만 필요하다.</p>
+
+<pre><code class="language-java">int open = 0;
+for (int i = 0; i &lt; s.length(); i++) {
+    if (s.charAt(i) == '(') {
+        open++;
+    } else if (open == 0) {
+        return false;
+    } else {
+        open--;
+    }
+}
+return open == 0;</code></pre>
+          <p>상세: <a href="코딩테스트문제-풀이프로그래머스pg12909-올바른-괄호분석.html">PG12909 분석</a></p>
+
+          <h2>BFS 큐에서 <code>push()</code>를 사용</h2>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">증상</div>
+            <p>BFS를 구현했는데 탐색 순서가 DFS처럼 깊게 들어간다.</p>
+          </div>
+
+<pre><code class="language-java">Deque&lt;Integer&gt; q = new ArrayDeque&lt;&gt;();
+q.push(start); // 앞에 넣는다</code></pre>
+          <p>BFS는 먼저 들어온 노드를 먼저 꺼내야 한다.</p>
+
+<pre><code class="language-java">Deque&lt;Integer&gt; q = new ArrayDeque&lt;&gt;();
+q.offer(start);
+
+while (!q.isEmpty()) {
+    int cur = q.poll();
+}</code></pre>
+          <h2>빈 자료구조에서 꺼냄</h2>
+
+          <table>
+          <thead>
+          <tr><th>메서드</th><th>비어 있을 때</th><th>사용 기준</th></tr>
+          </thead>
+          <tbody>
+          <tr><td><code>pop()</code></td><td>예외</td><td>비어 있지 않음을 보장할 때</td></tr>
+          <tr><td><code>poll()</code></td><td><code>null</code></td><td>빈 상태를 값으로 처리할 때</td></tr>
+          <tr><td><code>peek()</code></td><td><code>null</code></td><td>보기만 할 때</td></tr>
+          </tbody>
+          </table>
+
+          <p>스택 문제에서 실패 조건은 보통 <code>pop()</code> 전에 나온다.</p>
+
+<pre><code class="language-java">if (stack.isEmpty()) {
+    return false;
+}
+stack.pop();</code></pre>
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#코딩테스트</span>
+          <span>#자주하는실수</span>
+          <span>#Java</span>
+          <span>#Deque</span>
+          <span>#Stack</span>
+          <span>#Queue</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

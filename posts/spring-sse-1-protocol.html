@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[스프링] 1. SSE와 실시간 통신 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[스프링] 1. SSE와 실시간 통신</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">SSE 실시간 알림 (1/8)</div>
+            <p>다음 편: <a href="spring-sse-2-connection.html">[스프링] 2. SSE 연결 관리와 동시성</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">SSE 실시간 알림 시리즈</div>
+            <p><strong>개념</strong></p>
+            <p>1. <a href="spring-sse-1-protocol.html">SSE와 실시간 통신</a> ← 현재 편</p>
+            <p>2. <a href="spring-sse-2-connection.html">SSE 연결 관리와 동시성</a></p>
+            <p>3. <a href="spring-sse-3-architecture.html">실시간 알림 아키텍처</a></p>
+            <p>4. <a href="spring-sse-4-reliability.html">SSE 안정성과 이벤트 유실 복구</a></p>
+            <p><strong>실습</strong></p>
+            <p>1. <a href="spring-sse-5-setup.html">프로젝트 세팅과 도메인 설계</a></p>
+            <p>2. <a href="spring-sse-6-service.html">SSE 연결 서비스 구현</a></p>
+            <p>3. <a href="spring-sse-7-integration.html">알림 서비스와 프론트엔드 통합</a></p>
+            <p>4. <a href="spring-sse-8-heartbeat.html">Heartbeat와 이벤트 유실 복구 구현</a></p>
+          </div>
+
+          <p>웹 서비스에서 "새 댓글이 달렸습니다"라는 알림을 사용자에게 즉시 보여주려면 어떻게 해야 할까? 사용자가 새로고침을 누르기 전에, 서버가 먼저 데이터를 밀어넣는 방법이 필요하다. 이 편에서는 그 방법 중 하나인 SSE의 개념과 동작 원리를 다룬다.</p>
+
+          <h2>실시간 통신이 필요한 순간</h2>
+
+          <p>HTTP는 클라이언트가 요청하면 서버가 응답하는 구조다. 서버가 먼저 말을 걸 수는 없다.</p>
+
+          <p>그런데 알림, 실시간 피드, 주식 시세 같은 기능은 <mark>서버 쪽에서 새 데이터가 생겼을 때 즉시 클라이언트에 전달</mark>해야 한다. 클라이언트가 "혹시 새 데이터 있어?"라고 매번 물어보는 건 비효율적이다.</p>
+
+          <p>이 문제를 해결하기 위해 여러 기술이 등장했다. 각각의 방식이 어떤 문제를 어떻게  풀었는지 비교해 보자.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant C as 클라이언트
+    participant S as 서버
+
+    Note over C, S: [Polling] 주기적 확인
+    rect rgb(245, 245, 245)
+    C->>S: 새 데이터 있나요?
+    S-->>C: 아니요 (200 OK)
+    Note right of C: (3초 대기)
+    C->>S: 새 데이터 있나요?
+    S-->>C: 네, 여기요! (200 OK)
+    end
+
+    Note over C, S: [Long Polling] 데이터 생길 때까지 대기
+    rect rgb(240, 245, 255)
+    C->>S: 데이터 생기면 알려주세요
+    Note right of S: (데이터 생길 때까지 응답 보류)
+    S-->>C: 데이터 발생! (200 OK)
+    end
+
+    Note over C, S: [SSE] 스트리밍 연결 유지
+    rect rgb(240, 255, 240)
+    C->>S: 연결 요청 (Accept: text/event-stream)
+    S-->>C: 연결 성공 (200 OK)
+    S->>C: data: 이벤트 1
+    S->>C: data: 이벤트 2
+    end
+</div>
+          <h2>실시간 통신 기술 비교</h2>
+
+          <h3>Polling</h3>
+
+          <p>가장 단순한 방법이다. 클라이언트가 일정 주기마다 서버에 요청을 보내서 새 데이터가 있는지 확인한다.</p>
+
+<pre><code class="language-javascript">setInterval(async () =&gt; {
+    const response = await fetch('/api/notifications/new');
+    const data = await response.json();
+    if (data.length &gt; 0) {
+        renderNotifications(data);
+    }
+}, 3000); // 3초마다</code></pre>
+          <p>간단하지만, 새 데이터가 없어도 요청은 계속 나간다. 서버 입장에서는 "아무것도 없는데요"라는 빈 응답을 끊임없이 보내야 한다. 사용자가 많아지면 이 빈 요청들이 서버에 상당한 부하를 준다.</p>
+
+          <h3>Long Polling</h3>
+
+          <p>Polling의 개선 버전이다. 클라이언트가 요청을 보내면, 서버가 <mark>새 데이터가 생길 때까지 응답을 보류</mark>한다. 데이터가 생기는 순간 응답을 보내고, 클라이언트는 응답을 받자마자 다시 요청을 건다.</p>
+
+          <p>빈 응답이 줄어드니 Polling보다 효율적이다. 하지만 매번 새 HTTP 연결을 맺어야 하는 오버헤드가 여전히 있고, 서버에서 대기 중인 연결을 관리하는 것도 부담이다.</p>
+
+          <h3>SSE</h3>
+
+          <p>SSE는 Server-Sent Events의 약자다. 클라이언트가 한 번 연결하면, 서버가 그 연결을 열어둔 채 <mark>데이터가 생길 때마다 밀어 보내는</mark> 방식이다.</p>
+
+          <p>핵심 특징을 정리하면:</p>
+
+          <ul>
+            <li><strong>단방향 스트림</strong> : 서버 → 클라이언트 방향만 가능하다. 클라이언트에서 서버로 데이터를 보내려면 별도의 HTTP 요청을 쓴다.</li>
+            <li><strong>HTTP 기반</strong> : 기존 HTTP 인프라를 그대로 쓸 수 있다. 프록시, 로드밸런서, 방화벽이 별도 설정 없이 통과된다.</li>
+            <li><strong>자동 재연결</strong> : 연결이 끊기면 브라우저가 자동으로 다시 연결을 시도한다. 개발자가 재연결 로직을 짤 필요가 없다.</li>
+            <li><strong>텍스트 전용</strong> : 바이너리 데이터는 전송할 수 없다. JSON 문자열이 주로 쓰인다.</li>
+          </ul>
+
+          <h3>WebSocket</h3>
+
+          <p>WebSocket은 HTTP에서 시작하지만, 핸드셰이크 후 TCP 위에서 <mark>양방향 전이중 통신</mark>으로 전환된다. 클라이언트와 서버가 자유롭게 메시지를 주고받을 수 있다.</p>
+
+          <p>채팅처럼 양방향 통신이 빈번한 경우에 적합하다. 하지만 HTTP와 다른 프로토콜이라서 프록시 설정이나 방화벽 통과에 추가 작업이 필요할 수 있다.</p>
+
+          <h3>어떤 기술을 선택하는가</h3>
+
+<div class="mermaid">
+graph TD
+    Start([실시간 통신 기술 선택]) --> Bidirectional{양방향 통신이<br>필요한가?}
+    Bidirectional -- "예 (채팅, 게임)" --> WebSocket[WebSocket]
+    Bidirectional -- "아니오 (알림, 피드)" --> OneWay{서버에서<br>데이터를 밀어주는가?}
+    OneWay -- "예" --> SSE[SSE]
+    OneWay -- "아니오 (단순 조회)" --> Polling[Polling / Long Polling]
+
+    style SSE fill:#e1f5fe,stroke:#01579b
+    style WebSocket fill:#fff3e0,stroke:#e65100
+</div>
+          <table>
+          <thead>
+          <tr><th>기준</th><th>Polling</th><th>Long Polling</th><th>SSE</th><th>WebSocket</th></tr>
+          </thead>
+          <tbody>
+          <tr><td><strong>방향</strong></td><td>클라이언트 → 서버</td><td>클라이언트 → 서버</td><td>서버 → 클라이언트</td><td>양방향</td></tr>
+          <tr><td><strong>프로토콜</strong></td><td>HTTP</td><td>HTTP</td><td>HTTP</td><td>WS / TCP</td></tr>
+          <tr><td><strong>서버 부하</strong></td><td>높음</td><td>중간</td><td>낮음</td><td>낮음</td></tr>
+          <tr><td><strong>구현 난이도</strong></td><td>쉬움</td><td>보통</td><td>쉬움</td><td>높음</td></tr>
+          <tr><td><strong>자동 재연결</strong></td><td>직접 구현</td><td>직접 구현</td><td>브라우저 내장</td><td>직접 구현</td></tr>
+          <tr><td><strong>적합한 케이스</strong></td><td>레거시 호환</td><td>제한적 실시간</td><td>알림, 피드, 시세</td><td>채팅, 게임</td></tr>
+          </tbody>
+          </table>
+
+          <p><mark>서버에서 클라이언트로 일방적으로 데이터를 보내는 케이스</mark>라면 SSE가 가장 적합하다. 알림 시스템이 정확히 이 케이스에 해당한다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">실무에서의 선택 기준</div>
+            <p>"양방향이 필요한가?"를 먼저 판단한다. 알림, 대시보드 갱신, 실시간 피드처럼 서버 → 클라이언트 단방향이면 SSE로 충분하다. WebSocket은 채팅, 실시간 협업 에디터, 멀티플레이 게임처럼 양쪽이 빈번하게 메시지를 주고받는 경우에 쓴다.</p>
+          </div>
+
+          <h2>SSE 프로토콜 구조</h2>
+
+          <p>SSE는 HTTP 응답의 Content-Type을 <code>text/event-stream</code>으로 설정한 뒤, 특정 형식에 맞춰 텍스트를 스트리밍하는 구조다. 별도의 프로토콜 업그레이드 없이 일반 HTTP 위 에서 동작한다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    participant C as 클라이언트
+    participant S as 서버
+
+    C->>S: GET /api/sse/connect (Accept: text/event-stream)
+    S-->>C: 200 OK (Content-Type: text/event-stream)
+
+    Note over C, S: 연결 유지 (Streaming)
+
+    S->>C: event: user-joined<br/>data: {"name": "Alice"}
+    Note right of S: (빈 줄로 메시지 구분)
+
+    S->>C: id: 1<br/>data: {"msg": "Hello!"}
+
+    S->>C: : heartbeat (주기적 연결 확인용 주석)
+</div>
+          <h3>메시지 형식</h3>
+
+          <p>서버가 보내는 각 메시지는 네 가지 필드로 구성된다. 각 필드는 한 줄에 하나씩, <code>필드명: 값</code> 형태로 작성한다. 메시지와 메시지 사이는 빈 줄(<code>\n\n</code>)로 구분한다.</p>
+
+<pre><code>event: notification
+id: 42
+data: {"title": "새 댓글", "message": "좋은 글이네요!"}
+retry: 3000
+</code></pre>
+
+<div class="mermaid">
+graph LR
+    subgraph "SSE 메시지 단위"
+    E[event: 이름] --- D[data: 실제 내용]
+    D --- I[id: 식별자]
+    I --- R[retry: 재연결 시간]
+    end
+    
+    R --- Next["\n\n (구분자)"]
+    
+    style E fill:#f9f,stroke:#333
+    style D fill:#bbf,stroke:#333
+    style I fill:#dfd,stroke:#333
+    style R fill:#ffd,stroke:#333
+</div>
+          <p>각 필드의 역할은 다음과 같다:</p>
+
+          <ul>
+            <li><strong>event</strong> : 이벤트 이름이다. 클라이언트에서 <code>addEventListener('notification', ...)</code>으로 수신한다. 생략하면 <code>message</code>라는 기본 이벤트로 전달된다.</li>
+            <li><strong>data</strong> : 실제 전송 데이터다. 여러 줄에 걸쳐 보내려면 <code>data:</code> 줄을 여러 번 쓴다.</li>
+            <li><strong>id</strong> : 이벤트 고유 식별자다. 재연결 시 <code>Last-Event-ID</code> 헤더로 서버에 전달된다.</li>
+            <li><strong>retry</strong> : 재연결 대기 시간이다. 밀리초 단위로, 브라우저가 이 값을 기억해두고 연결이 끊겼을 때 해당 시간만큼 기다렸다가 재연결한다.</li>
+          </ul>
+
+          <h3>자동 재연결과 Last-Event-ID</h3>
+
+          <p>SSE의 가장 큰 장점 중 하나는 <mark>브라우저가 재연결을 알아서 처리</mark>한다는 것이다.</p>
+
+          <p>연결이 끊기면 브라우저는 다음 단계를 자동으로 수행한다:</p>
+
+          <ol>
+            <li><code>retry</code>에 지정된 시간만큼 대기한다. 기본값은 보통 3초다.</li>
+            <li>마지막으로 받은 <code>id</code> 값을 <code>Last-Event-ID</code> 요청 헤더에 담아서 서버에 재연결 요청을 보낸다.</li>
+            <li>서버는 이 ID를 보고 "이 클라이언트가 어디까지 받았는지" 판단할 수 있다.</li>
+          </ol>
+
+          <p>이 메커니즘 덕분에 네트워크가 잠시 불안정해도 클라이언트 코드에서 재연결 로직을 별도로 구현할 필요가 없다. 단, <mark>서버 측에서 Last-Event-ID를 받아서 누락된 이벤 트를 재전송하는 로직</mark>은 직접 구현해야 한다. 이 부분은 <a href="spring-sse-4-reliability.html">개념 4편</a>에서 상세히 다룬다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    participant C as 클라이언트
+    participant S as 서버
+
+    Note over C, S: 연결 활성 상태 (id: 10까지 수신)
+    C-xS: 연결 끊김 (네트워크 불안정)
+    Note right of C: retry 시간만큼 대기 (기본 3초)
+
+    C->>S: 재연결 요청<br/>(Last-Event-ID: 10)
+    S-->>C: 연결 성공
+    S->>C: id: 11 (누락된 데이터 전송)
+</div>
+          <h2>브라우저의 EventSource API</h2>
+
+          <p>SSE를 클라이언트에서 사용하려면 <code>EventSource</code> 객체를 쓴다. 브라우저 네이티브 API라서 별도 라이브러리가 필요 없다.</p>
+
+          <h3>연결과 이벤트 리스닝</h3>
+
+<pre><code class="language-javascript">const eventSource = new EventSource('/api/sse/connect?userId=user1');</code></pre>
+          <p>URL에 연결하면 브라우저가 서버와 SSE 연결을 수립한다. 이후 서버가 보내는 이벤트를 <code>addEventListener</code>로 수신한다.</p>
+
+<pre><code class="language-javascript">// 커스텀 이벤트 리스닝 (서버에서 event: notification으로 보낸 메시지)
+eventSource.addEventListener('notification', (event) =&gt; {
+    const data = JSON.parse(event.data);
+    console.log('알림:', data);
+});
+
+// 기본 이벤트 (event 필드가 없는 메시지)
+eventSource.onmessage = (event) =&gt; {
+    console.log('메시지:', event.data);
+};
+
+// 에러 처리
+eventSource.onerror = (error) =&gt; {
+    console.error('SSE 에러:', error);
+};</code></pre>
+          <p>서버에서 <code>event: notification</code>으로 보내면 클라이언트에서 <code>addEventListener('notification', ...)</code>으로 받는다. <code>event</code> 필드 없이 보내면 <code>onmessage</code>로 받는다. 커스텀 이벤트 이름을 쓴다면 반드시 <code>addEventListener</code>를 써야 한다는 점을 기억하자.</p>
+
+          <h3>연결 상태 관리</h3>
+
+          <p><code>eventSource.readyState</code>로 현재 연결 상태를 확인할 수 있다.</p>
+
+          <ul>
+            <li><code>EventSource.CONNECTING</code> (0) : 연결 중이거나 재연결 시도 중</li>
+            <li><code>EventSource.OPEN</code> (1) : 연결 활성 상태</li>
+            <li><code>EventSource.CLOSED</code> (2) : 연결 종료</li>
+          </ul>
+
+<pre><code class="language-javascript">eventSource.close();</code></pre>
+          <p><code>close()</code>를 호출하면 연결이 끊기고, 브라우저의 자동 재연결도 중단된다.</p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">EventSource의 제약</div>
+            <p>EventSource는 GET 요청만 지원한다. 커스텀 헤더도 설정할 수 없다. 인증 토큰을 헤더로 보내야 하는 상황이면 쿼리 파라미터에 담거나, <code>event-source-polyfill</code>이나 <code>fetch</code> 기반의 SSE 클라이언트 라이브러리를 사용해야 한다.</p>
+          </div>
+
+          <h2>Spring Boot에서의 SseEmitter</h2>
+
+          <p>Spring Framework는 <code>SseEmitter</code>라는 클래스로 SSE를 지원한다. 컨트롤러에서 <code>SseEmitter</code> 객체를 반환하면 Spring이 응답의 Content-Type을 <code>text/event-stream</code>으로 설정하고, 연결을 열어둔 채 데이터를 스트리밍할 수 있게 해준다.</p>
+
+          <h3>SseEmitter 기본 구조</h3>
+
+<pre><code class="language-java">@GetMapping(value = "/connect", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+public SseEmitter connect() {
+    SseEmitter emitter = new SseEmitter(3600000L);
+
+    emitter.send(
+            SseEmitter.event()
+                    .name("connect")
+                    .data("연결 성공")
+    );
+
+    return emitter;
+}</code></pre>
+          <p><code>SseEmitter</code> 객체를 생성할 때 타임아웃을 밀리초 단위로 지정한다. 위 예시는 1시간이다. 이 시간이 지나면 서버가 자동으로 연결을 종료한다.</p>
+
+          <p><code>SseEmitter.event()</code>는 빌더 패턴으로 메시지를 구성한다:</p>
+
+          <ul>
+            <li><code>.name(String)</code> → SSE의 <code>event</code> 필드</li>
+            <li><code>.data(Object)</code> → SSE의 <code>data</code> 필드. 객체를 넘기면 JSON으로 직렬화된다.</li>
+            <li><code>.id(String)</code> → SSE의 <code>id</code> 필드</li>
+          </ul>
+
+          <p><code>produces = MediaType.TEXT_EVENT_STREAM_VALUE</code>는 응답의 Content-Type을 <code>text/event-stream</code>으로 명시한다.</p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">타임아웃을 반드시 설정한다</div>
+            <p>타임아웃을 지정하지 않으면 Spring의 기본값이 적용되는데, 서블릿 컨테이너에 따라 30초~60초 정도다. 실시간 알림에서 30초마다 연결이 끊기고 재연결되면 서버에 불필요한 부하가 생긴다.</p>
+          </div>
+
+          <h3>생명주기 콜백</h3>
+
+          <p><code>SseEmitter</code>는 연결의 생명주기를 관리하기 위한 세 가지 콜백을 제공한다.</p>
+
+<pre><code class="language-java">emitter.onCompletion(() -&gt; {
+    // 연결이 정상 종료되었을 때
+});
+
+emitter.onTimeout(() -&gt; {
+    // 타임아웃이 발생했을 때
+});
+
+emitter.onError((e) -&gt; {
+    // 전송 중 에러가 발생했을 때
+});</code></pre>
+          <p>연결이 끊어진 <code>SseEmitter</code>에 메시지를 보내면 <code>IOException</code>이 발생한다. 그래서 연결이 끊긴 emitter는 즉시 정리해야 한다. 이 콜백들이 바로 그 정리 시점을 알려주는 역할을 한다. <a href="spring-sse-2-connection.html">개념 2편</a>에서 이 콜백을 활용한 연결  관리 패턴을 다룬다.</p>
+
+<div class="mermaid">
+stateDiagram-v2
+    [*] --> Created: SseEmitter 생성
+    Created --> Open: client.connect()
+
+    state Open {
+        [*] --> Sending: emitter.send()
+        Sending --> Sending
+    }
+
+    Open --> Completed: emitter.complete()
+    Open --> Timeout: 타임아웃 발생
+    Open --> Error: 네트워크 에러 등
+
+    Completed --> [*]
+    Timeout --> [*]
+    Error --> [*]
+
+    note right of Completed: onCompletion 콜백 실행
+    note right of Timeout: onTimeout 콜백 실행
+    note right of Error: onError 콜백 실행
+</div>
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">SSE를 양방향 통신에 사용</div>
+            <p>SSE는 서버 → 클라이언트 단방향 전용이다. 클라이언트에서 서버로 데이터를 보내야 한다면 별도의 REST API 호출을 사용해야 한다. 양방향 통신이 필요하면 WebSocket을 고려한다.</p>
+            <p>[!DANGER] EventSource의 onmessage로 커스텀 이벤트를 받으려 함</p>
+            <p>서버에서 <code>event: notification</code>처럼 이벤트 이름을 지정하면 <code>onmessage</code>로는 받을 수 없다. 반드시 <code>addEventListener('notification', ...)</code>을 써야 한다. <code>onmessage</code>는 이벤트 이름이 없는 메시지만 받는다.</p>
+            <p>[!DANGER] CORS 설정 누락</p>
+            <p>프론트엔드와 백엔드가 다른 도메인에서 동작한다면 SSE 연결에도 CORS 설정이 필요하다. <code>EventSource</code>는 쿠키를 기본으로 보내지 않으므로, <code>withCredentials</code> 옵션이 필요한 경우 폴리필 라이브러리를 검토해야 한다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#스프링</span>
+          <span>#SSE</span>
+          <span>#실시간통신</span>
+          <span>#SseEmitter</span>
+          <span>#EventSource</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+          <a href="spring-sse-2-connection.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

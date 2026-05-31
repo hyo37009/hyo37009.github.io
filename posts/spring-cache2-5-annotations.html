@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[캐시 가이드] 5. 캐시 어노테이션 완전 정복 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[캐시 가이드] 5. 캐시 어노테이션 완전 정복</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">스프링 캐시 심화 (5/11)</div>
+            <p>이전 편: <a href="spring-cache2-4-abstraction.html">[캐시 가이드] 4. Spring Cache 추상화</a></p>
+            <p>다음 편: <a href="spring-cache2-6-key-strategy.html">[캐시 가이드] 6. 캐시 키 전략과 조건부 캐싱</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">캐시 가이드 시리즈</div>
+            <p><strong>01 캐시 기초</strong></p>
+            <p>- <a href="spring-cache2-1-concept.html">캐시의 개념과 동작 원리</a></p>
+            <p>- <a href="spring-cache2-2-layers.html">캐시 계층과 유형</a></p>
+            <p>- <a href="spring-cache2-3-patterns.html">캐시 전략과 패턴</a></p>
+            <p><strong>02 Spring Cache 핵심</strong></p>
+            <p>- <a href="spring-cache2-4-abstraction.html">Spring Cache 추상화</a></p>
+            <p>- <mark>캐시 어노테이션 완전 정복</mark> ← 현재 편</p>
+            <p>- <a href="spring-cache2-6-key-strategy.html">캐시 키 전략과 조건부 캐싱</a></p>
+            <p><strong>03 캐시 저장소</strong></p>
+            <p>- <a href="spring-cache2-7-caffeine.html">CacheManager와 Caffeine</a></p>
+            <p>- <a href="spring-cache2-8-redis.html">Redis 분산 캐시</a></p>
+            <p><strong>04 실전과 운영</strong></p>
+            <p>- <a href="spring-cache2-9-consistency.html">캐시 일관성과 갱신 전략</a></p>
+            <p>- <a href="spring-cache2-10-antipatterns.html">안티패턴과 트러블슈팅</a></p>
+            <p>- <a href="spring-cache2-11-interview.html">면접 대비</a></p>
+          </div>
+
+          <p><a href="spring-cache2-4-abstraction.html">이전 편</a>에서 Spring Cache의 추상화 구조와 동작 원리를 살펴봤다. 이제 실제로 캐시를 적용할 때 사용하는 어노테이션들을 하나씩 파고들어보자. <code>@Cacheable</code>, <code>@CachePut</code>, <code>@CacheEvict</code>를 정확히 이해하면 대부분의 캐시 시나리오를 커버할 수 있다.</p>
+
+          <h2>@Cacheable — 캐시 조회와 저장</h2>
+
+          <p>가장 많이 쓰는 어노테이션이다. 메서드 실행 전에 캐시를 먼저 확인하고, <mark>Cache Hit이면 메서드를 실행하지 않고 캐시 값을 반환</mark>한다. Cache Miss면 메서드를 실행하고 결과를 캐시에 저장한다.</p>
+
+<pre><code class="language-java">@Cacheable("weather")
+public WeatherResponse getWeather(String city) {
+    log.info("외부 API 호출: {}", city);
+    return weatherApi.fetch(city);
+}</code></pre>
+          <p><code>getWeather("서울")</code>을 처음 호출하면 로그가 출력되고 API를 호출한다. 두 번째부터는 로그도 안 찍힌다. 메서드 자체가 실행되지 않기 때문이다.</p>
+
+<div class="mermaid">
+flowchart TD
+    A["메서드 호출"] --> B{"캐시에 키 존재?"}
+    B -->|Hit| C["캐시 값 반환"]
+    B -->|Miss| D["메서드 실행"]
+    D --> E["결과를 캐시에 저장"]
+    E --> F["결과 반환"]
+    C --> G["메서드 실행 안 함"]
+</div>
+          <h4>value와 cacheNames</h4>
+
+          <p>캐시 영역의 이름을 지정한다. <code>value</code>와 <code>cacheNames</code>는 동일한 속성이다.</p>
+
+<pre><code class="language-java">@Cacheable(value = "weather")       // 이 둘은 같다
+@Cacheable(cacheNames = "weather")</code></pre>
+          <p>여러 캐시 영역에 동시에 저장할 수도 있다.</p>
+
+<pre><code class="language-java">@Cacheable(value = {"weather", "weatherBackup"})</code></pre>
+          <p>이 경우 두 캐시 영역 중 <mark>하나라도 Hit이면</mark> 캐시 값을 반환한다. 실무에서는 거의 쓰지 않지만, L1/L2 캐시 구조에서 활용되기도 한다.</p>
+
+          <h4>key</h4>
+
+          <p>캐시에서 값을 구분하는 키를 지정한다. 기본적으로 메서드 파라미터가 키로 사용된다.</p>
+
+<pre><code class="language-java">// 파라미터가 하나면 그 값 자체가 키다
+@Cacheable("weather")
+public WeatherResponse getWeather(String city) { ... }
+// 키: "서울", "부산" 등
+
+// 파라미터가 여러 개면 모든 파라미터의 조합이 키다
+@Cacheable("weather")
+public WeatherResponse getWeather(String city, String date) { ... }
+// 키: SimpleKey("서울", "2024-01-01")</code></pre>
+          <p>SpEL을 사용해서 키를 직접 지정할 수도 있다. 키 전략의 세부 내용은 <a href="spring-cache2-6-key-strategy.html">다음 편</a>에서 다룬다.</p>
+
+<pre><code class="language-java">@Cacheable(value = "weather", key = "#city")
+public WeatherResponse getWeather(String city, boolean forceRefresh) { ... }</code></pre>
+          <p><code>forceRefresh</code> 파라미터는 키에서 제외하고, <code>city</code>만 키로 사용하겠다는 뜻이다.</p>
+
+          <h4>sync</h4>
+
+          <p>동시에 같은 키로 여러 요청이 들어올 때의 동작을 제어한다.</p>
+
+<pre><code class="language-java">@Cacheable(value = "weather", sync = true)
+public WeatherResponse getWeather(String city) { ... }</code></pre>
+          <p><code>sync = true</code>로 설정하면 <mark>같은 키에 대한 동시 요청 중 하나만 실제 메서드를 실행</mark>하고, 나머지는 그 결과를 기다린다. Cache Stampede 문제를 방지하는 데 유용하다.</p>
+
+          <p>기본값은 <code>false</code>다. 이 경우 같은 키로 동시에 10개의 요청이 오면 10개 모두 메서드를 실행한다. 외부 API 호출처럼 비용이 큰 작업이라면 비효율적이다.</p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">sync = true의 제약</div>
+            <p>모든 CacheManager 구현체가 <code>sync</code>를 지원하는 것은 아니다. <code>ConcurrentMapCacheManager</code>와 <code>CaffeineCacheManager</code>는 지원하지만, 일부 Redis 구현체에서는 지원하지 않을 수 있다. 사용하기 전에 구현체의 지원 여부를 확인하라.</p>
+          </div>
+
+          <h2>@CachePut — 캐시 갱신</h2>
+
+          <p><code>@Cacheable</code>과 비슷해 보이지만 결정적인 차이가 있다. <mark>항상 메서드를 실행하고, 그 결과를 캐시에 저장</mark>한다. 캐시를 조회하지 않는다.</p>
+
+<pre><code class="language-java">@CachePut(value = "weather", key = "#city")
+public WeatherResponse refreshWeather(String city) {
+    return weatherApi.fetch(city);
+}</code></pre>
+          <p>이 메서드를 호출하면 캐시에 데이터가 있든 없든 항상 <code>weatherApi.fetch</code>가 실행된다. 그리고 그 결과로 캐시를 갱신한다.</p>
+
+<div class="mermaid">
+flowchart TD
+    A["메서드 호출"] --> B["항상 메서드 실행"]
+    B --> C["결과를 캐시에 저장"]
+    C --> D["결과 반환"]
+</div>
+          <h4>@Cacheable과의 차이</h4>
+
+          <table>
+          <thead>
+          <tr><th>속성</th><th>@Cacheable</th><th>@CachePut</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>캐시 조회</td><td>한다 (Hit이면 메서드 스킵)</td><td>하지 않는다</td></tr>
+          <tr><td>메서드 실행</td><td>Cache Miss일 때만</td><td>항상</td></tr>
+          <tr><td>결과 캐시 저장</td><td>Cache Miss일 때만</td><td>항상</td></tr>
+          <tr><td>용도</td><td>읽기</td><td>갱신</td></tr>
+          </tbody>
+          </table>
+
+          <h4>사용 시나리오</h4>
+
+          <p>데이터를 수정한 후 캐시를 최신 상태로 유지하고 싶을 때 쓴다.</p>
+
+<pre><code class="language-java">@CachePut(value = "feed", key = "#feedId")
+public FeedResponse updateFeed(Long feedId, FeedUpdateRequest request) {
+    Feed feed = feedRepository.findById(feedId)
+        .orElseThrow(() -&gt; new EntityNotFoundException("Feed not found"));
+    feed.updateContent(request.getContent());
+    return FeedResponse.from(feed);
+}</code></pre>
+          <p>수정된 피드 정보가 캐시에 바로 반영되므로, 다음에 이 피드를 조회할 때 DB를 거치지 않고 최신 데이터를 반환한다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">@CachePut vs @CacheEvict — 갱신 전략 선택</div>
+            <p>- <strong>@CachePut</strong> : 수정 후 <mark>캐시를 즉시 최신 데이터로 교체</mark>한다. 수정 직후에 읽기 요청이 많을 때 유리하다.</p>
+            <p>- <strong>@CacheEvict</strong> : 수정 후 캐시를 <mark>삭제만</mark> 한다. 다음 읽기 요청 시 DB에서 새로 가져온다. 수정 후 즉시 읽기 요청이 적을 때 더 간단하다.</p>
+            <p>어떤 것이 나은지는 상황에 따라 다르지만, 단순함을 위해 <code>@CacheEvict</code>를 먼저 고려하는 것이 일반적이다.</p>
+          </div>
+
+          <h2>@CacheEvict — 캐시 제거</h2>
+
+          <p>캐시에서 항목을 제거한다. 데이터가 변경되었을 때 <mark>오래된 캐시를 무효화</mark>하는 용도로 사용한다.</p>
+
+<pre><code class="language-java">@CacheEvict(value = "weather", key = "#city")
+public void deleteWeatherCache(String city) {
+    // 이 메서드가 실행되면 "weather" 캐시에서 해당 city의 항목이 제거된다
+}</code></pre>
+
+<div class="mermaid">
+flowchart TD
+    A["메서드 호출"] --> B["메서드 실행"]
+    B --> C{"beforeInvocation?"}
+    C -->|"false (기본값)"| D["실행 성공 후 캐시 제거"]
+    C -->|true| E["실행 전 캐시 제거"]
+    D --> F["결과 반환"]
+    E --> G["메서드 실행"]
+    G --> F
+</div>
+          <h4>allEntries</h4>
+
+          <p>해당 캐시 영역의 <mark>모든 항목을 한 번에 제거</mark>한다.</p>
+
+<pre><code class="language-java">@CacheEvict(value = "weather", allEntries = true)
+public void clearAllWeatherCache() {
+    // "weather" 캐시의 모든 항목이 제거된다
+}</code></pre>
+          <p>특정 키만 지우는 것이 아니라 전체를 날리므로 강력하지만 위험하다. 캐시가 전부 비워진 직후 대량의 요청이 들어오면, 모든 요청이 동시에 DB를 때리는 <mark>Cache Stampede</mark>가 발생할 수 있다.</p>
+
+          <div class="callout callout-info">
+            <div class="callout-title">allEntries = true의 남용</div>
+            <p>"그냥 다 지우면 깔끔하니까"라는 생각으로 <code>allEntries = true</code>를 남용하면, 캐시 적중률이 급락하고 DB 부하가 순간적으로 치솟을 수 있다. 가능하면 <mark>변경된 항목의 키만 정확하게 지정</mark>해서 제거하는 것이 안전하다.</p>
+          </div>
+
+          <h4>beforeInvocation</h4>
+
+          <p>메서드 실행 전에 캐시를 제거할지, 실행 후에 제거할지를 결정한다.</p>
+
+<pre><code class="language-java">// 기본값: false (메서드 실행 후 제거)
+@CacheEvict(value = "feed", key = "#feedId")
+public void deleteFeed(Long feedId) {
+    feedRepository.deleteById(feedId);
+}
+
+// 메서드 실행 전 제거
+@CacheEvict(value = "feed", key = "#feedId", beforeInvocation = true)
+public void deleteFeed(Long feedId) {
+    feedRepository.deleteById(feedId);
+}</code></pre>
+          <p>기본값인 <code>false</code>에서는 메서드가 예외를 던지면 캐시가 제거되지 않는다. <code>true</code>로 설정하면 메서드 성공 여부와 관계없이 캐시를 먼저 제거한다.</p>
+
+          <p>언제 <code>beforeInvocation = true</code>를 쓸까? <mark>메서드 실패와 관계없이 캐시를 반드시 무효화해야 할 때</mark>다. 하지만 대부분의 경우 기본값인 <code>false</code>가 적절하다. 메서드가 실패했는데 캐시만 지워지면, 다음 요청에서 DB로 불필요한 조회가 발생하기 때문이다.</p>
+
+          <h2>@Caching — 복합 캐시 연산</h2>
+
+          <p>하나의 메서드에 여러 캐시 연산을 조합해야 할 때 사용한다.</p>
+
+<pre><code class="language-java">@Caching(
+    evict = {
+        @CacheEvict(value = "feed", key = "#feedId"),
+        @CacheEvict(value = "feedList", allEntries = true)
+    }
+)
+public void deleteFeed(Long feedId) {
+    feedRepository.deleteById(feedId);
+}</code></pre>
+          <p>피드를 삭제하면 개별 피드 캐시와 피드 목록 캐시를 동시에 무효화해야 한다. <code>@Caching</code>으로 이 두 연산을 하나의 메서드에 묶을 수 있다.</p>
+
+          <p><code>@Caching</code>은 <code>cacheable</code>, <code>put</code>, <code>evict</code> 세 가지를 조합할 수 있다.</p>
+
+<pre><code class="language-java">@Caching(
+    cacheable = { @Cacheable("feed") },
+    evict = { @CacheEvict(value = "feedList", allEntries = true) }
+)</code></pre>
+          <div class="callout callout-warning">
+            <div class="callout-title">@Caching의 실행 순서</div>
+            <p><code>@Caching</code> 내부의 연산은 선언 순서대로 실행되지 않을 수 있다. Spring은 <mark>put → evict 순서</mark>로 처리한다. <code>cacheable</code>과 <code>put</code>을 동시에 사용하면 예상치 못한 동작이 발생할 수 있으므로, 하나의 <code>@Caching</code> 안에서 <code>cacheable</code>과 <code>put</code>을 함께 쓰는 것은 피하라.</p>
+          </div>
+
+          <h2>@CacheConfig — 클래스 레벨 공통 설정</h2>
+
+          <p>같은 클래스의 여러 메서드가 동일한 캐시 설정을 공유할 때 반복을 줄여준다.</p>
+
+<pre><code class="language-java">@Service
+@CacheConfig(cacheNames = "feed")
+public class FeedService {
+
+    @Cacheable
+    public FeedResponse getFeed(Long feedId) { ... }
+
+    @CachePut(key = "#feedId")
+    public FeedResponse updateFeed(Long feedId, FeedUpdateRequest request) { ... }
+
+    @CacheEvict
+    public void deleteFeed(Long feedId) { ... }
+}</code></pre>
+          <p><code>@CacheConfig(cacheNames = "feed")</code>를 클래스 레벨에 붙이면, 하위 메서드들의 <code>@Cacheable</code>, <code>@CachePut</code>, <code>@CacheEvict</code>에서 <code>cacheNames</code>를 생략할 수 있다. 메서드 레벨에서 다시 지정하면 메서드 레벨 설정이 우선한다.</p>
+
+          <p><code>@CacheConfig</code>에서 지정할 수 있는 속성은 다음과 같다.</p>
+
+          <ul>
+            <li><strong>cacheNames</strong> : 캐시 영역 이름</li>
+            <li><strong>keyGenerator</strong> : 키 생성기</li>
+            <li><strong>cacheManager</strong> : 사용할 CacheManager</li>
+            <li><strong>cacheResolver</strong> : 사용할 CacheResolver</li>
+          </ul>
+
+          <h2>어노테이션 선택 가이드</h2>
+
+          <p>어떤 상황에서 어떤 어노테이션을 써야 하는지 정리하면 다음과 같다.</p>
+
+<div class="mermaid">
+flowchart TD
+    A{"어떤 작업?"} -->|읽기| B["@Cacheable"]
+    A -->|수정| C{"수정 후 즉시 캐시 필요?"}
+    C -->|예| D["@CachePut"]
+    C -->|아니오| E["@CacheEvict"]
+    A -->|삭제| F["@CacheEvict"]
+    A -->|여러 캐시 동시 조작| G["@Caching"]
+</div>
+          <ul>
+            <li><strong>데이터를 읽는다</strong> → <code>@Cacheable</code>
+          <ul>
+            <li>"같은 파라미터로 반복 호출되는 조회 메서드"에 붙인다</li>
+          </ul>
+          </li>
+            <li><strong>데이터를 수정한다</strong> → <code>@CachePut</code> 또는 <code>@CacheEvict</code>
+          <ul>
+            <li>수정 후 바로 캐시를 최신으로 유지 → <code>@CachePut</code></li>
+            <li>수정 후 캐시를 지우고 다음 조회 시 갱신 → <code>@CacheEvict</code></li>
+          </ul>
+          </li>
+            <li><strong>데이터를 삭제한다</strong> → <code>@CacheEvict</code>
+          <ul>
+            <li>원본이 사라졌으니 캐시도 삭제해야 한다</li>
+          </ul>
+          </li>
+            <li><strong>여러 캐시 영역에 영향을 준다</strong> → <code>@Caching</code>
+          <ul>
+            <li>단일 메서드에서 여러 캐시를 동시에 조작할 때</li>
+          </ul>
+          </li>
+          </ul>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">@Cacheable과 @CachePut을 같은 메서드에 붙이기</div>
+            <p><code>@Cacheable</code>은 "캐시가 있으면 메서드를 실행하지 않는다"이고, <code>@CachePut</code>은 "항상 실행한다"다. 이 둘은 <mark>서로 모순</mark>된다. 같이 붙이면 실행 순서에 따라 예측 불가능한 동작이 발생한다.</p>
+            <p>메서드를 분리하라. 조회 메서드에는 <code>@Cacheable</code>, 갱신 메서드에는 <code>@CachePut</code>을 붙이는 것이 올바른 설계다.</p>
+            <p>[!DANGER] 반환값이 void인 메서드에 @Cacheable 붙이기</p>
+            <p><code>@Cacheable</code>은 반환값을 캐시에 저장한다. 반환값이 없으면 <code>null</code>이 캐시에 저장되어 <mark>이후 호출에서 항상 null이 반환</mark>된다. <code>void</code> 메서드에는 <code>@CacheEvict</code>만 사용할 수 있다.</p>
+            <p>[!DANGER] null 반환값을 고려하지 않기</p>
+            <p><code>@Cacheable</code>은 기본적으로 <code>null</code>도 캐시에 저장한다. DB에서 조회 결과가 없어서 <code>null</code>을 반환하면, 이후 같은 키로 조회할 때 계속 <code>null</code>이 반환된다. 나중에 실제 데이터가 추가되어도 캐시에는 여전히 <code>null</code>이 남아 있다.</p>
+            <p>이 문제는 <code>unless</code> 속성으로 방지할 수 있다. 자세한 내용은 <a href="spring-cache2-6-key-strategy.html">다음 편</a>에서 다룬다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#캐시가이드</span>
+          <span>#Cacheable</span>
+          <span>#CachePut</span>
+          <span>#CacheEvict</span>
+          <span>#Caching</span>
+          <span>#CacheConfig</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="spring-cache2-4-abstraction.html">&larr; 이전 글</a>
+          <a href="spring-cache2-6-key-strategy.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Java] Java 시간 API 핵심 정리 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Java] Java 시간 API 핵심 정리</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+
+          <p>Java 8부터 도입된 <code>java.time</code> 패키지는 날짜·시간을 다루는 표준 API다. 테스트에서 "3일 전", "5초 이내" 같은 시간 계산이 필요할 때 자주 쓰이는데, 매번 메서드 이름이나 단위 지정 방식이 헷갈린다. 이 문서는 <mark>실제로 자주 쓰는 패턴만</mark> 정리한다.</p>
+
+          <h2>Instant — 특정 시점</h2>
+
+          <p><code>Instant</code>는 UTC 기준의 <mark>특정 시점</mark>을 나타낸다. 타임스탬프라고 생각하면 된다. DB의 <code>TIMESTAMP</code> 컬럼과 가장 잘 매핑되는 타입이다.</p>
+
+<div class="mermaid">
+graph LR
+    A[Global Timeline] --- B(UTC 0)
+    B --- C[Instant: 2024-03-17T10:00:00Z]
+    C --> D{Timezone Offset}
+    D -- +9h --> E[KST: 19:00:00]
+    D -- -5h --> F[EST: 05:00:00]
+    
+    style C fill:#f96,stroke:#333,stroke-width:2px
+    style B fill:#fff,stroke-dasharray: 5 5
+</div>
+
+<pre><code class="language-java">Instant now = Instant.now();           // 현재 시점
+Instant epoch = Instant.EPOCH;         // 1970-01-01T00:00:00Z</code></pre>
+          <p>JPA 엔티티에서 <code>@CreatedDate</code>, <code>@LastModifiedDate</code>에 <code>Instant</code> 타입을 쓰는 이유가 여기에 있다. 시간대 변환 없이 절대 시점을 저장할 수 있기 때문이다.</p>
+
+          <h2>ChronoUnit — 시간 단위</h2>
+
+          <p><code>ChronoUnit</code>은 시간의 단위를 정의하는 enum이다. <code>Instant</code>의 시간 연산에서 "얼마만큼"을 지정할 때 쓴다.</p>
+
+<div class="mermaid">
+mindmap
+  root((ChronoUnit))
+    Time Units
+      SECONDS[초<br>SECONDS]
+      MINUTES[분<br>MINUTES]
+      HOURS[시<br>HOURS]
+    Date Units
+      DAYS[일<br>DAYS]
+      WEEKS[주<br>WEEKS]
+    Unsupported in Instant
+      MONTHS[월<br>MONTHS]
+      YEARS[년<br>YEARS]
+</div>
+          <p>자주 쓰는 단위만 보면 이렇다.</p>
+
+          <ul>
+            <li><code>ChronoUnit.SECONDS</code> — 초</li>
+            <li><code>ChronoUnit.MINUTES</code> — 분</li>
+            <li><code>ChronoUnit.HOURS</code> — 시간</li>
+            <li><code>ChronoUnit.DAYS</code> — 일</li>
+          </ul>
+
+          <p>import는 <code>java.time.temporal.ChronoUnit</code>이다. <code>java.time</code>까지만 치면 안 나와서 헷갈리기 쉽다.</p>
+
+          <h2>시간 연산</h2>
+
+          <h3>과거/미래 시점 만들기</h3>
+
+          <p><code>plus()</code>와 <code>minus()</code>로 특정 시점에서 앞뒤로 이동한다.</p>
+
+<div class="mermaid">
+gitGraph
+    commit id: "3일 전 (minus)"
+    commit id: "2시간 전"
+    commit id: "현재 (now)" tag: "기준점"
+    commit id: "5분 후 (plus)"
+</div>
+
+<pre><code class="language-java">Instant now = Instant.now();
+
+Instant threeDaysAgo = now.minus(3, ChronoUnit.DAYS);      // 3일 전
+Instant fiveMinutesLater = now.plus(5, ChronoUnit.MINUTES); // 5분 후
+Instant twoHoursAgo = now.minus(2, ChronoUnit.HOURS);       // 2시간 전</code></pre>
+          <p><code>Duration</code>을 쓸 수도 있지만 <code>ChronoUnit</code>이 더 직관적이다.</p>
+
+<pre><code class="language-java">// Duration 방식 — 같은 결과
+Instant threeDaysAgo = now.minus(Duration.ofDays(3));</code></pre>
+          <h3>시간 비교</h3>
+
+          <p><code>isBefore()</code>, <code>isAfter()</code>로 두 시점의 선후 관계를 확인한다.</p>
+
+<pre><code class="language-java">Instant created = Instant.now().minus(3, ChronoUnit.DAYS);
+Instant updated = Instant.now();
+
+updated.isAfter(created)    // true — updated가 더 최근
+created.isBefore(updated)   // true — created가 더 이전</code></pre>
+          <h3>두 시점 사이의 차이 계산</h3>
+
+          <p><code>ChronoUnit.between()</code>으로 두 시점 사이의 차이를 특정 단위로 구한다.</p>
+
+<pre><code class="language-java">long daysBetween = ChronoUnit.DAYS.between(created, updated);    // 3
+long hoursBetween = ChronoUnit.HOURS.between(created, updated);  // 72</code></pre>
+          <h2>테스트에서 자주 쓰는 패턴</h2>
+
+          <h3>과거 시점 고정</h3>
+
+          <p>엔티티의 <code>createdAt</code>을 과거로 고정해서, 수정 후 <code>updatedAt</code>이 변경됐는지 비교할 때 쓴다. 테스트에서 Instancio와 함께 사용하는 패턴이다.</p>
+
+<pre><code class="language-java">Feed feed = Instancio.of(Feed.class)
+        .set(all(Instant.class), Instant.now().minus(3, ChronoUnit.DAYS))
+        .create();</code></pre>
+          <p><code>all(Instant.class)</code>로 모든 <code>Instant</code> 필드(<code>createdAt</code>, <code>updatedAt</code>)를 한꺼번에 3일 전으로 세팅한다. <a href="셀렉터와-커스터마이징.html">Instancio 셀렉터</a>의 타입 셀렉터를 활용한 것이다.</p>
+
+          <h3>최근 시점 검증</h3>
+
+          <p>"이 작업이 5초 이내에 실행됐는지" 같은 검증에 쓴다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    participant T as Timeline
+    participant C as Comparison
+    
+    Note over T: [now - 5s] <br> (검증 시작점)
+    Note right of T: [Actual Event] <br> (실제 발생 시점)
+    Note over T: [now] <br> (현재 시각)
+    
+    C->>T: isAfter(now - 5s)?
+    alt Success
+        T-->>C: true (최근 5초 이내)
+    else Failure
+        T-->>C: false (5초보다 더 이전)
+    end
+</div>
+
+<pre><code class="language-java">assertThat(result.updatedAt()).isAfter(Instant.now().minus(5, ChronoUnit.SECONDS));</code></pre>
+          <div class="callout callout-warning">
+            <div class="callout-title">단위 테스트에서 JPA Auditing은 동작하지 않는다</div>
+            <p><code>@CreatedDate</code>, <code>@LastModifiedDate</code>는 Spring 컨텍스트의 <code>AuditingEntityListener</code>가 처리한다. <code>@ExtendWith(MockitoExtension.class)</code>만 쓰는 단위 테스트에서는 Spring이 없으므로 시간 필드가 자동 갱신되지 않는다. 시간 관련 검증은 <code>@DataJpaTest</code> 같은 통합 테스트에서 하는 게 맞다.</p>
+          </div>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">ChronoUnit의 import 경로를 잊는다</div>
+            <p><code>ChronoUnit</code>은 <code>java.time.temporal.ChronoUnit</code>이다. <code>java.time.ChronoUnit</code>이 아니다. IDE 자동완성에 의존하면 되지만, 수동으로 import할 때 <code>temporal</code> 패키지를 빠뜨리기 쉽다.</p>
+            <p>[!DANGER] Instant에 MONTHS나 YEARS 단위를 쓴다</p>
+            <p><code>Instant.now().minus(1, ChronoUnit.MONTHS)</code>는 <mark>UnsupportedTemporalTypeException</mark>이 터진다. <code>Instant</code>는 절대 시점이라 "1개월"이 며칠인지 알 수 없기 때문이다. 월/년 단위 연산은 <code>LocalDateTime</code>이나 <code>ZonedDateTime</code>을 쓰자.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Java</span>
+          <span>#시간API</span>
+          <span>#Instant</span>
+          <span>#ChronoUnit</span>
+          <span>#테스트</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Kotlin] 1. 변수, 타입, 함수 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Kotlin] 1. 변수, 타입, 함수</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Kotlin 문법 복습 (1/4)</div>
+            <p>다음 편: <a href="kotlin-syntax-2-classes.html">[Kotlin] 2. 클래스와 객체</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">Kotlin 문법 복습 시리즈 (1/4)</div>
+            <p>Java 개발자가 Kotlin을 다시 잡을 때 빠르게 복습하는 시리즈다.</p>
+            <p>다음 편: <a href="kotlin-syntax-2-classes.html">2 클래스와 객체</a></p>
+          </div>
+
+          <p>Java를 쓰다가 Kotlin을 잡으면, 가장 먼저 손에 안 익는 게 <strong>변수 선언</strong>이다. 타입이 앞에 오는 게 아니라 뒤에 오고, <code>final</code>을 붙이는 게 아니라 <code>val</code>을 쓰고, 세미콜론도 없다. 사소한 차이지만 매일 치는 코드의 기본기가 다르면 모든 줄이 어색해진다.</p>
+
+          <p>이 문서에서는 Kotlin의 가장 기초적인 요소인 변수, 타입, 함수, 제어문을 다시 훑는다. 단순히 문법만 나열하는 게 아니라, Java와 비교했을 때 <strong>왜 이렇게 설계됐는지</strong>를 함께 짚는다.</p>
+
+          <h2>변수 선언</h2>
+
+          <p>Kotlin에는 변수를 선언하는 키워드가 두 개뿐이다. <code>val</code>과 <code>var</code>.</p>
+
+<pre><code class="language-kotlin">val name: String = "블로그"
+var count: Int = 0</code></pre>
+          <ul>
+            <li><code>val</code> — 한 번 할당하면 바꿀 수 없다. Java의 <code>final</code>과 같다.</li>
+            <li><code>var</code> — 재할당 가능한 변수다.</li>
+          </ul>
+
+          <p>Java에서 <code>final</code>을 잘 안 붙이는 습관이 있었다면, Kotlin에서는 사고방식을 뒤집어야 한다. <mark>Kotlin에서는 <code>val</code>이 기본이고, <code>var</code>는 예외</mark>다. 변수를 선언할 때 "이걸 나중에 바꿀 일이 있나?" 한 번 더 생각하게 되는데, 이건 언어가 의도한 것이다. 불변을 기본으로 삼으면 코드의 예측 가능성이 높아진다.</p>
+
+          <h3>타입 추론</h3>
+
+          <p>Java에서 <code>var</code>가 Java 10에 추가된 것처럼, Kotlin은 처음부터 타입 추론을 지원한다. 대입하는 값을 보고 컴파일러가 타입을 알아서 결정한다.</p>
+
+<pre><code class="language-kotlin">val name = "블로그"      // String으로 추론
+var count = 0            // Int로 추론
+val pi = 3.14            // Double로 추론
+val isActive = true      // Boolean으로 추론</code></pre>
+          <p>그렇다고 모든 곳에서 타입을 생략하는 게 좋은 건 아니다. 오른쪽만 봤을 때 타입이 바로 보이면 생략하고, 아니면 명시하는 게 낫다.</p>
+
+<pre><code class="language-kotlin">// 명시하는 게 나은 경우 — 함수 반환값이 뭔지 바로 안 보일 때
+val result: PostResponse = postService.getPost(1L)
+
+// 생략해도 되는 경우 — 리터럴이나 생성자 호출
+val maxRetry = 3
+val blogName = "내 블로그"
+val post = Post(title = "제목", content = "내용")</code></pre>
+          <div class="callout callout-tip">
+            <div class="callout-title">팀 프로젝트라면</div>
+            <p>타입 명시 기준은 팀 컨벤션으로 정하면 된다. 개인 프로젝트라면 본인이 나중에 읽었을 때 헷갈리지 않는 선에서 결정하자.</p>
+          </div>
+
+          <hr>
+
+          <h2>기본 타입</h2>
+
+          <p>Java는 <code>int</code>(primitive)와 <code>Integer</code>(wrapper)를 구분한다. <code>int</code>는 null이 안 되고 빠르지만, 제네릭에서는 <code>Integer</code>를 써야 하고 — 이런 이원 구조가 늘 귀찮았다.</p>
+
+          <p>Kotlin은 이 구분이 없다. 코드에서는 <code>Int</code> 하나만 쓴다.</p>
+
+<pre><code class="language-kotlin">val age: Int = 25
+val price: Long = 10000L
+val rate: Double = 3.14
+val initial: Char = 'K'
+val flag: Boolean = true</code></pre>
+          <p>그러면 성능은 어떻게 되냐? <mark>컴파일러가 상황에 따라 알아서 최적화</mark>한다. nullable이면 wrapper, 아니면 primitive로 컴파일된다.</p>
+
+<pre><code class="language-kotlin">val a: Int = 42       // → JVM에서 int (primitive)
+val b: Int? = 42      // → JVM에서 Integer (wrapper, null을 담아야 하니까)</code></pre>
+          <p>개발자가 primitive/wrapper를 신경 쓸 필요 없이 <code>Int</code> 하나로 통일하되, JVM에서는 가능한 한 primitive를 쓰도록 컴파일러가 처리해주는 것이다.</p>
+
+          <hr>
+
+          <h2>문자열</h2>
+
+          <h3>문자열 템플릿</h3>
+
+          <p>Java에서 문자열을 조합할 때 <code>+</code>로 이어 붙이거나 <code>String.format()</code>을 쓰는 건 늘 번거로웠다. Kotlin은 <code>$</code> 기호로 변수를 직접 문자열 안에 넣을 수 있다.</p>
+
+<pre><code class="language-kotlin">val name = "관리자"
+val age = 28
+val msg = "안녕, $name! 나이: $age"</code></pre>
+          <ul>
+            <li><code>$변수명</code>으로 단순 변수를 삽입한다.</li>
+          </ul>
+
+          <p>표현식이 들어가면 <code>{}</code>로 감싼다.</p>
+
+<pre><code class="language-kotlin">val msg = "글 수: ${posts.size}"
+val info = "결과: ${if (success) "성공" else "실패"}"</code></pre>
+          <ul>
+            <li><code>${표현식}</code> 안에는 함수 호출, 조건문 등 어떤 표현식이든 넣을 수 있다.</li>
+          </ul>
+
+          <p>Java의 <code>"안녕, " + name + "! 나이: " + age</code>와 비교하면, 가독성 차이가 확연하다. 특히 변수가 3개 이상 들어가는 문자열에서 체감이 크다.</p>
+
+          <h3>여러 줄 문자열</h3>
+
+          <p>HTML, JSON, SQL 같은 긴 문자열을 다룰 때 Java에서는 이스케이프 문자와 <code>+</code> 연결이 지저분했다. Kotlin은 <code>"""</code> 세 개로 감싸면 된다.</p>
+
+<pre><code class="language-kotlin">val html = """
+    &lt;div&gt;
+        &lt;h1&gt;$title&lt;/h1&gt;
+        &lt;p&gt;$content&lt;/p&gt;
+    &lt;/div&gt;
+""".trimIndent()</code></pre>
+          <ul>
+            <li><code>"""..."""</code> 안에서는 이스케이프 문자(<code>\n</code>, <code>\"</code>)가 필요 없다.</li>
+            <li><code>trimIndent()</code>를 붙이면 코드의 들여쓰기를 기준으로 공백을 자동 정리해준다.</li>
+          </ul>
+
+          <hr>
+
+          <h2>함수</h2>
+
+          <h3>기본 선언</h3>
+
+<pre><code class="language-kotlin">fun greet(name: String): String {
+    return "안녕, $name"
+}</code></pre>
+          <ul>
+            <li><code>fun</code> 키워드로 시작한다.</li>
+            <li>파라미터는 <code>이름: 타입</code> 순서다. Java와 반대.</li>
+            <li>반환 타입은 <code>:</code> 뒤에 쓴다.</li>
+          </ul>
+
+          <p>함수 본문이 한 줄이면 중괄호와 <code>return</code>을 생략하고 <code>=</code>으로 쓸 수 있다. 이것을 <strong>단일 표현식 함수</strong>라고 한다.</p>
+
+<pre><code class="language-kotlin">fun greet(name: String) = "안녕, $name"</code></pre>
+          <ul>
+            <li>반환 타입도 추론된다. 짧은 유틸 함수에서 자주 쓴다.</li>
+          </ul>
+
+          <p>반환값이 없는 함수는 <code>Unit</code>을 반환한다. Java의 <code>void</code>에 해당하는데, 생략할 수 있다.</p>
+
+<pre><code class="language-kotlin">fun printHello() {
+    println("hello")
+}
+// 위와 아래는 동일하다
+fun printHello(): Unit {
+    println("hello")
+}</code></pre>
+          <h3>기본값 파라미터</h3>
+
+          <p>Java에서 메서드 오버로딩이 왜 많아지는지 생각해보면, 대부분 <strong>"이 파라미터를 안 넘기면 기본값을 쓰고 싶어서"</strong>다. Kotlin은 기본값 파라미터로 이 문제를 해결한다.</p>
+
+<pre><code class="language-kotlin">// Java — 오버로딩 2개
+public String greet(String name) { return greet(name, "님"); }
+public String greet(String name, String suffix) {
+    return "안녕, " + name + suffix;
+}
+
+// Kotlin — 기본값 하나로 끝
+fun greet(name: String, suffix: String = "님") = "안녕, $name$suffix"</code></pre>
+          <ul>
+            <li><code>suffix</code>에 기본값 <code>"님"</code>을 지정했다.</li>
+            <li>호출 시 <code>suffix</code>를 넘기지 않으면 기본값이 사용된다.</li>
+          </ul>
+
+<pre><code class="language-kotlin">greet("관리자")              // "안녕, 관리자님"
+greet("관리자", "씨")        // "안녕, 관리자씨"</code></pre>
+          <p>오버로딩 2~3개를 만들어야 했던 상황이 파라미터 기본값 하나로 사라진다.</p>
+
+          <h3>Named Argument</h3>
+
+          <p>파라미터가 4~5개 이상인 함수를 호출할 때, Java에서는 어떤 값이 어떤 파라미터인지 알기 어렵다. 그래서 Builder 패턴을 쓰곤 했다.</p>
+
+          <p>Kotlin에서는 <strong>이름을 명시해서 호출</strong>할 수 있기 때문에 빌더가 대부분 필요 없다.</p>
+
+<pre><code class="language-kotlin">fun createPost(
+    title: String,
+    content: String,
+    thumbnail: String? = null,
+    isPublished: Boolean = true
+) { /* ... */ }</code></pre>
+          <p>이 함수를 호출할 때 이름을 붙이면 의도가 명확해진다.</p>
+
+<pre><code class="language-kotlin">createPost(
+    title = "첫 번째 글",
+    content = "&lt;p&gt;내용&lt;/p&gt;",
+    isPublished = false
+)</code></pre>
+          <ul>
+            <li><code>thumbnail</code>은 기본값이 <code>null</code>이므로 생략했다.</li>
+            <li>각 값이 어떤 파라미터인지 호출 지점에서 바로 보인다.</li>
+          </ul>
+
+          <p><mark>기본값 파라미터 + named argument 조합이 Java의 Builder 패턴을 대체</mark>한다. 이건 Kotlin에서 반복적으로 등장하는 중요한 패턴이니 기억해두자.</p>
+
+          <hr>
+
+          <h2>제어문</h2>
+
+          <p>Java의 제어문과 생김새는 비슷하지만, 근본적인 차이가 하나 있다. Kotlin에서는 <mark><code>if</code>와 <code>when</code>이 표현식(expression)</mark>이다. <strong>값을 반환</strong>한다는 뜻이다.</p>
+
+          <hr>
+
+          <h3>if 표현식</h3>
+
+          <p>Java에서 삼항 연산자(<code>? :</code>)를 쓰던 상황을 떠올려보자.</p>
+
+<pre><code class="language-kotlin">// Java
+String status = isPublished ? "발행" : "임시저장";
+
+// Kotlin — 삼항 연산자가 없다
+val status = if (isPublished) "발행" else "임시저장"</code></pre>
+          <p>삼항 연산자가 없는 게 아니라 <strong>필요가 없는</strong> 것이다. <code>if</code> 자체가 값을 반환하니까. 블록 안에 여러 줄이 있으면 마지막 줄이 반환값이 된다.</p>
+
+<pre><code class="language-kotlin">val max = if (a &gt; b) {
+    println("a가 더 크다")
+    a   // 마지막 줄이 반환값
+} else {
+    println("b가 더 크다")
+    b
+}</code></pre>
+          <ul>
+            <li>블록의 <strong>마지막 표현식이 반환값</strong>이라는 규칙은 Kotlin 전반에서 반복된다. <code>when</code>, 람다, <code>run</code> 등 모든 곳에서 동일하다.</li>
+          </ul>
+
+          <hr>
+
+          <h3>when 표현식</h3>
+
+          <p>Java의 <code>switch</code>를 완전히 대체하면서 훨씬 강력하다.</p>
+
+<pre><code class="language-kotlin">val message = when (status) {
+    200 -&gt; "성공"
+    401 -&gt; "인증 실패"
+    404 -&gt; "찾을 수 없음"
+    in 500..599 -&gt; "서버 에러"
+    else -&gt; "알 수 없는 상태"
+}</code></pre>
+          <ul>
+            <li><code>break</code>가 필요 없다. fall-through가 없기 때문이다.</li>
+            <li><code>in</code> 키워드로 <strong>범위 매칭</strong>이 가능하다.</li>
+            <li><code>if</code>와 마찬가지로 값을 반환하는 표현식이다.</li>
+          </ul>
+
+          <p><code>when</code>의 진짜 강력함은 단순 값 비교를 넘어서 <strong>타입 체크, 조건식</strong>까지 가능하다는 점이다.</p>
+
+<pre><code class="language-kotlin">fun describe(obj: Any): String = when (obj) {
+    is Int -&gt; "정수: $obj"
+    is String -&gt; "문자열 길이: ${obj.length}"
+    is Boolean -&gt; if (obj) "참" else "거짓"
+    else -&gt; "알 수 없는 타입"
+}</code></pre>
+          <ul>
+            <li><code>is</code> 키워드로 타입을 체크하면, 해당 분기 안에서 <strong>자동 캐스팅(스마트 캐스트)</strong>이 된다. <code>obj.length</code>처럼 캐스팅 없이 바로 쓸 수 있다.</li>
+          </ul>
+
+          <p>인자 없이 <code>when</code>만 쓰면 <code>if-else if</code> 체인을 대체할 수 있다. 조건이 3개 이상일 때 가독성이 좋다.</p>
+
+<pre><code class="language-kotlin">fun classify(score: Int) = when {
+    score &gt;= 90 -&gt; "A"
+    score &gt;= 80 -&gt; "B"
+    score &gt;= 70 -&gt; "C"
+    else -&gt; "F"
+}</code></pre>
+          <hr>
+
+          <h3>for 루프</h3>
+
+<pre><code class="language-kotlin">for (i in 1..10) { }           // 1부터 10까지 (10 포함)
+for (i in 1 until 10) { }     // 1부터 9까지 (10 미포함)
+for (i in 10 downTo 1) { }    // 10부터 1까지
+for (i in 1..10 step 2) { }   // 1, 3, 5, 7, 9</code></pre>
+          <ul>
+            <li><code>..</code>은 양쪽 끝을 <strong>포함</strong>하는 범위다.</li>
+            <li><code>until</code>은 끝을 <strong>제외</strong>하는 범위다. 배열 인덱스 순회할 때 주로 쓴다.</li>
+            <li><code>downTo</code>는 역순, <code>step</code>은 간격을 지정한다.</li>
+          </ul>
+
+          <p>컬렉션 순회는 Java의 향상된 for문과 비슷하다. 인덱스가 필요하면 <code>withIndex()</code>를 쓴다.</p>
+
+<pre><code class="language-kotlin">for (post in posts) { }
+
+for ((index, post) in posts.withIndex()) {
+    println("$index: ${post.title}")
+}</code></pre>
+          <p><code>while</code>은 Java와 동일하다. 특별한 차이 없다.</p>
+
+          <hr>
+
+          <h2>심화 분석</h2>
+
+          <h4>val vs const val</h4>
+
+          <p><code>val</code>은 런타임에 한 번 할당되는 변수이고, <code>const val</code>은 <mark>컴파일 타임 상수</mark>다.</p>
+
+<pre><code class="language-kotlin">val currentTime = System.currentTimeMillis()   // 런타임에 결정
+const val MAX_RETRY = 3                         // 컴파일 타임에 결정</code></pre>
+          <ul>
+            <li><code>const val</code>은 <code>String</code>과 primitive 타입만 가능하다.</li>
+            <li>반드시 <strong>최상위 레벨</strong> 또는 <code>object</code>/<code>companion object</code> 안에 선언해야 한다.</li>
+          </ul>
+
+          <p>Java의 <code>static final</code>과 같은 역할이다. 상수를 정의할 때 <code>val</code>이 아닌 <code>const val</code>을 쓰면 컴파일러가 사용 지점에 값을 직접 인라인하므로 미세하게 성능이 좋다.</p>
+
+          <h4>타입 추론의 한계</h4>
+
+          <p>타입 추론이 만능은 아니다. 함수의 <strong>반환 타입</strong>은 블록 본문(<code>{}</code>)일 때 생략할 수 없다.</p>
+
+<pre><code class="language-kotlin">// 단일 표현식 — 반환 타입 추론 가능
+fun double(x: Int) = x * 2
+
+// 블록 본문 — 반환 타입 명시 필수
+fun double(x: Int): Int {
+    return x * 2
+}</code></pre>
+          <ul>
+            <li>단일 표현식 함수(<code>=</code>)는 반환 타입이 추론된다.</li>
+            <li>블록 본문 함수(<code>{}</code>)는 반환 타입을 명시해야 한다. 안 쓰면 <code>Unit</code>으로 간주한다.</li>
+          </ul>
+
+          <p>이건 의도적인 설계다. 블록 본문은 복잡할 수 있으므로, 반환 타입을 명시하게 해서 코드 읽는 사람이 바로 파악할 수 있도록 한 것이다.</p>
+
+          <hr>
+
+          <h2>자주 하는 실수</h2>
+
+          <h4>val은 "불변"이 아니라 "재할당 불가"다</h4>
+
+          <p>이 차이를 모르면 나중에 혼란이 온다.</p>
+
+<pre><code class="language-kotlin">val list = mutableListOf("A", "B")
+list.add("C")                      // 가능! 내용을 바꾸는 거다
+// list = mutableListOf("X")       // 컴파일 에러! 재할당은 안 된다</code></pre>
+          <p><code>val</code>은 변수가 가리키는 <strong>참조를 바꿀 수 없다</strong>는 뜻이지, 객체의 내부 상태를 바꿀 수 없다는 뜻이 아니다. 비유하자면 "집 주소는 못 바꾸지만, 집 안 가구 배치는 바꿀 수 있다"는 것이다.</p>
+
+          <p>진짜 불변 컬렉션을 원한다면 <code>listOf()</code>를 써야 한다. 이건 <a href="kotlin-syntax-3-null-collections.html">컬렉션 편</a>에서 다룬다.</p>
+
+          <h4>타입 변환은 명시적으로</h4>
+
+          <p>Java에서는 <code>int</code>를 <code>long</code>에 대입하면 자동으로 넓어지는 변환(widening)이 일어난다. Kotlin은 이걸 허용하지 않는다.</p>
+
+<pre><code class="language-kotlin">val intVal: Int = 42
+// val longVal: Long = intVal     // 컴파일 에러!
+val longVal: Long = intVal.toLong()</code></pre>
+          <ul>
+            <li><code>toInt()</code>, <code>toLong()</code>, <code>toDouble()</code>, <code>toString()</code> 등을 <strong>명시적으로</strong> 호출해야 한다.</li>
+          </ul>
+
+          <p>왜 이렇게 했을까? 암묵적 변환은 의도치 않은 정밀도 손실이나 오버플로우를 숨길 수 있다. Kotlin은 "개발자가 모르는 사이에 타입이 바뀌는 것"을 막는 방향으로 설계됐다.</p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">산술 연산에서의 함정</div>
+            <p>정수끼리 나눗셈하면 Java와 마찬가지로 정수 결과가 나온다. 소수점이 필요하면 한쪽을 <code>Double</code>로 변환해야 한다.</p>
+            <p>```kotlin</p>
+            <p>val result = 7 / 2          // 3 (정수 나눗셈)</p>
+            <p>val result = 7.0 / 2        // 3.5</p>
+            <p>val result = 7 / 2.toDouble()  // 3.5</p>
+            <p>```</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Kotlin</span>
+          <span>#변수</span>
+          <span>#타입</span>
+          <span>#함수</span>
+          <span>#제어문</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+          <a href="kotlin-syntax-2-classes.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

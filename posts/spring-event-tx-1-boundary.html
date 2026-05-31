@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[스프링] 1. 직접 호출과 이벤트의 경계 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[스프링] 1. 직접 호출과 이벤트의 경계</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">이벤트와 트랜잭션 설계 (1/3)</div>
+            <p>다음 편: <a href="spring-event-tx-2-side-effects.html">[스프링] 2. 트랜잭션 경계와 부수효과</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">시리즈 안내</div>
+            <p>- <strong><a href="spring-event-tx-1-boundary.html">직접 호출과 이벤트의 경계</a></strong> ← 현재 문서</p>
+            <p>- <a href="spring-event-tx-2-side-effects.html">트랜잭션 경계와 부수효과</a></p>
+            <p>- <a href="spring-event-tx-3-compensation.html">실패 허용 설계와 보상 전략</a></p>
+          </div>
+
+          <p>"이 로직을 이벤트로 분리해야 하나?" 이 질문에 명확한 기준 없이 코드를 짜면, 이벤트를 안 써서 결합이 심해지거나, 이벤트를 남발해서 흐름을 쫓을 수 없게 된다. 분리의 기준을 세우려면 먼저 이벤트가 어떤 문제를 해결하는지, 그리고 <code>@EventListener</code>가 실제로 어떻게 동작하는지를 정확히 알아야 한다.</p>
+
+          <h2>직접 호출이 만드는 문제</h2>
+
+          <p>옷을 등록하면 이미지를 S3에 올리고, 팔로워에게 알림을 보낸다고 하자. 가장 직관적인 방법은 서비스에서 전부 직접 호출하는 것이다.</p>
+
+<pre><code class="language-java">@Transactional
+public ClothesDto create(ClothesCreateRequest request, MultipartFile image) {
+    Clothes clothes = clothesRepository.save(Clothes.create(request));
+    String imageKey = s3Service.put(image);
+    clothes.updateImageKey(imageKey);
+    notificationService.notifyFollowers(clothes.getOwner(), "새 옷 등록");
+    return ClothesDto.from(clothes, s3Service.getUrl(imageKey));
+}</code></pre>
+          <p>코드 자체는 읽기 쉽다. 하지만 이 서비스가 어떤 의존 구조를 만드는지 보면 문제가 드러난다.</p>
+
+<div class="mermaid">
+flowchart TD
+    Service["ClothesService"]
+    Service --> DB[("DB")]
+    Service --> S3["S3Service"]
+    Service --> Noti["NotificationService"]
+
+    style Service fill:#FFE6E6,stroke:#F44336,stroke-width:2px,color:#000
+    style DB fill:#E8F4F8,stroke:#2196F3,stroke-width:2px,color:#000
+    style S3 fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#000
+    style Noti fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#000
+</div>
+          <p><code>ClothesService</code>가 모든 것을 직접 알고 있다. 여기에 피드 자동 생성, 포인트 적립이 추가되면 화살표가 계속 늘어난다. <mark>핵심 로직(옷 등록)에 부가 로직(S3, 알림)이 결합</mark>된 구조다.</p>
+
+          <h3>장애 전파의 문제</h3>
+
+          <p>이 구조에서 알림 서비스가 죽으면 어떻게 되는지 보자.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    actor Client as 클라이언트
+    participant Service as ClothesService
+    participant DB
+    participant Noti as NotificationService
+
+    Client->>Service: 옷 등록 요청
+    Note over Service: 트랜잭션 시작
+    Service->>DB: 옷 저장
+    DB-->>Service: 성공
+
+    rect rgb(255, 230, 230)
+        Service->>Noti: 팔로워 알림 발송
+        Noti--x Service: 알림 서버 장애!
+    end
+
+    Note over Service: 전체 트랜잭션 롤백
+    Service--x Client: 500 에러
+</div>
+          <p>분홍 영역에서 알림이라는 부가 로직이 터졌는데, 핵심 로직(옷 등록)까지 함께 롤백됐다.</p>
+
+          <h3>트랜잭션 오염</h3>
+
+          <p>더 미묘한 문제가 있다. <code>s3Service.put(image)</code>는 HTTP로 외부 서버에 파일을 보내는 작업이다. 이 작업이 <code>@Transactional</code> 안에서 실행되면 무슨 일이 생기는지 보자.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    actor Client as 클라이언트
+    participant Service as ClothesService
+    participant DB
+    participant S3
+
+    Client->>Service: 옷 등록 요청
+    Note over Service: 트랜잭션 시작
+
+    Service->>DB: 옷 저장
+
+    rect rgb(255, 243, 224)
+        Note over Service, S3: DB 커넥션 점유 중
+        Service->>S3: 이미지 업로드
+        Note right of S3: 5초 소요...
+        S3-->>Service: 업로드 완료
+    end
+
+    Note over Service: 트랜잭션 커밋
+    Service-->>Client: 응답
+</div>
+          <p>주황 영역 동안 DB 커넥션이 불필요하게 잡혀 있다. 동시 요청이 몰리면 커넥션 풀이 고갈된다. 게다가 S3 업로드 성공 후 커밋이 실패하면, 파일은 올라갔는데 DB에는 데이터가 없는 불일치가 생긴다.</p>
+
+          <p><mark>외부 호출이 트랜잭션 안에 있으면 안 되는 이유</mark>다. 이 문제는 <a href="spring-event-tx-2-side-effects.html">2편</a>에서 깊이 다룬다.</p>
+
+          <h2>이벤트 분리의 효과</h2>
+
+          <p>이벤트 방식에서는 "옷이 등록됐다"는 <mark>사실만 알리고</mark>, 부가 로직은 그 사실에 관심 있는 리스너가 각자 처리한다.</p>
+
+<pre><code class="language-java">@Transactional
+public ClothesDto create(ClothesCreateRequest request) {
+    Clothes clothes = clothesRepository.save(Clothes.create(request));
+    eventPublisher.publishEvent(new ClothesCreatedEvent(clothes.getId()));
+    return ClothesDto.from(clothes);
+}</code></pre>
+          <p><code>ClothesService</code>는 이제 S3도 알림도 모른다. 이 사실에 관심 있는 리스너가 알아서 반응한다.</p>
+
+<pre><code class="language-java">@Component
+public class ClothesImageListener {
+    @EventListener
+    public void uploadImage(ClothesCreatedEvent event) {
+        s3Service.put(event.getClothesId(), ...);
+    }
+}</code></pre>
+          <p>위의 직접 호출 의존 구조와 비교하면 차이가 명확하다.</p>
+
+<div class="mermaid">
+flowchart TD
+    Service["ClothesService"]
+    Service --> DB[("DB")]
+    Service --> Event(("이벤트 발행"))
+    Event -.-> L1["S3 리스너"]
+    Event -.-> L2["알림 리스너"]
+    Event -.-> L3["피드 리스너"]
+    Event -.-> L4["포인트 리스너"]
+
+    style Service fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style DB fill:#E8F4F8,stroke:#2196F3,stroke-width:2px,color:#000
+    style Event fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#000
+    style L1 fill:#F3E5F5,stroke:#9C27B0,stroke-width:2px,color:#000
+    style L2 fill:#F3E5F5,stroke:#9C27B0,stroke-width:2px,color:#000
+    style L3 fill:#F3E5F5,stroke:#9C27B0,stroke-width:2px,color:#000
+    style L4 fill:#F3E5F5,stroke:#9C27B0,stroke-width:2px,color:#000
+</div>
+          <p><code>ClothesService</code>에서 나가는 화살표는 DB와 이벤트 발행뿐이다. 리스너가 아무리 늘어나도 서비스 코드는 바뀌지 않는다. 점선 화살표는 이벤트를 통한 간접 연결을 뜻한다 — 서비스와 리스너는 서로를 모른다.</p>
+
+          <div class="callout callout-tip">
+            <p>이 구조가 가능한 이유는 Spring의 <code>ApplicationEventPublisher</code>가 중간에서 이벤트를 받아 등록된 리스너들에게 전달하기 때문이다. 발행자와 리스너는 서로를 모르고, Spring이 연결해준다.</p>
+          </div>
+
+          <h2>@EventListener의 동작 원리</h2>
+
+          <p>이벤트를 설계에 쓰려면 <code>@EventListener</code>가 내부적으로 어떻게 동작하는지 정확히 알아야 한다. 잘못 이해하면 설계 의도와 다르게 동작해서 버그가 된다. 핵심 특성은 세 가지다.</p>
+
+          <h3>동기 실행</h3>
+
+          <p><code>publishEvent()</code>를 호출하면, Spring은 등록된 리스너를 <mark>즉시, 같은 스레드에서</mark> 실행한다. <code>publishEvent()</code> 다음 줄은 모든 리스너가 끝나야 실행된다.</p>
+
+<pre><code class="language-java">eventPublisher.publishEvent(event);  // 리스너가 전부 끝날 때까지 여기서 멈춤
+log.info("이 줄은 리스너가 끝난 뒤에 실행된다");</code></pre>
+          <p>비동기로 동작하지 않는다. 리스너가 오래 걸리면 발행자도 그만큼 기다린다.</p>
+
+          <h3>같은 트랜잭션</h3>
+
+          <p>발행자가 <code>@Transactional</code> 안에서 이벤트를 발행하면, 리스너도 <mark>같은 트랜잭션</mark> 안에서 실행된다. 이게 어떤 결과를 만드는지 보자.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    participant Service as ClothesService
+    participant Spring as Spring
+    participant Listener as 알림 리스너
+
+    Note over Service: 트랜잭션 시작
+    Service->>Service: 옷 저장 (DB)
+    Service->>Spring: publishEvent(event)
+    Spring->>Listener: 알림 발송
+
+    rect rgb(255, 230, 230)
+        Listener--x Spring: 예외 발생!
+        Spring--x Service: 예외 전파
+        Note over Service: 전체 트랜잭션 롤백
+    end
+</div>
+          <p>이벤트로 "분리"했다고 생각했는데, 리스너 예외가 발행자의 트랜잭션을 롤백시킨다. <mark>트랜잭션 관점에서는 여전히 하나</mark>인 셈이다. 직접 호출과 똑같은 장애 전파 문제가 그대로 남아 있다.</p>
+
+          <h3>실행 시점</h3>
+
+          <p><code>publishEvent()</code> 호출 시점에 리스너가 실행된다. <mark>트랜잭션이 커밋되기 전</mark>이다. 이 시점에서 DB 변경은 아직 확정되지 않았다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    participant Service as ClothesService
+    participant Listener as S3 리스너
+    participant S3
+
+    Note over Service: 트랜잭션 시작
+    Service->>Service: 옷 저장 (DB)
+    Service->>Listener: publishEvent → handle
+
+    rect rgb(232, 248, 232)
+        Listener->>S3: 파일 업로드
+        S3-->>Listener: 성공 ✅
+    end
+
+    Listener-->>Service: 리턴
+
+    rect rgb(255, 230, 230)
+        Note over Service: 트랜잭션 커밋 실패! 롤백!
+    end
+
+    Note over S3: 파일은 이미<br/>올라간 상태...
+</div>
+          <p>초록 영역에서 S3 업로드는 성공했는데, 분홍 영역에서 커밋이 실패했다. 파일은 S3에 올라갔는데 DB에는 데이터가 없다. 커밋 전에 외부 시스템을 호출했기 때문에 생기는 불일치다.</p>
+
+          <p>이 세 가지 특성 — 동기 실행, 같은 트랜잭션, 커밋 전 실행 — 을 이해하면, 왜 <code>@TransactionalEventListener</code>가 필요한지 자연스럽게 보인다. <a href="spring-event-tx-2-side-effects.html">2편</a>에서 자세히 다룬다.</p>
+
+          <div class="callout callout-warning">
+            <p><code>@EventListener</code>는 코드 구조를 분리할 뿐, <mark>실행 흐름과 트랜잭션을 분리하지 않는다</mark>. 이 차이를 인식하는 것이 이벤트 설계의 출발점이다.</p>
+          </div>
+
+          <h2>분리의 판단 기준</h2>
+
+          <p>모든 로직을 이벤트로 빼는 건 정답이 아니다. 세 가지 질문으로 판단한다.</p>
+
+          <h3>핵심 로직과 부가 로직</h3>
+
+          <p>첫 번째 질문은 "<mark>이 로직이 실패하면 전체가 실패해야 하는가?</mark>"이다.</p>
+
+          <ul>
+            <li>옷 등록 시 DB 저장이 실패하면? → 전체 실패해야 한다. <mark>핵심 로직</mark></li>
+            <li>옷 등록 시 알림 발송이 실패하면? → 옷은 등록되어야 한다. <mark>부가 로직</mark></li>
+            <li>옷 등록 시 S3 업로드가 실패하면? → 상황에 따라 다르다
+          <ul>
+            <li>이미지가 필수면 핵심 로직에 가깝다</li>
+            <li>이미지 없이도 등록 가능하면 부가 로직이다</li>
+          </ul>
+          </li>
+          </ul>
+
+          <p>핵심 로직은 같은 트랜잭션 안에 두고, 부가 로직은 이벤트로 분리하는 것이 기본 원칙이다.</p>
+
+          <h3>변경 가능성</h3>
+
+          <p>두 번째 질문은 "<mark>이 로직이 추가/삭제될 때 기존 코드를 수정해야 하는가?</mark>"이다.</p>
+
+          <p>옷 등록 후 해야 할 일이 하나씩 늘어난다고 하자.</p>
+
+          <ul>
+            <li>팔로워 알림 → 서비스에 코드 추가</li>
+            <li>피드 자동 생성 → 서비스에 코드 추가</li>
+            <li>포인트 적립 → 서비스에 코드 추가</li>
+          </ul>
+
+          <p>매번 <code>ClothesService</code>를 수정해야 한다. 이벤트 구조에서는 리스너만 추가하면 된다. 확장 가능성이 높은 부분은 이벤트가 유리하다.</p>
+
+          <h3>응답 시간 영향</h3>
+
+          <p>세 번째 질문은 "<mark>이 로직이 API 응답 시간에 포함되어야 하는가?</mark>"이다.</p>
+
+          <ul>
+            <li>이미지 URL을 응답에 담아야 하면 → S3 업로드가 끝나야 응답 가능</li>
+            <li>알림은 사용자가 기다릴 필요 없다 → 응답 후 뒤에서 처리해도 된다</li>
+          </ul>
+
+          <p>응답에 포함되지 않아도 되는 로직은 이벤트 + 비동기(<code>@Async</code>)로 분리할 수 있다. 이 조합은 <a href="spring-event-tx-3-compensation.html">3편</a>에서 다룬다.</p>
+
+          <p>세 가지 질문을 의사결정 흐름으로 정리하면 이렇다.</p>
+
+<div class="mermaid">
+flowchart TD
+    A{"이 로직이 실패하면<br/>전체가 실패해야 하는가?"}
+    A -->|"예"| B["핵심 로직<br/>서비스에 유지"]
+    A -->|"아니오"| C{"확장 가능성이<br/>있는가?"}
+    C -->|"예"| D["이벤트로 분리"]
+    C -->|"아니오"| E{"API 응답에<br/>포함되어야 하는가?"}
+    E -->|"예"| F["서비스에 유지"]
+    E -->|"아니오"| D
+
+    style A fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#000
+    style B fill:#FFE6E6,stroke:#F44336,stroke-width:2px,color:#000
+    style C fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#000
+    style D fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style E fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#000
+    style F fill:#E8F4F8,stroke:#2196F3,stroke-width:2px,color:#000
+</div>
+          <p>"아니오"가 나올수록 이벤트 분리의 근거가 강해진다.</p>
+
+          <h2>이벤트가 과한 경우</h2>
+
+          <p>이벤트는 결합을 끊는 도구지만, 남용하면 다른 문제가 생긴다.</p>
+
+          <h3>흐름 추적의 어려움</h3>
+
+          <p>직접 호출은 IDE에서 메서드 호출을 따라가면 전체 흐름을 파악할 수 있다. 이벤트는 <code>publishEvent()</code>에서 끊긴다. 어떤 리스너가 반응하는지 알려면 이벤트 클래스를 검색해야 한다.</p>
+
+          <p>리스너가 1개뿐이고 앞으로도 추가될 가능성이 없다면, 이벤트로 분리하는 건 간접 호출 레이어만 추가한 셈이다. 직접 호출이 더 명확하다.</p>
+
+          <h3>핵심 로직의 잘못된 분리</h3>
+
+          <p>"옷 저장"을 이벤트 리스너로 빼는 건 잘못된 분리다. 핵심 비즈니스 로직은 서비스 메서드 안에 있어야 한다. 이벤트는 <mark>핵심 로직이 끝난 뒤의 후속 작업</mark>에 쓰는 도구다.</p>
+
+          <div class="callout callout-warning">
+            <p>이벤트로 분리할 때는 "이 리스너를 삭제해도 핵심 기능이 동작하는가?"를 확인한다. 동작하지 않는다면 핵심 로직이므로 이벤트로 빼면 안 된다.</p>
+          </div>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">@EventListener가 비동기라고 착각</div>
+            <p><code>@EventListener</code>는 기본적으로 <mark>동기 실행</mark>이다. <code>publishEvent()</code> 호출 시 같은 스레드에서 리스너가 실행되고, 리스너가 끝나야 다음 코드로 넘어간다. 비동기로 만들려면 <code>@Async</code>를 함께 사용해야 한다.</p>
+            <p>[!DANGER] 리스너 예외가 발행자를 롤백시키는 것을 모르는 경우</p>
+            <p><code>@EventListener</code> 안에서 발생한 예외는 발행자의 <code>@Transactional</code>까지 전파된다. 알림 발송 실패로 핵심 비즈니스까지 롤백될 수 있다. 부가 로직의 예외가 핵심 로직에 영향을 주지 않으려면 <code>@TransactionalEventListener</code> + <code>@Async</code>를 사용한다.</p>
+            <p>[!DANGER] 트랜잭션 커밋 전에 외부 시스템 호출</p>
+            <p><code>@EventListener</code> 안에서 S3, 이메일 등 외부 호출을 하면, 이후 트랜잭션이 롤백될 때 불일치가 발생한다. 외부 연동은 트랜잭션 커밋이 확정된 뒤에 실행해야 한다. 이 문제의 해결 방법은 <a href="spring-event-tx-2-side-effects.html">2편</a>에서 다룬다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#스프링</span>
+          <span>#이벤트</span>
+          <span>#설계</span>
+          <span>#트랜잭션</span>
+          <span>#결합도</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+          <a href="spring-event-tx-2-side-effects.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

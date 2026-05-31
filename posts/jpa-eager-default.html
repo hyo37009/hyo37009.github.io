@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[JPA] ManyToOne과 OneToOne의 기본값이 EAGER인 이유 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[JPA] ManyToOne과 OneToOne의 기본값이 EAGER인 이유</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+
+          <p><code>@ManyToOne</code>과 <code>@OneToOne</code>은 기본 Fetch 전략이 EAGER다. 반면 <code>@OneToMany</code>와 <code>@ManyToMany</code>는 LAZY다. 같은 JPA인데 왜 어노테이션마다 기본값이 다를까. 이 설계 결정에는 이유가 있다.</p>
+
+          <div class="callout callout-info">
+            <div class="callout-title">관련 문서</div>
+            <p>- <a href="jpa-fetch-타입-완전-정복.html">JPA Fetch 타입 완전 정복</a> — Fetch 전략 전체 개념 정리</p>
+          </div>
+
+          <h2>설계 당시의 판단 기준</h2>
+
+          <p>JPA 스펙이 만들어진 2006년 당시, 설계자들은 연관관계를 두 가지로 구분했다.</p>
+
+          <ul>
+            <li><strong>단일 객체 연관</strong> (<code>@ManyToOne</code>, <code>@OneToOne</code>) — 연관 대상이 딱 하나</li>
+            <li><strong>컬렉션 연관</strong> (<code>@OneToMany</code>, <code>@ManyToMany</code>) — 연관 대상이 여러 개</li>
+          </ul>
+
+          <p>단일 객체는 JOIN 한 번이면 함께 가져올 수 있다. 데이터 크기도 예측 가능하다. 어차피 같이 쓸 가능성이 높다고 봤고, EAGER가 더 자연스럽다고 판단했다.</p>
+
+          <p>컬렉션은 다르다. 몇 개가 들어올지 모른다. 10개일 수도 있고 10만 개일 수도 있다. 항상 즉시 가져오면 언제 어디서 성능 문제가 터질지 예측이 안 된다. 그래서 LAZY를 기본으로 했다.</p>
+
+          <p>요약하면 다음과 같다.</p>
+
+          <ul>
+            <li><strong>단일 객체</strong> → 크기 예측 가능 → EAGER</li>
+            <li><strong>컬렉션</strong> → 크기 예측 불가 → LAZY</li>
+          </ul>
+
+          <h2>왜 지금은 문제가 되는가</h2>
+
+          <p>설계 당시의 전제는 "대부분 단건 조회를 한다"였다. 단건 조회에서는 EAGER가 문제없다.</p>
+
+<pre><code class="language-java">Feed feed = feedRepository.findById(1L);
+// → Feed + User를 JOIN 한 번으로 가져옴 → 문제없음</code></pre>
+          <p>하지만 실제 서비스에서는 목록 조회가 훨씬 많다.</p>
+
+<pre><code class="language-java">List&lt;Feed&gt; feeds = feedRepository.findAll();
+// Feed가 100개면 EAGER로 인해 User 쿼리가 100번 추가로 실행됨</code></pre>
+          <p>EAGER가 단건 조회 전제에서 설계됐는데, 현실은 목록 조회가 주력이었다. 설계 당시의 가정이 틀린 것이다.</p>
+
+          <h2>왜 지금도 바꾸지 않는가</h2>
+
+          <p>하위 호환성 때문이다. 기본값을 LAZY로 바꾸면 기존에 EAGER를 가정하고 작성된 수많은 코드가 동작 방식이 달라진다. 트랜잭션 밖에서 연관 필드에 접근하던 코드는 <code>LazyInitializationException</code>으로 터진다.</p>
+
+          <p>JPA 스펙을 관리하는 Jakarta EE 측도 이 문제를 인지하고 있다. 공식 문서에서 직접 권고한다.</p>
+
+          <div class="callout callout-info">
+            <div class="callout-title">JPA 스펙 권고</div>
+            <p>"It is recommended to use <code>FetchType.LAZY</code> for all associations."</p>
+            <p>— Jakarta Persistence specification</p>
+          </div>
+
+          <p>기본값은 EAGER지만, 쓰지 말라고 권장하는 상황이다. 기본값이 권장 사항과 반대인 셈이다.</p>
+
+          <h2>실제 적용</h2>
+
+          <p>결론은 단순하다. 기본값을 믿지 말고 <mark>항상 명시적으로 LAZY를 설정</mark>한다.</p>
+
+<pre><code class="language-java">// 기본값에 의존하면 EAGER — 위험
+@ManyToOne
+private User author;
+
+// 명시적으로 LAZY 설정 — 안전
+@ManyToOne(fetch = FetchType.LAZY)
+private User author;
+
+// OneToOne도 마찬가지
+@OneToOne(fetch = FetchType.LAZY)
+private Profile profile;</code></pre>
+          <p>필요할 때는 fetch join으로 명시적으로 가져오면 된다.</p>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#JPA</span>
+          <span>#Fetch</span>
+          <span>#EAGER</span>
+          <span>#LAZY</span>
+          <span>#ManyToOne</span>
+          <span>#OneToOne</span>
+          <span>#설계</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

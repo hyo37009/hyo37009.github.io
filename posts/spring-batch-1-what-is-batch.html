@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Spring Batch] 1. 배치 처리란 무엇인가 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Spring Batch] 1. 배치 처리란 무엇인가</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Spring Batch (1/8)</div>
+            <p>다음 편: <a href="spring-batch-2-job-step.html">[Spring Batch] 2. Job과 Step 구조</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">Spring Batch 가이드 시리즈</div>
+            <p><strong>01 배치 기초</strong></p>
+            <p>- <mark>배치 처리란 무엇인가</mark> ← 현재 편</p>
+            <p>- <a href="spring-batch-2-job-step.html">Job과 Step 구조</a></p>
+            <p><strong>02 Chunk 처리</strong></p>
+            <p>- <a href="spring-batch-3-chunk.html">Chunk 기반 처리</a></p>
+            <p>- <a href="spring-batch-4-readers-writers.html">다양한 Reader와 Writer</a></p>
+            <p><strong>03 실행 제어</strong></p>
+            <p>- <a href="spring-batch-5-flow.html">실행 제어와 흐름</a></p>
+            <p>- <a href="spring-batch-6-retry-skip.html">재시도와 건너뛰기</a></p>
+            <p><strong>04 운영과 면접</strong></p>
+            <p>- <a href="spring-batch-7-scheduling.html">스케줄링과 운영</a></p>
+            <p>- <a href="spring-batch-8-interview.html">면접 대비</a></p>
+          </div>
+
+          <p>사용자가 요청할 때 즉시 응답하는 API와 달리, 새벽 2시에 아무도 모르게 수만 건의 데이터를 처리하는 작업이 있다. 정산, 통계 집계, 대량 알림 발송 — 이런 작업은 실시간으로 처리할 필요도 없고, 실시간으로 처리할 수도 없다. 이런 대량 데이터의 일괄 처리를 <mark>배치 처리</mark>라고 부른다.</p>
+
+          <h2>배치 처리란</h2>
+
+          <p>배치 처리는 <mark>대량의 데이터를 모아서 한꺼번에 처리하는 방식</mark>이다. 사용자의 요청에 즉시 응답하는 실시간 처리와 대비되는 개념이다.</p>
+
+          <p>편의점 택배를 생각해보자. 고객이 택배를 맡길 때마다 배송 트럭이 출발하면 비효율적이다. 대신 하루 동안 모인 택배를 저녁에 한 번에 싣고 출발한다. 배치 처리도 이와 같다. 데이터를 모아두었다가, 정해진 시점에 일괄적으로 처리한다.</p>
+
+          <p>실시간 처리와 배치 처리의 차이를 비교하면 다음과 같다.</p>
+
+<div class="mermaid">
+flowchart LR
+    subgraph RT["실시간 처리"]
+        direction TB
+        U1["사용자 요청"] --> S1["즉시 처리"]
+        S1 --> R1["즉시 응답"]
+    end
+
+    RT ~~~ BT
+
+    subgraph BT["배치 처리"]
+        direction TB
+        D1["데이터 축적"] --> T1["정해진 시점"]
+        T1 --> P1["일괄 처리"]
+    end
+
+    style RT fill:#E8F8E8,stroke:#4CAF50
+    style BT fill:#E8F4F8,stroke:#2196F3
+</div>
+          <table>
+          <thead>
+          <tr><th>구분</th><th>실시간 처리</th><th>배치 처리</th></tr>
+          </thead>
+          <tbody>
+          <tr><td><strong>트리거</strong></td><td>사용자 요청</td><td>스케줄 또는 수동 실행</td></tr>
+          <tr><td><strong>처리 단위</strong></td><td>건 by 건</td><td>수천~수백만 건</td></tr>
+          <tr><td><strong>응답 시간</strong></td><td>밀리초~초</td><td>분~시간</td></tr>
+          <tr><td><strong>대표 예시</strong></td><td>API 호출, 검색</td><td>정산, 통계, 데이터 마이그레이션</td></tr>
+          </tbody>
+          </table>
+
+          <h2>배치가 필요한 상황</h2>
+
+          <p>모든 작업이 배치로 처리되어야 하는 건 아니다. 배치가 필요한 상황에는 공통된 패턴이 있다.</p>
+
+          <h4>대량 데이터 처리</h4>
+
+          <p>수만~수백만 건의 데이터를 한 번에 처리해야 할 때다. 하나씩 API로 처리하면 시간이 너무 오래 걸리거나 시스템에 과부하가 걸린다.</p>
+
+          <ul>
+            <li>월말 정산 — 한 달치 주문 데이터를 집계해서 정산 금액을 계산</li>
+            <li>데이터 마이그레이션 — 레거시 DB에서 새 DB로 수백만 건의 레코드를 이관</li>
+            <li>대량 이메일/알림 발송 — 10만 명의 사용자에게 프로모션 알림을 전송</li>
+          </ul>
+
+          <h4>주기적 집계</h4>
+
+          <p>일정 주기로 데이터를 모아 통계를 내야 할 때다.</p>
+
+          <ul>
+            <li>일일 매출 리포트 — 하루 동안의 거래를 집계해서 대시보드에 반영</li>
+            <li>인기 피드 순위 — 24시간 동안의 좋아요 수를 집계해서 순위를 갱신</li>
+            <li>사용자 활동 통계 — 주간 활동 로그를 분석해서 리포트 생성</li>
+          </ul>
+
+          <h4>시스템 유지보수</h4>
+
+          <p>서비스 운영에 필요하지만 사용자에게 직접 보이지 않는 관리 작업이다.</p>
+
+          <ul>
+            <li>만료 데이터 정리 — 90일이 지난 임시 파일이나 만료된 토큰을 삭제</li>
+            <li>캐시 워밍 — 서비스 시작 전에 자주 조회되는 데이터를 미리 캐시에 적재</li>
+            <li>데이터 정합성 검증 — 두 시스템 간의 데이터가 일치하는지 주기적으로 확인</li>
+          </ul>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">배치 vs 실시간 판단 기준</div>
+            <p>- 즉시 응답이 필요한가? → 실시간</p>
+            <p>- 대량 데이터를 한꺼번에 처리해야 하는가? → 배치</p>
+            <p>- 정해진 시간에 주기적으로 실행되는가? → 배치</p>
+            <p>- 처리 시간이 수 분 이상 걸리는가? → 배치</p>
+            <p>하나라도 해당하면 배치를 고려할 만하다.</p>
+          </div>
+
+          <h2>Spring Batch란</h2>
+
+          <p>Spring Batch는 <mark>Java 진영의 표준 배치 프레임워크</mark>다. Spring 생태계의 일부로, 대량 데이터 처리에 필요한 구조와 기능을 제공한다.</p>
+
+          <p>배치를 직접 구현한다고 생각해보자. 데이터를 읽고, 가공하고, 저장하는 코드를 짜는 건 어렵지 않다. 하지만 실무에서는 단순한 로직 외에도 해결해야 할 문제가 많다.</p>
+
+          <ul>
+            <li>10만 건 중 5만 건째에서 에러가 나면 처음부터 다시?</li>
+            <li>메모리에 100만 건을 한 번에 올릴 수 없으면?</li>
+            <li>어제 실행한 배치가 정상 완료되었는지 어떻게 확인하지?</li>
+            <li>실패한 배치를 이어서 다시 실행할 수 있을까?</li>
+          </ul>
+
+          <p>Spring Batch는 이런 문제를 프레임워크 차원에서 해결한다.</p>
+
+<div class="mermaid">
+mindmap
+  root((Spring Batch))
+    구조
+      Job / Step 계층
+      Chunk 기반 처리
+      Tasklet 모델
+    안정성
+      재시작 / 재시도
+      건너뛰기(Skip)
+      트랜잭션 관리
+    운영
+      실행 이력 관리
+      JobParameters
+      모니터링
+    확장
+      병렬 처리
+      파티셔닝
+      원격 청킹
+</div>
+          <h2>Spring Batch의 핵심 특징</h2>
+
+          <h4>Chunk 기반 처리</h4>
+
+          <p>데이터를 한 번에 전부 메모리에 올리지 않는다. <mark>일정 크기(chunk)로 나눠서</mark> 읽기 → 가공 → 쓰기를 반복한다.</p>
+
+          <p>100만 건을 처리한다면, 1,000건씩 끊어서 1,000번 반복한다. 각 chunk 단위로 트랜잭션이 관리되므로, 중간에 실패해도 이미 처리된 chunk는 보존된다.</p>
+
+          <p>이 구조를 그림으로 보면 다음과 같다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant Reader as ItemReader
+    participant Processor as ItemProcessor
+    participant Writer as ItemWriter
+    participant TX as 트랜잭션
+
+    loop chunk 단위 반복 (예: 1,000건씩)
+        TX->>TX: 트랜잭션 시작
+
+        rect rgb(232, 248, 232)
+            Note over Reader,Writer: Chunk 처리
+            Reader->>Reader: 1,000건 읽기
+            Reader->>Processor: 데이터 전달
+            Processor->>Processor: 가공/변환/필터링
+            Processor->>Writer: 가공된 데이터 전달
+            Writer->>Writer: 1,000건 일괄 저장
+        end
+
+        TX->>TX: 커밋
+    end
+</div>
+          <p>Reader가 데이터를 읽고, Processor가 가공하고, Writer가 저장한다. 이 3단계가 chunk 단위로 반복되며, 각 chunk마다 트랜잭션이 걸린다. 5번째 chunk에서 실패하면 1~4번째 chunk의 결과는 이미 커밋되어 있으므로 안전하다.</p>
+
+          <h4>재시작과 재시도</h4>
+
+          <p>배치 작업이 중간에 실패하면, <mark>실패한 지점부터 이어서 재시작</mark>할 수 있다. Spring Batch는 각 Step의 실행 상태를 DB에 기록해두기 때문에, 어디까지 처리했는지 정확히 알고 있다.</p>
+
+          <p>특정 레코드에서 일시적 오류가 발생하면, 해당 레코드만 재시도하거나 건너뛸 수도 있다. 네트워크 타임아웃 같은 일시적 문제에 유용하다.</p>
+
+          <h4>실행 이력 관리</h4>
+
+          <p>모든 배치 실행은 <mark>메타데이터 테이블에 기록</mark>된다. 언제 실행했는지, 성공했는지, 몇 건을 처리했는지, 얼마나 걸렸는지가 자동으로 저장된다.</p>
+
+<div class="mermaid">
+erDiagram
+    BATCH_JOB_INSTANCE ||--o{ BATCH_JOB_EXECUTION : "실행 이력"
+    BATCH_JOB_EXECUTION ||--o{ BATCH_STEP_EXECUTION : "Step별 기록"
+    BATCH_JOB_EXECUTION ||--o{ BATCH_JOB_EXECUTION_PARAMS : "실행 파라미터"
+
+    BATCH_JOB_INSTANCE {
+        bigint JOB_INSTANCE_ID PK
+        varchar JOB_NAME
+        varchar JOB_KEY
+    }
+    BATCH_JOB_EXECUTION {
+        bigint JOB_EXECUTION_ID PK
+        varchar STATUS
+        timestamp START_TIME
+        timestamp END_TIME
+        varchar EXIT_CODE
+    }
+    BATCH_STEP_EXECUTION {
+        bigint STEP_EXECUTION_ID PK
+        varchar STEP_NAME
+        bigint READ_COUNT
+        bigint WRITE_COUNT
+        bigint SKIP_COUNT
+        varchar STATUS
+    }
+</div>
+          <p>운영팀에서 "어제 정산 배치가 정상적으로 돌았나?"라고 물으면, 메타데이터 테이블을 조회해서 바로 확인할 수 있다.</p>
+
+          <h2>Spring Batch 아키텍처 개요</h2>
+
+          <p>Spring Batch의 전체 구조를 큰 그림으로 먼저 잡아두자. 세부 내용은 이후 편에서 하나씩 파고든다.</p>
+
+<div class="mermaid">
+block-beta
+    columns 3
+
+    block:app["애플리케이션 레이어"]:3
+        columns 3
+        Job Step Tasklet/Chunk
+    end
+
+    block:core["코어 레이어"]:3
+        columns 3
+        JobLauncher JobRepository StepExecution
+    end
+
+    block:infra["인프라 레이어"]:3
+        columns 3
+        ItemReader ItemProcessor ItemWriter
+    end
+
+    app --> core
+    core --> infra
+</div>
+          <p>세 개의 레이어로 나뉜다.</p>
+
+          <ul>
+            <li><strong>애플리케이션 레이어</strong> : 개발자가 직접 작성하는 배치 Job과 Step이다. 비즈니스 로직을 담는다.</li>
+            <li><strong>코어 레이어</strong> : Spring Batch의 핵심 런타임이다. Job을 실행하고(<code>JobLauncher</code>), 실행 이력을 기록하고(<code>JobRepository</code>), Step의 상태를 관리한다.</li>
+            <li><strong>인프라 레이어</strong> : 데이터를 읽고(<code>ItemReader</code>), 가공하고(<code>ItemProcessor</code>), 저장하는(<code>ItemWriter</code>) 구현체들이다. DB, 파일, 메시지 큐 등 다양한 데이터 소스를 지원한다.</li>
+          </ul>
+
+          <p>개발자가 집중하는 영역은 애플리케이션 레이어와 인프라 레이어다. 코어 레이어는 Spring Batch가 자동으로 관리한다.</p>
+
+          <div class="callout callout-info">
+            <div class="callout-title">Spring Batch ≠ 스케줄러</div>
+            <p>Spring Batch는 배치 "처리"를 담당하지, 배치를 "언제 실행할지"는 관여하지 않는다. 실행 시점은 <code>@Scheduled</code>, Quartz, Jenkins, 쿠버네티스 CronJob 같은 외부 스케줄러가 결정한다. Spring Batch는 "실행되면 어떻게 처리할 것인가"에 집중한다.</p>
+          </div>
+
+          <h2>실제 사용 사례</h2>
+
+          <p>배치 처리가 실제로 어떻게 활용되는지 몇 가지 사례를 살펴보자.</p>
+
+          <h4>이커머스 정산</h4>
+
+          <p>매일 자정에 전날의 주문 데이터를 집계해서 판매자별 정산 금액을 계산한다. 수십만 건의 주문을 한 건씩 API로 처리하면 몇 시간이 걸리지만, Spring Batch의 chunk 기반 처리로 수 분 내에 완료할 수 있다.</p>
+
+          <h4>SNS 피드 랭킹</h4>
+
+          <p>24시간 동안의 좋아요, 댓글, 조회수를 집계해서 인기 피드 순위를 갱신한다. 실시간으로 매번 집계 쿼리를 돌리면 DB에 과부하가 걸리므로, 주기적으로 배치로 집계한 결과를 캐시에 올린다.</p>
+
+          <div class="callout callout-info">
+            <div class="callout-title">옷장을 부탁해 프로젝트에서의 배치 활용</div>
+            <p>피드 좋아요 수 집계, 만료된 알림 정리, 날씨 데이터 주기적 갱신 등이 배치 처리 후보다. 현재는 실시간으로 처리하고 있지만, 트래픽이 늘어나면 집계성 작업을 배치로 분리하는 것이 일반적인 성장 패턴이다.</p>
+          </div>
+
+          <h4>데이터 마이그레이션</h4>
+
+          <p>레거시 시스템에서 신규 시스템으로 수백만 건의 데이터를 이관한다. 단순 INSERT가 아니라 데이터 형식 변환, 유효성 검증, 중복 제거 등의 가공이 필요하다. Spring Batch의 Reader → Processor → Writer 구조가 이 패턴에 정확히 맞는다.</p>
+
+          <h2>Spring Batch 프로젝트 설정</h2>
+
+          <p>Spring Boot에서 Spring Batch를 시작하려면 의존성을 추가하고 기본 설정을 한다.</p>
+
+          <h4>의존성 추가</h4>
+
+<pre><code class="language-groovy">// build.gradle
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-batch'
+    runtimeOnly 'com.h2database:h2' // 메타데이터 테이블용 DB (개발용)
+}</code></pre>
+          <p><code>spring-boot-starter-batch</code>가 Spring Batch의 핵심 모듈을 포함한다. 메타데이터 테이블을 저장할 DB가 필요하므로, 개발 환경에서는 H2를 함께 추가한다. 운영 환경에서는 MySQL이나 PostgreSQL을 사용한다.</p>
+
+          <h4>application.yml 설정</h4>
+
+<pre><code class="language-yaml">spring:
+  batch:
+    jdbc:
+      initialize-schema: always  # 메타데이터 테이블 자동 생성
+    job:
+      enabled: false  # 애플리케이션 시작 시 자동 실행 방지</code></pre>
+          <p><code>initialize-schema: always</code>는 Spring Batch가 필요로 하는 메타데이터 테이블을 자동으로 생성한다. <code>job.enabled: false</code>는 애플리케이션 시작 시 모든 Job이 자동 실행되는 것을 방지한다. 이 설정이 없으면 서버를 띄울 때마다 배치가 돌아간다.</p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">job.enabled 설정을 빼먹지 마라</div>
+            <p>Spring Batch는 기본적으로 <mark>애플리케이션 시작 시 등록된 모든 Job을 자동 실행</mark>한다. 개발 중에 서버를 재시작할 때마다 배치가 돌면 곤란하다. 반드시 <code>job.enabled: false</code>로 설정하고, 필요할 때 명시적으로 실행하라.</p>
+          </div>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">배치와 실시간 처리를 같은 서버에서 돌리기</div>
+            <p>배치는 CPU와 메모리를 집중적으로 사용한다. API 서버와 같은 인스턴스에서 배치를 돌리면, 배치 실행 중 API 응답 시간이 느려질 수 있다. 가능하면 <mark>배치 전용 인스턴스</mark>를 분리하거나, 트래픽이 적은 새벽 시간대에 실행하라.</p>
+            <p>[!DANGER] 메타데이터 테이블을 무시하기</p>
+            <p>Spring Batch의 메타데이터 테이블은 단순한 로그가 아니다. <mark>재시작, 실행 이력 조회, 중복 실행 방지</mark>의 핵심이다. H2 같은 인메모리 DB를 운영에 쓰면 서버 재시작 시 이력이 사라져서 재시작 기능이 동작하지 않는다. 운영 환경에서는 반드시 영속적인 DB를 사용하라.</p>
+            <p>[!DANGER] 전체 데이터를 메모리에 올리려는 시도</p>
+            <p><code>findAll()</code>로 100만 건을 한 번에 메모리에 올리면 <code>OutOfMemoryError</code>가 발생한다. Spring Batch의 존재 이유가 바로 이 문제 해결이다. <mark>반드시 chunk 기반으로 나눠서 처리</mark>하라. Reader가 페이징으로 데이터를 조금씩 읽어오는 것이 핵심이다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#SpringBatch</span>
+          <span>#배치처리</span>
+          <span>#대량데이터</span>
+          <span>#Chunk</span>
+          <span>#배치아키텍처</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+          <a href="spring-batch-2-job-step.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

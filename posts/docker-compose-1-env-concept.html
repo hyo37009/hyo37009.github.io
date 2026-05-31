@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>1. 01 Compose 파일이 표현하는 실행 환경 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">1. 01 Compose 파일이 표현하는 실행 환경</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Docker Compose 정리 (1/9)</div>
+            <p>다음 편: <a href="docker-compose-2-service-image-port.html">2. 02 서비스 이미지 컨테이너 포트의 관계</a></p>
+          </div>
+
+
+
+          <p>﻿# [Docker Compose 개념] Compose 파일이 표현하는 실행 환경</p>
+
+          <div class="callout callout-info">
+            <div class="callout-title">Docker Compose 개념편</div>
+            <p>- <mark>Compose 파일이 표현하는 실행 환경</mark> ← 현재 문서</p>
+            <p>- <a href="docker-compose-2-service-image-port.html">서비스 이미지 컨테이너 포트의 관계</a></p>
+            <p>- <a href="docker-compose-3-network-volume.html">네트워크와 볼륨이 상태를 만드는 방식</a></p>
+            <p>- <a href="docker-compose-4-env-vars-order.html">환경 변수와 시작 순서 설계</a></p>
+          </div>
+
+          <p>Docker Compose는 "컨테이너 여러 개를 띄우는 명령어 묶음"이 아니다. 하나의 애플리케이션을 이루는 실행 단위를 선언하고, 그 단위들이 어떤 네트워크와 저장 공간을 공유하는지 정의하는 모델이다.</p>
+
+          <p>예시 프로젝트에서는 애플리케이션 서버와 데이터베이스가 따로 필요하다. Spring Boot 앱은 Java 프로세스이고, PostgreSQL은 DB 서버 프로세스다. 로컬에서 두 프로세스를 수동으로 띄울 수도 있지만, 그렇게 하면 실행 순서, 포트, 환경 변수, DB 데이터 위치를 매번 사람이 기억해야 한다. Compose 파일은 이 기억해야 할 내용을 YAML로 고정해준다.</p>
+
+          <h2>Compose가 관리하는 단위</h2>
+
+          <p>현재 <code>docker-compose.yml</code>의 핵심 구조는 다음과 같다.</p>
+
+<pre><code class="language-yaml">services:
+  app:
+    build: .
+    ports:
+      - "8081:80"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:15-alpine
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
+  app_storage:</code></pre>
+          <p>여기서 <code>services</code> 아래의 <code>app</code>과 <code>db</code>는 각각 하나의 실행 역할이다. <code>app</code>은 Spring Boot 서버를 실행하고, <code>db</code>는 PostgreSQL 서버를 실행한다. 서비스는 컨테이너 하나와 거의 비슷하게 느껴지지만, 개념적으로는 "이 설정으로 실행되는 역할"에 가깝다.</p>
+
+          <p><code>volumes</code>는 컨테이너가 삭제되어도 남겨야 하는 데이터를 다룬다. PostgreSQL 데이터는 컨테이너 내부에만 두면 컨테이너를 지울 때 같이 사라지므로 named volume으로 분리한다.</p>
+
+          <h2>프로젝트 이름이 중요한 이유</h2>
+
+          <p>Compose는 실행되는 묶음을 프로젝트로 본다. 프로젝트 이름은 네트워크와 볼륨 이름의 접두어로 쓰인다. 현재 <code>docker compose config</code>를 실행하면 다음처럼 정리된 모델이 만들어진다.</p>
+
+<pre><code class="language-text">networks:
+  default:
+    name: discordit_default
+volumes:
+  app_storage:
+    name: discordit_app_storage
+  postgres_data:
+    name: discordit_postgres_data</code></pre>
+          <p>여기서 <code>discordit</code>은 현재 디렉터리 이름에서 온 프로젝트 이름이다. 같은 Compose 파일을 다른 폴더에서 실행하면 프로젝트 이름이 달라질 수 있고, 그에 따라 네트워크와 볼륨 이름도 달라질 수 있다.</p>
+
+          <p>그래서 프로젝트 이름을 고정하고 싶다면 Compose 파일 상단에 <code>name</code>을 둘 수 있다.</p>
+
+<pre><code class="language-yaml">name: discodeit
+
+services:
+  app:
+    build: .</code></pre>
+          <p>이렇게 하면 실행 위치가 바뀌어도 Compose 리소스 이름이 더 예측 가능해진다. 단, 같은 컴퓨터에서 같은 <code>name</code>을 가진 Compose 프로젝트를 두 벌 동시에 띄우면 리소스 이름이 충돌할 수 있다. 여러 복사본을 동시에 실행해야 한다면 <code>docker compose -p 다른이름 up</code>처럼 실행 시점에 프로젝트 이름을 바꾸는 편이 낫다.</p>
+
+          <h2>docker compose config는 설계도를 펼쳐 보는 명령이다</h2>
+
+          <p><code>docker-compose.yml</code>은 사람이 쓰기 좋은 형태이고, <code>docker compose config</code>는 Compose가 실제로 이해한 최종 모델을 보여준다.</p>
+
+<pre><code class="language-bash">docker compose config</code></pre>
+          <p>이 명령은 다음을 확인할 때 유용하다.</p>
+
+          <ul>
+            <li><code>${POSTGRES_DB}</code> 같은 변수가 실제 어떤 값으로 보간되는지 확인한다.</li>
+            <li><code>ports</code>가 어떤 구조로 해석되는지 확인한다.</li>
+            <li>named volume과 default network의 실제 이름을 확인한다.</li>
+            <li>Compose 문법 경고를 먼저 확인한다.</li>
+          </ul>
+
+          <p>현재 프로젝트에서는 이 명령이 <code>version</code> 속성에 대해 obsolete 경고를 낸다. 최신 Compose에서는 <code>version</code>이 스키마 선택에 쓰이지 않고, 호환성을 위한 정보로만 남아 있기 때문이다. 그래서 새로 정리하는 Compose 파일에서는 <code>version: '3.8'</code>을 제거해도 된다.</p>
+
+          <div class="callout callout-info">
+            <div class="callout-title">config 출력 공유 금지</div>
+            <p><code>docker compose config</code>는 <code>.env</code> 값을 실제 값으로 펼친다. 비밀번호와 access key가 출력될 수 있으므로, 결과를 이슈나 질문 글에 그대로 올리면 안 된다.</p>
+          </div>
+
+          <h2>예시 실행 환경을 한 장으로 보기</h2>
+
+<div class="mermaid">
+flowchart TD
+    Host["호스트 머신"]
+
+    subgraph Compose["Compose project"]
+        App["app service<br/>Spring Boot"]
+        Db["db service<br/>PostgreSQL"]
+        PgVol[("postgres_data")]
+        AppVol[("app_storage")]
+        Net["default bridge network"]
+    end
+
+    Host -->|"localhost:8081"| App
+    Host -->|"localhost:5432"| Db
+    App -->|"jdbc:postgresql://db:5432"| Db
+    App --- AppVol
+    Db --- PgVol
+    App --- Net
+    Db --- Net
+</div>
+          <p>이 그림에서 가장 중요한 지점은 앱이 DB에 접근할 때 <code>localhost</code>가 아니라 <code>db</code>라는 서비스 이름을 쓴다는 점이다. <code>localhost</code>는 "내가 실행 중인 컨테이너 자신"을 가리킨다. 앱 컨테이너 안에서 <code>localhost:5432</code>를 호출하면 PostgreSQL 컨테이너가 아니라 앱 컨테이너 내부를 찾게 된다.</p>
+
+          <h2>Compose 파일을 읽는 순서</h2>
+
+          <p>처음 Compose 파일을 볼 때는 위에서 아래로 모든 줄을 해석하려고 하면 어렵다. 다음 순서로 읽는 편이 빠르다.</p>
+
+          <ol>
+            <li><code>services</code>에 어떤 실행 단위가 있는지 본다.</li>
+            <li>각 서비스가 <code>build</code>로 이미지를 만드는지, <code>image</code>로 이미지를 받아오는지 본다.</li>
+            <li>외부에 열리는 <code>ports</code>가 무엇인지 본다.</li>
+            <li>서비스끼리 연결되는 이름과 DB URL을 본다.</li>
+            <li>사라지면 안 되는 데이터가 <code>volumes</code>로 빠져 있는지 본다.</li>
+            <li><code>.env</code>, <code>environment</code>, <code>env_file</code>이 어떤 값을 어디로 보내는지 본다.</li>
+            <li><code>depends_on</code>과 <code>healthcheck</code>로 시작 순서를 어떻게 제어하는지 본다.</li>
+          </ol>
+
+          <p>이 순서로 읽으면 Compose 파일이 "긴 YAML"이 아니라 "실행 환경의 지도"로 보인다.</p>
+
+          <h2>참고한 공식 문서</h2>
+
+          <ul>
+            <li><a href="https://docs.docker.com/compose/intro/compose-application-model/">How Compose works</a></li>
+            <li><a href="https://docs.docker.com/reference/compose-file/version-and-name/">Version and name top-level elements</a></li>
+            <li><a href="https://docs.docker.com/compose/how-tos/project-name/">Specify a project name</a></li>
+          </ul>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Docker_Compose</span>
+          <span>#Compose_개념</span>
+          <span>#도커</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+          <a href="docker-compose-2-service-image-port.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

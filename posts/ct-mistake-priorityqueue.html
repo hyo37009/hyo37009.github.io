@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Java 자료구조] PriorityQueue 사용 시 자주 틀리는 사례 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Java 자료구조] PriorityQueue 사용 시 자주 틀리는 사례</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+
+          <div class="callout callout-warning">
+            <div class="callout-title">기준</div>
+            <p><code>PriorityQueue</code>는 peek만 빠르다. 넣고 빼는 순간에는 힙 재정렬이 일어나므로 <mark>삽입/삭제 비용과 내부 객체 변경</mark>을 같이 본다.</p>
+          </div>
+
+          <h2>사례 지도</h2>
+
+          <table>
+          <thead>
+          <tr><th>장면</th><th>실수</th><th>다음 기준</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>N번 삽입/삭제</td><td><code>O(N)</code>으로 계산</td><td><code>add</code>, <code>poll</code>은 <code>O(log N)</code></td></tr>
+          <tr><td>객체 우선순위 수정</td><td>PQ가 자동 재정렬된다고 생각</td><td>제거 후 재삽입 또는 새 객체 삽입</td></tr>
+          <tr><td>최대 힙</td><td><code>b - a</code> Comparator 사용</td><td><code>Integer.compare(b, a)</code></td></tr>
+          <tr><td>N번째 큰 수</td><td>모든 값을 저장</td><td>크기 N 최소 힙 유지</td></tr>
+          </tbody>
+          </table>
+
+<div class="mermaid">
+flowchart TD
+    Need["가장 큰 값 또는 작은 값이 계속 필요한가"] --> YesNo{"계속 필요"}
+    YesNo -->|아니오| Sort["정렬 또는 한 번 순회 검토"]
+    YesNo -->|예| Size{"필요한 값 개수가 제한되는가"}
+    Size -->|예| Fixed["고정 크기 PQ 유지"]
+    Size -->|아니오| Full["전체 PQ 가능"]
+    Fixed --> Cost["각 add poll 비용은 log N"]
+    Full --> Cost
+</div>
+          <h2><code>add()</code>와 <code>poll()</code>을 O(1)로 착각</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">발생 장면</div>
+            <p><code>BOJ1927 최소 힙</code>에서 N번 반복하므로 전체를 <code>O(N)</code>으로 계산했다.</p>
+          </div>
+
+<pre><code class="language-java">for (int i = 0; i &lt; n; i++) {
+    pq.add(input); // O(log N)
+    pq.poll();     // O(log N)
+}</code></pre>
+          <p>힙은 삽입/삭제 때 위아래로 재정렬한다. 전체는 <code>O(N log N)</code>이다.</p>
+
+          <p>상세: <a href="자료구조-연산-복잡도-착각.html">자료구조 연산 복잡도 착각</a></p>
+
+          <h2>내부 객체 값을 바꾸고 그대로 둠</h2>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">증상</div>
+            <p>PQ 안에 들어간 객체의 우선순위 필드를 바꿨는데 꺼내는 순서가 바뀌지 않는다.</p>
+          </div>
+
+          <p>PQ는 들어온 시점의 비교 결과로 힙을 만든다. 내부 객체 필드를 수정해도 자동으로 재정렬하지 않는다.</p>
+
+          <h4>고치는 기준</h4>
+
+<pre><code class="language-java">pq.remove(node);
+node.cost = nextCost;
+pq.offer(node);</code></pre>
+          <p>또는 변경된 상태를 새 객체로 넣고, 꺼낼 때 오래된 상태를 무시한다.</p>
+
+          <p>상세: <a href="pq-내부-객체-수정-후-재삽입-누락.html">PQ 내부 객체 수정 후 재삽입 누락</a></p>
+
+          <h2>최대 힙 Comparator에서 오버플로우</h2>
+
+<pre><code class="language-java">PriorityQueue&lt;Integer&gt; pq = new PriorityQueue&lt;&gt;((a, b) -&gt; b - a);</code></pre>
+          <p>값 범위가 크면 <code>b - a</code>가 오버플로우될 수 있다.</p>
+
+<pre><code class="language-java">PriorityQueue&lt;Integer&gt; pq = new PriorityQueue&lt;&gt;((a, b) -&gt; Integer.compare(b, a));</code></pre>
+          <h2>모든 값을 저장해서 메모리를 씀</h2>
+
+          <p><code>N번째 큰 수</code>처럼 필요한 것은 상위 N개뿐인데 전체 값을 저장하면 메모리가 커진다.</p>
+
+<div class="mermaid">
+flowchart LR
+    Input["새 값"] --> Add["PQ에 넣기"]
+    Add --> Over{"크기가 N 초과"}
+    Over -->|예| Poll["가장 작은 값 제거"]
+    Over -->|아니오| Keep["유지"]
+    Poll --> Answer["PQ top이 N번째 큰 수"]
+    Keep --> Answer
+</div>
+          <p>관련: <a href="백준-언어-버전별-메모리-제한.html">백준 언어 버전별 메모리 제한</a></p>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#코딩테스트</span>
+          <span>#자주하는실수</span>
+          <span>#Java</span>
+          <span>#PriorityQueue</span>
+          <span>#힙</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

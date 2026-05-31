@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[QueryDSL] 6. Spring Data JPA 통합 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[QueryDSL] 6. Spring Data JPA 통합</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">QueryDSL 가이드 (6/8)</div>
+            <p>이전 편: <a href="querydsl-5-projection-dto.html">[QueryDSL] 5. 프로젝션과 DTO 매핑</a></p>
+            <p>다음 편: <a href="querydsl-7-performance.html">[QueryDSL] 7. 성능 최적화</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">QueryDSL 시리즈</div>
+            <p><strong>01 기본</strong></p>
+            <p>1. <a href="querydsl-1-setup.html">환경 설정과 Q클래스</a></p>
+            <p>2. <a href="querydsl-2-basic-query.html">기본 쿼리 작성</a></p>
+            <p>3. <a href="querydsl-3-join-subquery.html">조인과 서브쿼리</a></p>
+            <p><strong>02 실전</strong></p>
+            <p>4. <a href="querydsl-4-dynamic-query.html">동적 쿼리</a></p>
+            <p>5. <a href="querydsl-5-projection-dto.html">프로젝션과 DTO 매핑</a></p>
+            <p>6. <a href="querydsl-6-spring-data.html">Spring Data JPA 통합</a> ← 현재 편</p>
+            <p><strong>03 심화</strong></p>
+            <p>7. <a href="querydsl-7-performance.html">성능 최적화</a></p>
+            <p>8. <a href="querydsl-8-patterns.html">실전 패턴과 면접 대비</a></p>
+          </div>
+
+          <p>QueryDSL로 쿼리를 작성하는 법은 배웠다. 이제 이것을 Spring Data JPA의 Repository 패턴과 어떻게 합치는지가 문제다. 기본 CRUD는 <code>JpaRepository</code>가 처리하고, 복잡한 조회는 QueryDSL이 담당하는 구조를 만들어야 한다.</p>
+
+          <h2>커스텀 Repository 패턴</h2>
+
+          <p>Spring Data JPA에서 QueryDSL을 쓰는 <mark>표준 패턴</mark>은 커스텀 Repository다. 세 개의 파일로 구성된다.</p>
+
+<div class="mermaid">
+classDiagram
+    direction BT
+    class JpaRepository {
+        <<interface>>
+        +save()
+        +findById()
+        +findAll()
+    }
+    class FeedRepositoryCustom {
+        <<interface>>
+        +search(condition)
+        +findRecentFeeds(limit)
+    }
+    class FeedRepository {
+        <<interface>>
+    }
+    class FeedRepositoryImpl {
+        -JPAQueryFactory queryFactory
+        +search(condition)
+        +findRecentFeeds(limit)
+    }
+
+    FeedRepository --|> JpaRepository
+    FeedRepository --|> FeedRepositoryCustom
+    FeedRepositoryImpl ..|> FeedRepositoryCustom
+</div>
+          <h3>커스텀 인터페이스</h3>
+
+          <p>QueryDSL로 구현할 메서드를 선언한다.</p>
+
+<pre><code class="language-java">public interface FeedRepositoryCustom {
+    List&lt;Feed&gt; search(FeedSearchCondition condition);
+    List&lt;Feed&gt; findRecentFeeds(int limit);
+}</code></pre>
+          <p>이 인터페이스에는 <code>@Repository</code> 같은 어노테이션이 필요 없다. 순수한 Java 인터페이스다.</p>
+
+          <h3>구현체</h3>
+
+          <p>커스텀 인터페이스를 구현하고, <code>JPAQueryFactory</code>를 주입받아 QueryDSL 쿼리를 작성한다.</p>
+
+<pre><code class="language-java">@RequiredArgsConstructor
+public class FeedRepositoryImpl implements FeedRepositoryCustom {
+
+    private final JPAQueryFactory queryFactory;
+
+    @Override
+    public List&lt;Feed&gt; search(FeedSearchCondition condition) {
+        return queryFactory
+                .selectFrom(feed)
+                .join(feed.user, user).fetchJoin()
+                .where(
+                        titleContains(condition.title()),
+                        regionEq(condition.region())
+                )
+                .orderBy(feed.createdAt.desc())
+                .fetch();
+    }
+
+    @Override
+    public List&lt;Feed&gt; findRecentFeeds(int limit) {
+        return queryFactory
+                .selectFrom(feed)
+                .orderBy(feed.createdAt.desc())
+                .limit(limit)
+                .fetch();
+    }
+
+    private BooleanExpression titleContains(String title) {
+        return title != null ? feed.title.contains(title) : null;
+    }
+
+    private BooleanExpression regionEq(String region) {
+        return region != null ? feed.region.eq(region) : null;
+    }
+}</code></pre>
+          <h3>JpaRepository에 합치기</h3>
+
+          <p>기존 <code>JpaRepository</code>가 커스텀 인터페이스를 추가로 상속하면 된다.</p>
+
+<pre><code class="language-java">public interface FeedRepository extends JpaRepository&lt;Feed, Long&gt;, FeedRepositoryCustom {
+    // JpaRepository의 기본 메서드 + 커스텀 메서드가 모두 사용 가능
+}</code></pre>
+          <p>이제 <code>FeedRepository</code>를 주입받으면 <code>save()</code>, <code>findById()</code> 같은 기본 메서드와 <code>search()</code>, <code>findRecentFeeds()</code> 같은 커스텀 메서드를 모두 쓸 수 있다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    participant S as Service
+    participant P as FeedRepository<br/>(Proxy)
+    participant JPA as SimpleJpaRepository
+    participant Impl as FeedRepositoryImpl
+
+    S->>P: save(feed)
+    P->>JPA: 기본 메서드 위임
+    JPA-->>S: 결과 반환
+
+    S->>P: search(condition)
+    P->>Impl: 커스텀 메서드 위임
+    Impl-->>S: 결과 반환
+</div>
+          <div class="callout callout-warning">
+            <div class="callout-title">구현체 네이밍 규칙</div>
+            <p>구현체의 이름은 <mark>반드시 <code>JpaRepository 인터페이스명 + Impl</code></mark>이어야 한다. <code>FeedRepository</code>가 메인 인터페이스이면 구현체는 <code>FeedRepositoryImpl</code>이다. Spring Data JPA가 이 네이밍 규칙으로 구현체를 자동 인식하여 프록시에 연결한다. <code>FeedRepositoryCustomImpl</code>이 아니라 <code>FeedRepositoryImpl</code>이다.</p>
+          </div>
+
+          <h2>별도 쿼리 Repository 패턴</h2>
+
+          <p>커스텀 Repository가 항상 정답은 아니다. 조회 쿼리가 많아지면 하나의 <code>FeedRepositoryImpl</code>에 메서드가 수십 개씩 쌓이고, 네이밍 규칙도 신경 써야 한다.</p>
+
+<div class="mermaid">
+graph TD
+    subgraph "커스텀 Repository 패턴"
+        S1[Service] --> FR1[FeedRepository]
+        FR1 --> JPA1[기본 CRUD]
+        FR1 --> IMPL1[커스텀 조회]
+    end
+
+    subgraph "별도 Repository 패턴"
+        S2[Service] --> FR2[FeedRepository]
+        S2 --> FQR[FeedQueryRepository]
+        FR2 --> JPA2[기본 CRUD]
+        FQR --> IMPL2[복잡한 조회]
+    end
+</div>
+          <p>대안으로, <mark>QueryDSL 전용 Repository를 별도로 만드는 방법</mark>이 있다.</p>
+
+<pre><code class="language-java">@Repository
+@RequiredArgsConstructor
+public class FeedQueryRepository {
+
+    private final JPAQueryFactory queryFactory;
+
+    public List&lt;Feed&gt; search(FeedSearchCondition condition) {
+        return queryFactory
+                .selectFrom(feed)
+                .where(
+                        titleContains(condition.title()),
+                        regionEq(condition.region())
+                )
+                .fetch();
+    }
+
+    // 조건 메서드들...
+}</code></pre>
+          <p>이 클래스는 Spring Data JPA와 무관한 일반 <code>@Repository</code> 빈이다. Service에서 <code>FeedRepository</code>와 <code>FeedQueryRepository</code>를 각각 주입받아 사용한다.</p>
+
+<pre><code class="language-java">@Service
+@RequiredArgsConstructor
+public class FeedService {
+    private final FeedRepository feedRepository;           // 기본 CRUD
+    private final FeedQueryRepository feedQueryRepository;  // 복잡한 조회
+}</code></pre>
+          <h3>어떤 패턴을 선택할까</h3>
+
+          <h4>커스텀 Repository</h4>
+
+          <ul>
+            <li>하나의 인터페이스로 모든 메서드에 접근할 수 있다.</li>
+            <li>Spring Data JPA의 공식 확장 방식이다.</li>
+            <li>Impl 네이밍 규칙을 지켜야 한다.</li>
+            <li>메서드가 많아지면 구현체가 비대해진다.</li>
+          </ul>
+
+          <h4>별도 쿼리 Repository</h4>
+
+          <ul>
+            <li>조회 전용 로직을 분리하여 관심사가 명확하다.</li>
+            <li>네이밍 규칙에 묶이지 않는다.</li>
+            <li>Service에서 Repository를 두 개 주입받아야 한다.</li>
+            <li>팀 내 컨벤션이 필요하다.</li>
+          </ul>
+
+          <p>두 방식을 섞어 쓰는 것도 가능하다. 간단한 커스텀 조회는 커스텀 Repository에, 복잡한 검색 쿼리는 별도 Repository에 두는 식이다. 프로젝트의 규모와 팀 컨벤션에 맞게 선택하면 된다.</p>
+
+          <h2>QuerydslRepositorySupport</h2>
+
+          <p>QueryDSL이 제공하는 추상 클래스로, <code>EntityManager</code>와 <code>Querydsl</code> 헬퍼를 자동으로 설정해준다.</p>
+
+<pre><code class="language-java">public class FeedRepositoryImpl extends QuerydslRepositorySupport
+        implements FeedRepositoryCustom {
+
+    public FeedRepositoryImpl() {
+        super(Feed.class);
+    }
+
+    @Override
+    public List&lt;Feed&gt; search(FeedSearchCondition condition) {
+        return from(feed)
+                .where(titleContains(condition.title()))
+                .fetch();
+    }
+}</code></pre>
+          <p><code>from()</code>을 바로 쓸 수 있어서 편리해 보이지만, 몇 가지 문제가 있다.</p>
+
+          <ul>
+            <li><code>select</code>로 시작할 수 없다. 항상 <code>from</code>으로 시작해야 한다.</li>
+            <li><code>JPAQueryFactory</code>를 직접 사용할 때보다 API가 제한적이다.</li>
+            <li>Spring Data JPA의 <code>Sort</code>와의 통합이 번거롭다.</li>
+          </ul>
+
+<div class="mermaid">
+graph LR
+    subgraph "QuerydslRepositorySupport"
+        QRS["from()으로 시작<br/>select 불가"]
+    end
+    subgraph "JPAQueryFactory 직접 사용"
+        JQF["select/from 자유<br/>유연한 API"]
+    end
+
+    QRS -.->|"레거시"| OLD[기존 프로젝트]
+    JQF -->|"권장"| NEW[새 프로젝트]
+
+    style JQF fill:#9f9,stroke:#333
+</div>
+          <p><mark>실무에서는 <code>JPAQueryFactory</code>를 직접 주입받는 방식이 더 선호</mark>된다. <code>QuerydslRepositorySupport</code>는 레거시 프로젝트에서 볼 수 있지만, 새 프로젝트에서는 굳이 쓸 필요 없다.</p>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">Impl 클래스 이름 오류</div>
+            <p><code>FeedRepository</code>에 커스텀 인터페이스를 연결했는데, 구현체를 <code>FeedCustomRepositoryImpl</code>이나 <code>FeedRepositoryCustomImpl</code>로 이름 지으면 Spring이 인식하지 못한다. 반드시 <code>FeedRepositoryImpl</code>이어야 한다. 메인 JpaRepository 인터페이스 이름 + Impl이 규칙이다.</p>
+            <p>[!DANGER] 커스텀 인터페이스를 JpaRepository에 연결하지 않음</p>
+            <p><code>FeedRepositoryCustom</code>을 만들고 <code>FeedRepositoryImpl</code>도 만들었는데, <code>FeedRepository extends JpaRepository&lt;Feed, Long&gt;</code>에 <code>FeedRepositoryCustom</code>을 추가 상속하지 않으면 커스텀 메서드가 연결되지 않는다.</p>
+            <p>[!DANGER] Impl 클래스에 @Repository 생략</p>
+            <p>커스텀 Repository 패턴에서 Impl 클래스에는 <code>@Repository</code>를 붙이지 않는다. Spring Data JPA가 자동으로 프록시에 연결하기 때문이다. 반면, 별도 쿼리 Repository 패턴에서는 <code>@Repository</code>를 붙여야 스프링 빈으로 등록된다. 두 패턴을 혼동하지 않도록 주의한다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#QueryDSL</span>
+          <span>#JPA</span>
+          <span>#Spring</span>
+          <span>#Repository</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="querydsl-5-projection-dto.html">&larr; 이전 글</a>
+          <a href="querydsl-7-performance.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

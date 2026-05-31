@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[코프링] 4. 설정 관리와 프로파일 전략 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[코프링] 4. 설정 관리와 프로파일 전략</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">코프링 실전 (4/5)</div>
+            <p>이전 편: <a href="kopring-3-querydsl.html">[코프링] 3. QueryDSL + Kotlin</a></p>
+            <p>다음 편: <a href="kopring-5-security.html">[코프링] 5. Spring Security + Kotlin 심화</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">코프링 실전 시리즈 (4/5)</div>
+            <p>이전 편: <a href="kopring-3-querydsl.html">3 QueryDSL + Kotlin</a></p>
+            <p>다음 편: <a href="kopring-5-security.html">5 Spring Security + Kotlin 심화</a></p>
+          </div>
+
+          <p>Spring Boot 애플리케이션은 환경(개발, 테스트, 운영)에 따라 다른 설정이 필요하다. DB 접속 정보, 외부 API 키, 로깅 레벨, 캐시 TTL 같은 값들이 환경마다 달라진다. Java에서는 <code>@Value</code>로 값을 주입받거나 <code>@ConfigurationProperties</code>로 바인딩하는데, Kotlin에서는 이 과정에서 몇 가지 주의할 점이 있다.</p>
+
+          <p>이 문서에서는 Kotlin + Spring Boot에서 설정을 타입 안전하게 관리하는 방법과, 프로파일 전략을 다룬다.</p>
+
+          <h2>@Value — 단순하지만 한계가 있다</h2>
+
+          <p>가장 기본적인 설정 주입 방법이다.</p>
+
+<pre><code class="language-kotlin">@Service
+class NotificationService(
+    @Value("\${notification.email.from}")
+    private val fromAddress: String,
+
+    @Value("\${notification.retry-count:3}")
+    private val retryCount: Int
+)</code></pre>
+          <ul>
+            <li><code>\${...}</code> — Kotlin에서는 <code>$</code>가 문자열 템플릿이므로, 백슬래시로 이스케이프해야 한다. 이걸 빠뜨리면 Kotlin이 변수를 찾으려 해서 컴파일 에러가 난다.</li>
+            <li><code>:3</code> — 기본값. 프로퍼티가 없으면 3을 사용한다.</li>
+          </ul>
+
+          <p><code>@Value</code>는 간단하지만 문제가 있다.</p>
+
+          <ul>
+            <li><strong>타입 안전하지 않다</strong> — 프로퍼티 키가 문자열이므로, 오타를 내면 런타임에서야 에러가 난다.</li>
+            <li><strong>구조화가 안 된다</strong> — 관련된 설정값이 흩어져서 관리하기 어렵다.</li>
+            <li><strong>테스트가 번거롭다</strong> — 설정값을 바꾸려면 프로퍼티 파일을 수정하거나 <code>@TestPropertySource</code>를 써야 한다.</li>
+          </ul>
+
+          <p>설정이 2~3개 이하로 단순하면 <code>@Value</code>로 충분하다. 하지만 그 이상이면 <code>@ConfigurationProperties</code>가 낫다.</p>
+
+          <hr>
+
+          <h2>@ConfigurationProperties — 타입 안전한 설정</h2>
+
+          <p>관련된 설정값을 하나의 클래스로 묶어서 바인딩하는 방법이다. Kotlin에서는 <code>data class</code>와 결합하면 깔끔하다.</p>
+
+          <h3>기본 사용법</h3>
+
+<pre><code class="language-yaml"># application.yml
+blog:
+  title: "My Blog"
+  posts-per-page: 10
+  upload:
+    max-size: 10MB
+    allowed-types:
+      - image/jpeg
+      - image/png
+      - image/webp</code></pre>
+
+<pre><code class="language-kotlin">@ConfigurationProperties(prefix = "blog")
+data class BlogProperties(
+    val title: String,
+    val postsPerPage: Int = 10,
+    val upload: UploadProperties = UploadProperties()
+) {
+    data class UploadProperties(
+        val maxSize: String = "5MB",
+        val allowedTypes: List&lt;String&gt; = emptyList()
+    )
+}</code></pre>
+          <ul>
+            <li><code>@ConfigurationProperties(prefix = "blog")</code> — <code>blog.*</code> 프로퍼티를 이 클래스에 바인딩한다.</li>
+            <li><code>data class</code> — 설정 객체는 불변이 좋으므로 <code>data class</code>에 <code>val</code>을 쓴다.</li>
+            <li><strong>kebab-case → camelCase</strong> 자동 변환 — <code>posts-per-page</code>가 <code>postsPerPage</code>에 바인딩된다. Spring Boot의 relaxed binding이 이걸 처리한다.</li>
+            <li><strong>중첩 구조</strong> — <code>upload.max-size</code>가 <code>UploadProperties.maxSize</code>에 바인딩된다.</li>
+          </ul>
+
+          <p>이 클래스를 활성화하려면 설정이 하나 필요하다.</p>
+
+<pre><code class="language-kotlin">@Configuration
+@EnableConfigurationProperties(BlogProperties::class)
+class AppConfig</code></pre>
+          <p>또는 Spring Boot 3.x에서는 <code>@ConfigurationPropertiesScan</code>을 메인 클래스에 붙이면 자동으로 스캔한다.</p>
+
+<pre><code class="language-kotlin">@SpringBootApplication
+@ConfigurationPropertiesScan
+class BlogApplication</code></pre>
+          <hr>
+
+          <h3>사용법</h3>
+
+          <p><code>@ConfigurationProperties</code> 클래스는 일반 빈처럼 주입받아 사용한다.</p>
+
+<pre><code class="language-kotlin">@Service
+class PostService(
+    private val blogProperties: BlogProperties,
+    private val postRepository: PostRepository
+) {
+    fun getRecentPosts(page: Int): Page&lt;Post&gt; {
+        val pageable = PageRequest.of(page, blogProperties.postsPerPage)
+        return postRepository.findByIsPublishedTrue(pageable)
+    }
+}</code></pre>
+          <p><code>@Value</code>와 달리 문자열 키가 없다. <code>blogProperties.postsPerPage</code>처럼 프로퍼티 접근이 타입 안전하고, IDE 자동완성이 된다.</p>
+
+          <hr>
+
+          <h3>Validation 적용</h3>
+
+          <p>설정값에도 Validation을 적용할 수 있다. 잘못된 설정으로 애플리케이션이 시작되는 것을 방지한다.</p>
+
+<pre><code class="language-kotlin">@Validated
+@ConfigurationProperties(prefix = "blog")
+data class BlogProperties(
+    @field:NotBlank
+    val title: String,
+
+    @field:Min(1)
+    @field:Max(100)
+    val postsPerPage: Int = 10,
+
+    @field:Valid
+    val upload: UploadProperties = UploadProperties()
+) {
+    data class UploadProperties(
+        @field:NotBlank
+        val maxSize: String = "5MB",
+
+        val allowedTypes: List&lt;String&gt; = emptyList()
+    )
+}</code></pre>
+          <ul>
+            <li><code>@Validated</code> — 클래스 레벨에 붙여야 Validation이 활성화된다.</li>
+            <li><code>@field:</code> — <a href="kopring-2-exception-validation.html">앞에서 다뤘듯이</a> Kotlin에서는 <code>@field:</code> 접두사가 필요하다.</li>
+            <li><code>@field:Valid</code> — 중첩 객체의 Validation도 수행하려면 필수.</li>
+          </ul>
+
+          <p>설정이 잘못되면 <mark>애플리케이션 시작 시점에 에러</mark>가 나서, 런타임에 잘못된 값으로 동작하는 것을 방지한다.</p>
+
+          <hr>
+
+          <h2>프로파일 전략</h2>
+
+          <p>Spring 프로파일은 환경별 설정을 분리하는 메커니즘이다. 개발, 테스트, 운영 환경에서 다른 설정을 적용할 수 있다.</p>
+
+          <h3>설정 파일 분리</h3>
+
+<pre><code>src/main/resources/
+├── application.yml          # 공통 설정
+├── application-local.yml    # 로컬 개발
+├── application-dev.yml      # 개발 서버
+├── application-prod.yml     # 운영 서버
+└── application-test.yml     # 테스트</code></pre>
+          <p><code>application-{profile}.yml</code> 파일은 해당 프로파일이 활성화될 때 <code>application.yml</code> 위에 <strong>덮어쓰기</strong> 방식으로 적용된다. 공통 설정은 <code>application.yml</code>에, 환경별 차이만 각 프로파일 파일에 넣는다.</p>
+
+<pre><code class="language-yaml"># application.yml — 공통
+spring:
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none
+
+blog:
+  title: "My Blog"
+  posts-per-page: 10</code></pre>
+
+<pre><code class="language-yaml"># application-local.yml — 로컬 개발
+spring:
+  datasource:
+    url: jdbc:h2:mem:blog
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+
+logging:
+  level:
+    org.hibernate.SQL: debug</code></pre>
+
+<pre><code class="language-yaml"># application-prod.yml — 운영
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+
+logging:
+  level:
+    root: warn</code></pre>
+          <p>운영 환경에서는 민감한 정보를 <code>${환경변수}</code>로 참조한다. YAML 파일에 비밀번호를 직접 적지 않는 것이 원칙이다.</p>
+
+          <hr>
+
+          <h3>프로파일 활성화</h3>
+
+          <p>프로파일을 활성화하는 방법은 여러 가지다.</p>
+
+<pre><code class="language-bash"># 1. 실행 시 인자로 지정
+java -jar blog.jar --spring.profiles.active=prod
+
+# 2. 환경 변수로 지정
+SPRING_PROFILES_ACTIVE=prod java -jar blog.jar
+
+# 3. application.yml에서 기본 프로파일 지정
+# spring:
+#   profiles:
+#     active: local</code></pre>
+          <p>로컬 개발에서는 <code>application.yml</code>에 <code>spring.profiles.active: local</code>을 넣어두고, 운영 배포 시에는 환경 변수로 덮어쓰는 것이 일반적인 패턴이다.</p>
+
+          <hr>
+
+          <h3>@Profile로 빈 분리</h3>
+
+          <p>설정 파일뿐 아니라 빈 자체를 프로파일별로 다르게 등록할 수 있다.</p>
+
+<pre><code class="language-kotlin">interface StorageService {
+    fun upload(file: MultipartFile): String
+}
+
+@Service
+@Profile("local", "dev")
+class LocalStorageService : StorageService {
+    override fun upload(file: MultipartFile): String {
+        // 로컬 파일 시스템에 저장
+        val path = Path.of("uploads", file.originalFilename ?: "unknown")
+        file.transferTo(path)
+        return path.toString()
+    }
+}
+
+@Service
+@Profile("prod")
+class S3StorageService(
+    private val s3Client: S3Client,
+    private val storageProperties: StorageProperties
+) : StorageService {
+    override fun upload(file: MultipartFile): String {
+        // S3에 업로드
+        // ...
+        return "https://s3.amazonaws.com/..."
+    }
+}</code></pre>
+          <ul>
+            <li>로컬/개발에서는 파일 시스템에 저장하고, 운영에서는 S3에 업로드한다.</li>
+            <li>사용하는 쪽은 <code>StorageService</code> 인터페이스만 의존하므로, 프로파일이 바뀌어도 코드 변경이 없다.</li>
+          </ul>
+
+          <hr>
+
+          <h2>설정 그룹 패턴</h2>
+
+          <p>프로젝트가 커지면 설정 클래스도 많아진다. 관련된 설정을 그룹으로 묶어서 관리하면 가독성이 좋아진다.</p>
+
+<pre><code class="language-kotlin">@ConfigurationProperties(prefix = "app")
+data class AppProperties(
+    val blog: BlogConfig = BlogConfig(),
+    val storage: StorageConfig = StorageConfig(),
+    val security: SecurityConfig = SecurityConfig()
+) {
+    data class BlogConfig(
+        val title: String = "My Blog",
+        val postsPerPage: Int = 10,
+        val summaryLength: Int = 200
+    )
+
+    data class StorageConfig(
+        val type: StorageType = StorageType.LOCAL,
+        val uploadPath: String = "uploads",
+        val maxSize: Long = 10 * 1024 * 1024  // 10MB
+    )
+
+    data class SecurityConfig(
+        val jwtSecret: String = "",
+        val jwtExpirationMs: Long = 3600000,  // 1시간
+        val allowedOrigins: List&lt;String&gt; = emptyList()
+    )
+
+    enum class StorageType {
+        LOCAL, S3
+    }
+}</code></pre>
+
+<pre><code class="language-yaml">app:
+  blog:
+    title: "My Kotlin Blog"
+    posts-per-page: 15
+  storage:
+    type: S3
+    max-size: 20971520
+  security:
+    jwt-secret: ${JWT_SECRET}
+    jwt-expiration-ms: 7200000
+    allowed-origins:
+      - https://myblog.com</code></pre>
+          <p>하나의 <code>AppProperties</code>를 주입받으면 모든 설정에 접근할 수 있다. 관련 설정이 계층적으로 구조화되어 찾기 쉽다.</p>
+
+          <hr>
+
+          <h2>심화 분석</h2>
+
+          <h4>@ConstructorBinding</h4>
+
+          <p>Spring Boot 3.x에서는 <code>@ConfigurationProperties</code>가 <strong>생성자 바인딩</strong>을 기본으로 사용한다. <code>data class</code>의 생성자 파라미터에 값이 바인딩되므로 <code>var</code>이 아닌 <code>val</code>을 쓸 수 있고, 불변 객체가 된다.</p>
+
+          <p>Spring Boot 2.x에서는 <code>@ConstructorBinding</code>을 명시적으로 붙여야 했지만, 3.x에서는 생성자가 하나뿐이면 자동으로 생성자 바인딩을 사용한다. 생성자가 여러 개라면 바인딩에 사용할 생성자에 <code>@ConstructorBinding</code>을 붙여야 한다.</p>
+
+          <h4>테스트에서 설정 오버라이드</h4>
+
+          <p>테스트에서 특정 설정값을 바꾸고 싶을 때는 <code>@TestPropertySource</code>를 사용한다.</p>
+
+<pre><code class="language-kotlin">@SpringBootTest
+@TestPropertySource(properties = [
+    "blog.posts-per-page=5",
+    "blog.title=Test Blog"
+])
+class PostServiceTest {
+    @Autowired
+    lateinit var blogProperties: BlogProperties
+
+    @Test
+    fun `설정이 오버라이드되었는지 확인`() {
+        assertEquals(5, blogProperties.postsPerPage)
+        assertEquals("Test Blog", blogProperties.title)
+    }
+}</code></pre>
+          <p>또는 <code>application-test.yml</code> 파일을 <code>src/test/resources</code>에 두고 <code>@ActiveProfiles("test")</code>를 사용할 수도 있다.</p>
+
+          <h4>설정 메타데이터</h4>
+
+          <p><code>@ConfigurationProperties</code>를 사용하면 IDE에서 <code>application.yml</code> 편집 시 자동완성이 가능하다. 이를 위해 <code>spring-boot-configuration-processor</code>를 추가한다.</p>
+
+<pre><code class="language-kotlin">// build.gradle.kts
+kapt("org.springframework.boot:spring-boot-configuration-processor")</code></pre>
+          <p>빌드 시 <code>META-INF/spring-configuration-metadata.json</code>이 생성되고, IDE가 이 파일을 읽어서 프로퍼티 자동완성과 문서를 제공한다. 개발 생산성에 의외로 큰 도움이 된다.</p>
+
+          <hr>
+
+          <h2>자주 하는 실수</h2>
+
+          <h4>$ 이스케이프 빠뜨리기</h4>
+
+<pre><code class="language-kotlin">// 컴파일 에러 — Kotlin이 ${ }를 문자열 템플릿으로 해석
+@Value("${server.port}")
+
+// 올바른 사용 — 백슬래시로 이스케이프
+@Value("\${server.port}")</code></pre>
+          <p>Kotlin에서 <code>$</code>는 문자열 보간(string interpolation) 문자이다. <code>@Value</code>의 SpEL 표현식에서 <code>$</code>를 쓰려면 반드시 <code>\$</code>로 이스케이프해야 한다. <code>@ConfigurationProperties</code>를 쓰면 이 문제를 아예 피할 수 있다.</p>
+
+          <h4>민감 정보를 코드에 직접 작성</h4>
+
+<pre><code class="language-yaml"># 나쁜 예 — 비밀번호가 코드에 노출
+spring:
+  datasource:
+    password: mySecretPassword123
+
+# 좋은 예 — 환경 변수 참조
+spring:
+  datasource:
+    password: ${DB_PASSWORD}</code></pre>
+          <p>비밀번호, API 키, JWT 시크릿 같은 민감 정보는 절대 YAML 파일에 직접 쓰지 않는다. 환경 변수, Spring Cloud Config, AWS Secrets Manager 같은 외부 설정 소스를 사용해야 한다. 특히 Git에 커밋되는 파일에는 더더욱 주의가 필요하다.</p>
+
+          <h4>프로파일별 설정 파일에 공통 설정 중복</h4>
+
+<pre><code class="language-yaml"># application-local.yml에 공통 설정까지 넣은 경우
+blog:
+  title: "My Blog"       # 이건 공통 설정인데?
+  posts-per-page: 10     # 이것도 공통인데?
+
+spring:
+  datasource:
+    url: jdbc:h2:mem:blog  # 이것만 환경별 설정</code></pre>
+          <p>프로파일 파일에는 <strong>그 환경에서만 달라지는 설정</strong>만 넣어야 한다. 공통 설정은 <code>application.yml</code>에 넣고, 프로파일 파일에서는 덮어쓸 것만 작성한다. 공통 설정이 중복되면 값을 바꿀 때 모든 프로파일 파일을 수정해야 한다.</p>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Kotlin</span>
+          <span>#Spring</span>
+          <span>#설정관리</span>
+          <span>#프로파일</span>
+          <span>#코프링</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="kopring-3-querydsl.html">&larr; 이전 글</a>
+          <a href="kopring-5-security.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

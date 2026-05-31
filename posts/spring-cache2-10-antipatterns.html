@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[캐시 가이드] 10. 안티패턴과 트러블슈팅 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[캐시 가이드] 10. 안티패턴과 트러블슈팅</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">스프링 캐시 심화 (10/11)</div>
+            <p>이전 편: <a href="spring-cache2-9-consistency.html">[캐시 가이드] 9. 캐시 일관성과 갱신 전략</a></p>
+            <p>다음 편: <a href="spring-cache2-11-interview.html">[캐시 가이드] 11. 면접 대비</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">캐시 가이드 시리즈</div>
+            <p><strong>01 캐시 기초</strong></p>
+            <p>- <a href="spring-cache2-1-concept.html">캐시의 개념과 동작 원리</a></p>
+            <p>- <a href="spring-cache2-2-layers.html">캐시 계층과 유형</a></p>
+            <p>- <a href="spring-cache2-3-patterns.html">캐시 전략과 패턴</a></p>
+            <p><strong>02 Spring Cache 핵심</strong></p>
+            <p>- <a href="spring-cache2-4-abstraction.html">Spring Cache 추상화</a></p>
+            <p>- <a href="spring-cache2-5-annotations.html">캐시 어노테이션 완전 정복</a></p>
+            <p>- <a href="spring-cache2-6-key-strategy.html">캐시 키 전략과 조건부 캐싱</a></p>
+            <p><strong>03 캐시 저장소</strong></p>
+            <p>- <a href="spring-cache2-7-caffeine.html">CacheManager와 Caffeine</a></p>
+            <p>- <a href="spring-cache2-8-redis.html">Redis 분산 캐시</a></p>
+            <p><strong>04 실전과 운영</strong></p>
+            <p>- <a href="spring-cache2-9-consistency.html">캐시 일관성과 갱신 전략</a></p>
+            <p>- <mark>안티패턴과 트러블슈팅</mark> ← 현재 편</p>
+            <p>- <a href="spring-cache2-11-interview.html">면접 대비</a></p>
+          </div>
+
+          <p>캐시는 잘 쓰면 성능을 극적으로 끌어올리지만, 잘못 쓰면 찾기 힘든 버그를 만들어낸다. 이 편에서는 <mark>실무에서 자주 발견되는 안티패턴</mark>과 그 해결 방법을 정리한다. 각 편에서 흩어져 나온 "자주 하는 실수"의 근본 원인을 더 깊이 파고든다.</p>
+
+          <h2>내부 호출 문제 — 가장 흔한 함정</h2>
+
+          <p>Spring Cache는 AOP 프록시 기반으로 동작한다. <mark>같은 클래스 내부에서 호출하면 프록시를 거치지 않으므로 캐시가 동작하지 않는다.</mark></p>
+
+          <h4>문제 상황</h4>
+
+<pre><code class="language-java">@Service
+public class WeatherService {
+
+    @Cacheable("weather")
+    public WeatherResponse getWeather(String city) {
+        return weatherApi.fetch(city);
+    }
+
+    public WeatherResponse getWeatherWithFallback(String city) {
+        // 내부 호출 — 캐시가 동작하지 않는다!
+        return this.getWeather(city);
+    }
+}</code></pre>
+          <p><code>getWeatherWithFallback</code>에서 <code>this.getWeather()</code>를 호출하면, 프록시 객체가 아닌 <mark>실제 객체의 메서드가 직접 호출</mark>된다. <code>@Cacheable</code>이 붙어 있어도 캐시를 확인하지 않고 매번 API를 호출한다.</p>
+
+          <h4>왜 이런 일이 벌어지는가</h4>
+
+          <p>Spring AOP의 프록시 구조를 이해하면 원인이 명확하다.</p>
+
+          <p>외부에서 <code>weatherService.getWeather("서울")</code>을 호출하면, 실제로는 다음 순서로 실행된다.</p>
+
+          <ol>
+            <li>호출자 → 프록시 객체의 <code>getWeather()</code> → 캐시 로직 실행 → 실제 객체의 <code>getWeather()</code></li>
+          </ol>
+
+          <p>하지만 같은 클래스 내부에서 <code>this.getWeather()</code>를 호출하면, 이미 실제 객체 안에 있으므로 프록시를 거치지 않는다.</p>
+
+          <ol>
+            <li>실제 객체의 <code>getWeatherWithFallback()</code> → 실제 객체의 <code>getWeather()</code> (프록시 건너뜀)</li>
+          </ol>
+
+<div class="mermaid">
+flowchart LR
+    subgraph "외부 호출 - 캐시 동작 ✅"
+        Caller1["호출자"] --> Proxy1["프록시"]
+        Proxy1 -->|캐시 로직| Target1["실제 객체"]
+    end
+
+    subgraph "내부 호출 - 캐시 동작 ❌"
+        Target2["실제 객체\nmethod A"] -->|"this.methodB()"| Target3["실제 객체\nmethod B"]
+    end
+</div>
+          <h4>해결 방법 — 클래스 분리</h4>
+
+          <p>가장 깔끔한 해결 방법이다. 캐시가 필요한 메서드를 별도의 클래스로 분리한다.</p>
+
+<pre><code class="language-java">@Service
+@RequiredArgsConstructor
+public class WeatherService {
+
+    private final WeatherCacheService weatherCacheService;
+
+    public WeatherResponse getWeatherWithFallback(String city) {
+        return weatherCacheService.getWeather(city);  // 외부 호출 — 캐시 동작
+    }
+}
+
+@Service
+public class WeatherCacheService {
+
+    @Cacheable("weather")
+    public WeatherResponse getWeather(String city) {
+        return weatherApi.fetch(city);
+    }
+}</code></pre>
+          <p><code>WeatherService</code>에서 <code>WeatherCacheService</code>를 주입받아 호출하면, Spring이 만든 <mark>프록시 객체를 통해 호출</mark>하므로 캐시가 정상 동작한다.</p>
+
+          <h4>해결 방법 — 자기 자신 주입</h4>
+
+          <p>클래스를 분리하고 싶지 않다면, 자기 자신을 주입받는 방법도 있다.</p>
+
+<pre><code class="language-java">@Service
+public class WeatherService {
+
+    @Lazy
+    @Autowired
+    private WeatherService self;
+
+    @Cacheable("weather")
+    public WeatherResponse getWeather(String city) {
+        return weatherApi.fetch(city);
+    }
+
+    public WeatherResponse getWeatherWithFallback(String city) {
+        return self.getWeather(city);  // 프록시를 통한 호출
+    }
+}</code></pre>
+          <p><code>@Lazy</code>를 붙여야 순환 참조가 발생하지 않는다. <code>self</code>는 프록시 객체이므로 캐시가 정상 동작한다. 하지만 코드가 직관적이지 않으므로 <mark>클래스 분리를 먼저 고려</mark>하라.</p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">이 문제는 @Transactional에도 동일하게 적용된다</div>
+            <p>같은 클래스 내부에서 <code>@Transactional</code> 메서드를 호출해도 트랜잭션이 동작하지 않는다. Spring AOP의 근본적인 한계이므로, 프록시 기반 어노테이션을 사용할 때는 <mark>항상 외부 호출인지 확인</mark>하라.</p>
+          </div>
+
+          <h2>거대한 객체 캐싱</h2>
+
+          <p>캐시에 저장하는 객체가 클수록 문제가 커진다.</p>
+
+          <h4>문제 상황</h4>
+
+<pre><code class="language-java">@Cacheable("feed")
+public Feed getFeed(Long feedId) {
+    return feedRepository.findById(feedId).orElseThrow();
+}</code></pre>
+          <p>JPA 엔티티를 그대로 캐시에 넣고 있다. 이것은 여러 문제를 일으킨다.</p>
+
+          <ul>
+            <li><strong>Lazy Loading 예외</strong> : 엔티티의 연관 관계가 <code>LAZY</code>로 설정되어 있으면, 캐시에서 꺼낸 엔티티에서 연관 객체에 접근할 때 <code>LazyInitializationException</code>이 발생한다. 영속성 컨텍스트가 이미 닫혔기 때문이다.</li>
+            <li><strong>직렬화 문제</strong> : 엔티티에 양방향 관계가 있으면 직렬화 시 <mark>무한 루프</mark>가 발생할 수 있다. Redis 캐시의 JSON 직렬화에서 특히 문제가 된다.</li>
+            <li><strong>메모리 낭비</strong> : 엔티티는 JPA 프록시 객체, 변경 감지 정보 등 불필요한 데이터를 포함하고 있다. 캐시에 필요한 것보다 훨씬 큰 객체가 저장된다.</li>
+          </ul>
+
+          <h4>올바른 방법</h4>
+
+          <p><mark>DTO로 변환한 후 캐시</mark>하라.</p>
+
+<pre><code class="language-java">@Cacheable(value = "feed", unless = "#result == null")
+public FeedResponse getFeed(Long feedId) {
+    return feedRepository.findById(feedId)
+        .map(FeedResponse::from)
+        .orElse(null);
+}</code></pre>
+          <p><code>FeedResponse</code>는 순수한 데이터 객체이므로 Lazy Loading 문제가 없고, 직렬화도 안전하며, 필요한 데이터만 포함하므로 메모리 효율적이다.</p>
+
+<div class="mermaid">
+flowchart LR
+    subgraph "안티패턴 ❌"
+        E1["JPA 엔티티"] --> C1["캐시"]
+        C1 --> P1["LazyInitializationException"]
+        C1 --> P2["직렬화 무한루프"]
+        C1 --> P3["메모리 낭비"]
+    end
+
+    subgraph "올바른 방법 ✅"
+        E2["JPA 엔티티"] --> DTO["DTO 변환"]
+        DTO --> C2["캐시"]
+        C2 --> S1["안전한 직렬화"]
+        C2 --> S2["필요한 데이터만"]
+    end
+</div>
+          <div class="callout callout-warning">
+            <div class="callout-title">JPA 엔티티를 캐시에 직접 넣지 마라</div>
+            <p>엔티티는 영속성 컨텍스트와 생명주기가 묶여 있다. 캐시에서 꺼낸 엔티티는 <mark>이미 분리(detached) 상태</mark>이므로, 변경 감지도 동작하지 않고, Lazy Loading도 실패한다. 반드시 DTO로 변환 후 캐시하라.</p>
+          </div>
+
+          <h2>캐시 키 충돌</h2>
+
+          <p>서로 다른 데이터가 같은 캐시 키를 가지면 <mark>잘못된 데이터가 반환</mark>된다.</p>
+
+          <h4>문제 상황</h4>
+
+<pre><code class="language-java">@Cacheable("data")
+public UserResponse getUser(Long id) { ... }
+
+@Cacheable("data")
+public FeedResponse getFeed(Long id) { ... }</code></pre>
+          <p>같은 캐시 이름 "data"를 쓰고, 키도 <code>Long id</code>로 동일하다. <code>getUser(1L)</code>을 먼저 호출하면 키 <code>1</code>에 <code>UserResponse</code>가 저장된다. 이후 <code>getFeed(1L)</code>을 호출하면 캐시에서 <code>UserResponse</code>가 반환되어 <mark>ClassCastException</mark>이 발생한다.</p>
+
+          <h4>올바른 방법</h4>
+
+          <ul>
+            <li><strong>캐시 이름을 분리</strong>하라. <code>"user"</code>, <code>"feed"</code>처럼 도메인별로 구분한다.</li>
+            <li>같은 캐시 이름을 공유해야 한다면 <strong>키에 메서드 이름을 포함</strong>시킨다.</li>
+          </ul>
+
+<pre><code class="language-java">@Cacheable("user")
+public UserResponse getUser(Long id) { ... }
+
+@Cacheable("feed")
+public FeedResponse getFeed(Long id) { ... }</code></pre>
+          <h2>null 캐싱 문제</h2>
+
+          <p><code>@Cacheable</code>은 기본적으로 <code>null</code>도 캐시에 저장한다.</p>
+
+          <h4>문제 상황</h4>
+
+<pre><code class="language-java">@Cacheable("feed")
+public FeedResponse getFeed(Long feedId) {
+    return feedRepository.findById(feedId)
+        .map(FeedResponse::from)
+        .orElse(null);
+}</code></pre>
+          <p>존재하지 않는 ID로 조회하면 <code>null</code>이 반환되고, 이 <code>null</code>이 캐시에 저장된다. 이후 해당 ID의 피드가 실제로 생성되어도, 캐시에는 <mark><code>null</code>이 계속 남아 있어</mark> 항상 <code>null</code>이 반환된다.</p>
+
+          <h4>올바른 방법</h4>
+
+<pre><code class="language-java">@Cacheable(value = "feed", unless = "#result == null")
+public FeedResponse getFeed(Long feedId) {
+    return feedRepository.findById(feedId)
+        .map(FeedResponse::from)
+        .orElse(null);
+}</code></pre>
+          <p><code>unless = "#result == null"</code>을 추가하면 <code>null</code> 결과는 캐시에 저장되지 않는다.</p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">Cache Penetration과 null 캐싱의 트레이드오프</div>
+            <p>악의적인 사용자가 존재하지 않는 ID로 반복 요청을 보내면, 매번 DB를 조회하게 된다. 이것을 Cache Penetration이라고 한다. 이 경우에는 의도적으로 <code>null</code>을 캐시하고, 짧은 TTL을 설정하는 것이 방어 수단이 될 수 있다. 상황에 따라 판단해야 한다.</p>
+          </div>
+
+          <h2>캐시와 트랜잭션 불일치</h2>
+
+          <p>DB 트랜잭션과 캐시 갱신은 <mark>원자적으로 동작하지 않는다.</mark></p>
+
+          <h4>문제 상황</h4>
+
+<pre><code class="language-java">@Transactional
+@CacheEvict(value = "feed", key = "#feedId")
+public void updateFeed(Long feedId, FeedUpdateRequest request) {
+    Feed feed = feedRepository.findById(feedId)
+        .orElseThrow();
+    feed.updateContent(request.getContent());
+    // 메서드 종료 후: 1. 캐시 삭제 → 2. 트랜잭션 커밋
+}</code></pre>
+          <p><code>@CacheEvict</code>는 메서드 실행 후 즉시 캐시를 삭제한다. 하지만 <code>@Transactional</code>의 커밋은 프록시의 후처리에서 발생하므로, <mark>캐시가 먼저 삭제되고 트랜잭션은 아직 커밋되지 않은</mark> 순간이 존재한다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    participant App as 메서드 실행
+    participant Cache as 캐시
+    participant TX as 트랜잭션
+    participant DB as DB
+
+    App->>DB: 데이터 수정
+    App->>Cache: 캐시 삭제
+    Note over Cache: 캐시 비어있음
+    Note over TX: 아직 커밋 전!
+    Note over Cache,TX: 이 틈에 다른 스레드가 조회하면?
+    TX->>DB: 커밋
+</div>
+          <p>이 짧은 틈에 다른 스레드가 조회하면 아직 업데이트되지 않은 DB 데이터가 캐시에 다시 저장된다. 트랜잭션이 커밋된 후에도 캐시에는 옛날 데이터가 남아 있게 된다.</p>
+
+          <h4>해결 방법 — TransactionAwareCacheManagerProxy</h4>
+
+<pre><code class="language-java">@Bean
+public CacheManager cacheManager() {
+    CaffeineCacheManager caffeineCacheManager = new CaffeineCacheManager();
+    caffeineCacheManager.setCaffeine(Caffeine.newBuilder()
+        .maximumSize(500)
+        .expireAfterWrite(10, TimeUnit.MINUTES));
+
+    return new TransactionAwareCacheManagerProxy(caffeineCacheManager);
+}</code></pre>
+          <p><code>TransactionAwareCacheManagerProxy</code>로 감싸면, 캐시 연산이 <mark>트랜잭션 커밋 후에 실행</mark>된다. 트랜잭션이 롤백되면 캐시 연산도 취소된다.</p>
+
+          <h4>해결 방법 — 이벤트 기반 무효화</h4>
+
+          <p>Spring의 <code>@TransactionalEventListener</code>를 사용하면 트랜잭션 커밋 후에 캐시를 무효화할 수 있다.</p>
+
+<pre><code class="language-java">@Service
+@RequiredArgsConstructor
+public class FeedService {
+
+    private final ApplicationEventPublisher eventPublisher;
+
+    @Transactional
+    public void updateFeed(Long feedId, FeedUpdateRequest request) {
+        Feed feed = feedRepository.findById(feedId).orElseThrow();
+        feed.updateContent(request.getContent());
+        eventPublisher.publishEvent(new FeedUpdatedEvent(feedId));
+    }
+}
+
+@Component
+@RequiredArgsConstructor
+public class FeedCacheEventHandler {
+
+    private final CacheManager cacheManager;
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void handleFeedUpdated(FeedUpdatedEvent event) {
+        Cache feedCache = cacheManager.getCache("feed");
+        if (feedCache != null) {
+            feedCache.evict(event.getFeedId());
+        }
+    }
+}</code></pre>
+          <p>이 방식은 <code>@CacheEvict</code>를 사용하지 않고, <mark>트랜잭션 커밋이 확인된 후에만 캐시를 무효화</mark>한다. 더 안전하지만 코드가 복잡해진다.</p>
+
+          <h2>직렬화/역직렬화 실패</h2>
+
+          <p>Redis 캐시를 사용할 때 자주 발생하는 문제다.</p>
+
+          <h4>문제 상황</h4>
+
+<pre><code>org.springframework.data.redis.serializer.SerializationException:
+Could not read JSON: Unrecognized field "newField"</code></pre>
+          <p>캐시에 저장된 JSON에는 <code>newField</code>가 없는데, DTO에 새 필드를 추가한 후 역직렬화하려고 하면 실패한다.</p>
+
+          <h4>올바른 방법</h4>
+
+          <p>DTO 클래스에 Jackson의 역직렬화 설정을 추가한다.</p>
+
+<pre><code class="language-java">@JsonIgnoreProperties(ignoreUnknown = true)
+public class FeedResponse {
+    // 알 수 없는 필드를 무시한다
+}</code></pre>
+          <p>또는 ObjectMapper 레벨에서 전역 설정을 한다.</p>
+
+<pre><code class="language-java">ObjectMapper objectMapper = new ObjectMapper();
+objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);</code></pre>
+          <div class="callout callout-tip">
+            <div class="callout-title">배포 시 캐시 비우기</div>
+            <p>DTO 구조가 변경되는 배포에서는 <mark>배포 전에 해당 캐시 영역을 비우는</mark> 것이 가장 확실한 방법이다. Redis라면 <code>FLUSHDB</code>나 특정 패턴의 키를 삭제하고, 로컬 캐시라면 서버 재시작 시 자동으로 비워진다.</p>
+          </div>
+
+          <h2>과도한 캐시 의존</h2>
+
+          <p>캐시가 애플리케이션의 <mark>필수 인프라</mark>처럼 동작하면 위험하다.</p>
+
+          <h4>문제 상황</h4>
+
+          <p>캐시가 없으면 DB 부하가 감당이 안 되는 구조를 만들어놨다. Redis가 다운되면 모든 요청이 DB로 몰려서 DB도 함께 죽는다.</p>
+
+          <h4>올바른 접근</h4>
+
+          <ul>
+            <li><mark>캐시 없이도 동작하는 시스템</mark>을 먼저 만들고, 캐시는 성능 최적화 수단으로 추가하라.</li>
+            <li><code>CacheErrorHandler</code>를 등록하여 캐시 장애 시 DB 폴백이 자동으로 일어나도록 하라.</li>
+            <li>DB 쿼리 자체를 최적화하라. 인덱스, 쿼리 튜닝, 페이지네이션 등 기본기를 소홀히 하지 마라.</li>
+            <li>캐시가 전부 날아갔을 때 DB가 버틸 수 있는지 <mark>부하 테스트</mark>로 확인하라.</li>
+          </ul>
+
+          <h2>트러블슈팅 체크리스트</h2>
+
+          <p>캐시가 기대대로 동작하지 않을 때 확인할 항목을 정리한다.</p>
+
+<div class="mermaid">
+flowchart TD
+    A["캐시가 동작하지 않는다!"] --> B{"@EnableCaching 있음?"}
+    B -->|아니오| B1["@EnableCaching 추가"]
+    B -->|예| C{"public 메서드?"}
+    C -->|아니오| C1["public으로 변경"]
+    C -->|예| D{"내부 호출?"}
+    D -->|예| D1["클래스 분리"]
+    D -->|아니오| E{"Spring Bean?"}
+    E -->|아니오| E1["Bean 등록 확인"]
+    E -->|예| F["키 전략/TTL 확인"]
+</div>
+          <h4>캐시가 전혀 동작하지 않을 때</h4>
+
+          <ol>
+            <li><code>@EnableCaching</code>이 설정 클래스에 있는가?</li>
+            <li>캐시 대상 메서드가 <code>public</code>인가?</li>
+            <li>같은 클래스 <mark>내부에서 호출</mark>하고 있지는 않은가?</li>
+            <li>캐시 이름이 CacheManager에 등록된 이름과 일치하는가? (SimpleCacheManager 사용 시)</li>
+            <li>Spring Bean으로 관리되는 객체에서 호출하고 있는가? (<code>new</code>로 생성한 객체에서는 AOP가 동작하지 않는다)</li>
+          </ol>
+
+          <h4>캐시 Hit가 되지 않을 때</h4>
+
+          <ol>
+            <li>캐시 키가 올바르게 생성되고 있는가? 로그를 찍어 확인하라.</li>
+            <li>파라미터 객체의 <code>hashCode()</code>/<code>equals()</code>가 올바르게 구현되어 있는가?</li>
+            <li><code>condition</code> 조건이 <code>false</code>를 반환하고 있지는 않은가?</li>
+            <li>TTL이 너무 짧게 설정되어 있지는 않은가?</li>
+            <li><code>maximumSize</code>를 넘어서 항목이 자주 제거되고 있지는 않은가?</li>
+          </ol>
+
+          <h4>Redis 관련 문제</h4>
+
+          <ol>
+            <li>Redis 연결이 정상적인가? <code>redis-cli ping</code>으로 확인하라.</li>
+            <li>직렬화/역직렬화에 문제가 없는가? Redis CLI에서 값을 직접 확인하라.</li>
+            <li>TTL이 설정되어 있는가? <code>TTL</code> 명령으로 확인하라.</li>
+            <li>메모리가 부족하지는 않은가? <code>INFO memory</code> 명령으로 확인하라.</li>
+          </ol>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">캐시를 디버깅 수단으로 무시하기</div>
+            <p>"캐시 때문에 옛날 데이터가 보이는 것 같으니까 캐시를 끄자"라는 대응은 <mark>근본 원인을 해결하지 못한다</mark>. 캐시를 끄면 문제가 사라진 것처럼 보이지만, 나중에 다시 활성화하면 같은 문제가 재발한다. 캐시 무효화 로직이 올바른지, 키 전략이 적절한지 근본 원인을 추적하라.</p>
+            <p>[!DANGER] @Cacheable 메서드에서 외부 상태를 변경하기</p>
+            <p><code>@Cacheable</code> 메서드는 Cache Hit 시 <mark>실행되지 않는다</mark>. 이 메서드 안에서 카운터 증가, 로그 기록, 이벤트 발행 등 부수 효과를 수행하면, 캐시가 Hit될 때는 이 동작이 스킵된다. 부수 효과가 필요하면 <code>@Cacheable</code> 메서드 바깥에서 처리하라.</p>
+            <p>[!DANGER] 모든 메서드에 습관적으로 @Cacheable 붙이기</p>
+            <p>캐시는 <mark>측정과 분석 후에 필요한 곳에만</mark> 적용해야 한다. 습관적으로 모든 조회 메서드에 <code>@Cacheable</code>을 붙이면, 무효화 로직이 복잡해지고, 디버깅이 어려워지며, 예상치 못한 stale data 문제가 곳곳에서 발생한다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#캐시가이드</span>
+          <span>#안티패턴</span>
+          <span>#트러블슈팅</span>
+          <span>#내부호출</span>
+          <span>#캐시키충돌</span>
+          <span>#직렬화</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="spring-cache2-9-consistency.html">&larr; 이전 글</a>
+          <a href="spring-cache2-11-interview.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

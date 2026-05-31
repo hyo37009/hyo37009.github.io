@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>6. 02 Compose 파일 1차 정리하기 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">6. 02 Compose 파일 1차 정리하기</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Docker Compose 정리 (6/9)</div>
+            <p>이전 편: <a href="docker-compose-5-diagnose.html">5. 01 현재 docker-compose.yml 진단하기</a></p>
+            <p>다음 편: <a href="docker-compose-7-spring-boot.html">7. 03 Spring Boot 컨테이너 설정 맞추기</a></p>
+          </div>
+
+
+
+          <p>﻿# [Docker Compose 실습] Compose 파일 1차 정리하기</p>
+
+          <div class="callout callout-info">
+            <div class="callout-title">Docker Compose 실습편</div>
+            <p>- <a href="docker-compose-5-diagnose.html">현재 docker-compose.yml 진단하기</a></p>
+            <p>- <mark>Compose 파일 1차 정리하기</mark> ← 현재 문서</p>
+            <p>- <a href="docker-compose-7-spring-boot.html">Spring Boot 컨테이너 설정 맞추기</a></p>
+            <p>- <a href="docker-compose-8-postgresql.html">PostgreSQL 볼륨과 초기화 다루기</a></p>
+            <p>- <a href="docker-compose-9-verify.html">실행 검증과 문제 해결 루틴</a></p>
+          </div>
+
+          <p>이번 실습의 목표는 현재 Compose 파일을 "돌아가는 파일"에서 "읽고 관리할 수 있는 파일"로 바꾸는 것이다. 여기서는 앱 코드나 Dockerfile은 아직 고치지 않고, Compose 파일의 책임만 먼저 정리한다.</p>
+
+          <p>정리 기준은 단순하다. 각 서비스에는 그 서비스가 필요한 값만 넣는다.</p>
+
+          <h2>1차 정리 방향</h2>
+
+          <table>
+          <thead>
+          <tr><th>정리 항목</th><th>처리</th></tr>
+          </thead>
+          <tbody>
+          <tr><td><code>version: '3.8'</code></td><td>제거</td></tr>
+          <tr><td>프로젝트 이름</td><td><code>name: discodeit</code> 추가</td></tr>
+          <tr><td><code>container_name</code></td><td>제거 권장</td></tr>
+          <tr><td><code>db.env_file</code></td><td>제거하고 <code>POSTGRES_*</code>만 명시</td></tr>
+          <tr><td><code>app.env_file</code></td><td>제거하고 앱에 필요한 변수만 명시</td></tr>
+          <tr><td>DB 포트</td><td>로컬 DB 클라이언트가 필요하면 유지</td></tr>
+          <tr><td>named volume</td><td>유지</td></tr>
+          <tr><td>healthcheck</td><td>유지</td></tr>
+          </tbody>
+          </table>
+
+          <p><code>container_name</code>은 꼭 필요한 경우가 아니면 제거하는 편이 낫다. Compose는 기본적으로 <code>프로젝트명-서비스명-번호</code> 형태로 컨테이너 이름을 만든다. 이 기본 네이밍을 쓰면 같은 Compose 파일을 다른 프로젝트 이름으로 여러 벌 실행하기 쉽다.</p>
+
+          <h2>정리된 Compose 예시</h2>
+
+          <p>아래 예시는 현재 프로젝트 기준의 1차 정리안이다. 실제 값은 <code>.env</code>에 두고, Compose 파일에서는 필요한 변수만 골라 각 서비스에 전달한다.</p>
+
+<pre><code class="language-yaml">name: discodeit
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${APP_PORT:-8081}:80"
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: ${SPRING_JPA_HIBERNATE_DDL_AUTO:-update}
+      SPRING_JPA_SHOW_SQL: ${SPRING_JPA_SHOW_SQL:-false}
+      AWS_S3_ACCESS_KEY: ${AWS_S3_ACCESS_KEY}
+      AWS_S3_SECRET_KEY: ${AWS_S3_SECRET_KEY}
+      AWS_S3_REGION: ${AWS_S3_REGION}
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET}
+      AWS_S3_PRESIGNED_URL_EXPIRATION: ${AWS_S3_PRESIGNED_URL_EXPIRATION:-600}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_USERNAME: ${ADMIN_USERNAME}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      JVM_OPTS: ${JVM_OPTS:-}
+    volumes:
+      - app_storage:/app/storage
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: postgres:15-alpine
+    ports:
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  app_storage:</code></pre>
+          <p><code>healthcheck.test</code>에서 <code>$${POSTGRES_USER}</code>처럼 달러를 두 번 쓴 점이 중요하다. Compose가 파일을 읽는 시점에 값을 먼저 치환하지 않고, 컨테이너 안에서 실행될 때 환경 변수를 읽게 하려는 의도다. 단순히 <code>${POSTGRES_USER}</code>를 써도 현재는 동작할 수 있지만, healthcheck 명령을 컨테이너 환경 기준으로 읽히게 하려면 이 방식이 더 명확하다.</p>
+
+          <h2>왜 env_file을 빼는가</h2>
+
+          <p><code>env_file</code>은 편하지만 경계를 흐린다.</p>
+
+<pre><code class="language-yaml">env_file:
+  - .env</code></pre>
+          <p>이 한 줄은 파일 안의 모든 변수를 해당 컨테이너에 넣는다. 작은 프로젝트에서는 편해 보이지만, 시간이 지나면 어떤 컨테이너가 어떤 비밀값을 알고 있는지 추적하기 어려워진다.</p>
+
+          <p>정리된 예시에서는 <code>.env</code>가 여전히 필요하다. 다만 <code>.env</code>는 Compose 파일의 <code>${...}</code> 값을 채우는 저장소로 쓰고, 컨테이너에 들어가는 값은 <code>environment</code>에서 서비스별로 고른다.</p>
+
+          <h2>APP_PORT와 POSTGRES_HOST_PORT를 추가하는 이유</h2>
+
+          <p>현재 파일은 포트가 고정되어 있다.</p>
+
+<pre><code class="language-yaml">ports:
+  - "8081:80"
+  - "5432:5432"</code></pre>
+          <p>로컬에서 이미 5432를 쓰고 있으면 DB 컨테이너가 뜨지 않는다. 포트를 <code>.env</code>로 뺄 수 있게 하면 충돌을 피하기 쉽다.</p>
+
+<pre><code class="language-env">APP_PORT=8081
+POSTGRES_HOST_PORT=5433</code></pre>
+          <p>이렇게 하면 앱은 <code>localhost:8081</code>, DB는 호스트에서 <code>localhost:5433</code>으로 접근한다. 컨테이너 내부의 DB 포트는 여전히 5432다. 앱의 JDBC URL은 <code>db:5432</code> 그대로 유지된다.</p>
+
+          <h2>정리 후 확인</h2>
+
+          <p>파일을 수정한 뒤에는 바로 실행하지 말고 먼저 구문과 해석 결과를 본다.</p>
+
+<pre><code class="language-bash">docker compose config</code></pre>
+          <p>확인할 포인트는 다음과 같다.</p>
+
+          <ul>
+            <li><code>version</code> 경고가 사라졌는가.</li>
+            <li><code>db.environment</code>에 <code>POSTGRES_*</code>만 있는가.</li>
+            <li><code>app.environment</code>에 앱이 필요한 값만 있는가.</li>
+            <li><code>ports</code>가 원하는 호스트 포트로 풀렸는가.</li>
+            <li><code>healthcheck</code>가 유지되었는가.</li>
+          </ul>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">config 출력은 계속 민감하다</div>
+            <p><code>env_file</code>을 제거해도 <code>environment</code>에 secret을 넘기면 <code>docker compose config</code>에는 실제 값이 출력된다. 출력 공유 금지 원칙은 그대로 유지한다.</p>
+          </div>
+
+          <h2>여기까지의 결과</h2>
+
+          <p>이 단계가 끝나면 Compose 파일은 다음 상태가 된다.</p>
+
+          <ul>
+            <li>최신 Compose에서 불필요한 <code>version</code>이 없다.</li>
+            <li>프로젝트 이름이 명시되어 리소스 이름이 예측 가능하다.</li>
+            <li>DB 컨테이너가 앱 secret을 받지 않는다.</li>
+            <li>앱 컨테이너가 필요한 Spring, AWS, JWT, Admin 값만 받는다.</li>
+            <li>DB healthcheck와 named volume은 유지된다.</li>
+          </ul>
+
+          <p>다음 실습에서는 앱 이미지와 Spring Boot 설정을 맞춘다. 특히 Dockerfile의 JAR 파일명 문제를 정리해야 한다.</p>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Docker_Compose</span>
+          <span>#환경변수</span>
+          <span>#실습</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="docker-compose-5-diagnose.html">&larr; 이전 글</a>
+          <a href="docker-compose-7-spring-boot.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Instancio] 2. 셀렉터와 커스터마이징 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Instancio] 2. 셀렉터와 커스터마이징</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Instancio (2/5)</div>
+            <p>이전 편: <a href="instancio-1-intro.html">[Instancio] 1. 테스트 객체, 직접 만들지 마라</a></p>
+            <p>다음 편: <a href="instancio-3-collection-model.html">[Instancio] 3. 컬렉션과 Model</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">Instancio 시리즈</div>
+            <p>1. <a href="instancio-1-intro.html">테스트 객체, 직접 만들지 마라</a></p>
+            <p>2. <strong>셀렉터와 커스터마이징</strong> <em>(현재 편)</em></p>
+            <p>3. <a href="instancio-3-collection-model.html">컬렉션과 Model</a></p>
+            <p>4. <a href="instancio-4-advanced.html">고급 기능</a></p>
+            <p>5. <a href="instancio-5-practical.html">실전 활용과 면접 대비</a></p>
+          </div>
+
+          <p><a href="instancio-1-intro.html">1편</a>에서 <code>Instancio.create()</code>로 객체를 통째로 생성하는 법을 배웠다. 하지만 실제 테스트에서는 "나이는 18세 이상이어야 한다", "이메일은 특정 형식이어야 한다"처럼 특정 필드에 조건을 걸어야 하는 경우가 대부분이다. 이때 셀렉터와 커스터마이징 API가 필요하다.</p>
+
+          <h2>셀렉터란</h2>
+
+          <p>셀렉터는 <mark>객체 그래프에서 어떤 필드나 타입을 지정할지</mark> 결정하는 도구다. CSS에서 <code>.class</code>나 <code>#id</code>로 요소를 선택하듯, Instancio의 셀렉터는 필드 이름, 타입, 어노테이션 등으로 대상을 지정한다.</p>
+
+<pre><code class="language-java">Person person = Instancio.of(Person.class)
+    .set(field(Person::getName), "홍길동")      // 필드 셀렉터
+    .set(all(LocalDateTime.class), LocalDateTime.now())  // 타입 셀렉터
+    .create();</code></pre>
+          <p><code>set()</code>의 첫 번째 인자가 셀렉터, 두 번째가 값이다. 셀렉터 종류에 따라 하나의 필드를 정확히 찍을 수도 있고, 특정 타입의 모든 필드를 한꺼번에 지정할 수도 있다.</p>
+
+          <h2>셀렉터 종류</h2>
+
+          <h3>field() — 특정 필드 지정</h3>
+
+          <p>가장 많이 쓰는 셀렉터다. 메서드 레퍼런스로 필드를 지정한다.</p>
+
+<pre><code class="language-java">field(Person::getName)
+field(Person::getAge)</code></pre>
+          <p>getter가 없거나 필드명과 메서드명이 다른 경우, 클래스와 필드명 문자열로 지정할 수도 있다.</p>
+
+<pre><code class="language-java">field(Person.class, "name")
+field(Phone.class, "countryCode")</code></pre>
+          <div class="callout callout-tip">
+            <div class="callout-title">메서드 레퍼런스를 우선 사용하자</div>
+            <p>문자열 기반 셀렉터는 필드명이 바뀌면 컴파일 타임에 잡히지 않는다. 리팩토링 안전성을 위해 메서드 레퍼런스 방식을 기본으로 쓰고, 불가능한 경우에만 문자열 방식을 사용하자.</p>
+          </div>
+
+          <h3>all() — 타입 전체 지정</h3>
+
+          <p>특정 타입의 모든 필드를 한 번에 지정한다. 객체 그래프 어디에 있든 해당 타입이면 전부 적용된다.</p>
+
+<pre><code class="language-java">all(String.class)          // 모든 String 필드
+all(LocalDateTime.class)   // 모든 LocalDateTime 필드
+all(Address.class)         // 모든 Address 타입 객체</code></pre>
+          <p><code>Person</code> 안에 <code>homeAddress</code>와 <code>workAddress</code>가 둘 다 <code>Address</code> 타입이면, <code>all(Address.class)</code>는 두 곳 모두에 적용된다.</p>
+
+          <h3>편의 셀렉터</h3>
+
+          <p>자주 쓰는 타입에는 축약 메서드가 있다.</p>
+
+          <ul>
+            <li><code>allStrings()</code> → <code>all(String.class)</code></li>
+            <li><code>allInts()</code> → <code>all(int.class)</code> + <code>all(Integer.class)</code></li>
+            <li><code>allLongs()</code> → <code>all(long.class)</code> + <code>all(Long.class)</code></li>
+            <li><code>allDoubles()</code> → <code>all(double.class)</code> + <code>all(Double.class)</code></li>
+            <li><code>allBooleans()</code> → <code>all(boolean.class)</code> + <code>all(Boolean.class)</code></li>
+          </ul>
+
+          <p><code>allInts()</code>는 primitive <code>int</code>와 wrapper <code>Integer</code>를 동시에 잡아준다. 이걸 <code>all(int.class)</code>로만 쓰면 <code>Integer</code> 필드는 빠진다.</p>
+
+          <h3>Predicate 셀렉터 — 조건 기반 지정</h3>
+
+          <p>필드 이름 패턴이나 타입 조건으로 여러 필드를 한꺼번에 잡을 때 쓴다.</p>
+
+<pre><code class="language-java">// 필드명에 "date"가 포함된 모든 필드
+fields(f -&gt; f.getName().contains("date"))
+
+// Collection을 구현한 모든 타입
+types(t -&gt; Collection.class.isAssignableFrom(t))</code></pre>
+          <p>빌더 패턴도 지원한다.</p>
+
+<pre><code class="language-java">// Long 타입이면서 @Id 어노테이션이 붙은 필드
+fields().ofType(Long.class).annotated(Id.class)</code></pre>
+          <div class="callout callout-warning">
+            <div class="callout-title">Predicate 셀렉터의 우선순위</div>
+            <p>Predicate 셀렉터는 일반 셀렉터보다 우선순위가 낮다. 같은 필드에 <code>field(Person::getName)</code>과 <code>fields(f -&gt; ...)</code>가 동시에 걸리면, <code>field()</code> 쪽이 이긴다. 이건 의도된 설계로, "구체적인 지정이 느슨한 지정보다 우선"이라는 원칙이다.</p>
+          </div>
+
+          <h2>스코프와 깊이</h2>
+
+          <h3>스코프 — 같은 타입을 구분</h3>
+
+          <p><code>Person</code>에 <code>homeAddress</code>와 <code>workAddress</code>가 둘 다 <code>Address</code> 타입이라면, <code>field(Address::getCity)</code>만으로는 어느 주소의 city인지 구분할 수 없다. 이때 스코프를 사용한다.</p>
+
+<pre><code class="language-java">Person person = Instancio.of(Person.class)
+    .set(field(Address::getCity).within(scope(Person::getHomeAddress)), "서울")
+    .set(field(Address::getCity).within(scope(Person::getWorkAddress)), "부산")
+    .create();</code></pre>
+          <p><code>within()</code>에 전달하는 <code>scope()</code>는 "어떤 경로를 통해 도달한 필드인지"를 한정한다. <code>homeAddress</code> 아래의 <code>city</code>와 <code>workAddress</code> 아래의 <code>city</code>를 구분하는 것이다.</p>
+
+          <h3>깊이 — 객체 그래프의 레벨 지정</h3>
+
+          <p>재귀적인 구조에서 특정 깊이의 노드만 선택할 수 있다.</p>
+
+<pre><code class="language-java">// 깊이 1에 있는 Address만
+all(Address.class).atDepth(1)
+
+// 깊이 3 이상의 모든 String
+allStrings().atDepth(depth -&gt; depth &gt;= 3)</code></pre>
+          <p>깊이 0은 루트 객체 자신, 깊이 1은 루트의 직접 필드, 깊이 2는 그 필드의 필드다.</p>
+
+          <h2>값 커스터마이징 API</h2>
+
+          <p>셀렉터로 "어디를"를 정했다면, 이제 "어떤 값을"을 정해야 한다. Instancio는 네 가지 방법을 제공한다.</p>
+
+          <h3>set() — 고정 값 할당</h3>
+
+          <p>가장 직관적이다. 지정한 필드에 항상 같은 값을 넣는다.</p>
+
+<pre><code class="language-java">Person person = Instancio.of(Person.class)
+    .set(field(Person::getName), "홍길동")
+    .set(field(Phone::getCountryCode), "+82")
+    .set(all(LocalDateTime.class), LocalDateTime.now())
+    .create();</code></pre>
+          <p><code>all(LocalDateTime.class)</code>로 타입 셀렉터를 쓰면, 객체 안의 모든 <code>LocalDateTime</code> 필드가 현재 시간으로 세팅된다.</p>
+
+          <h3>generate() — 내장 생성기 활용</h3>
+
+          <p>고정 값이 아니라 "범위"나 "패턴"으로 값을 생성하고 싶을 때 쓴다. 람다의 <code>gen</code> 파라미터로 내장 생성기에 접근한다.</p>
+
+<pre><code class="language-java">Person person = Instancio.of(Person.class)
+    .generate(field(Person::getAge), gen -&gt; gen.ints().range(18, 65))
+    .generate(field(Person::getEmail), gen -&gt; gen.net().email())
+    .generate(field(Phone::getNumber), gen -&gt; gen.text().pattern("#d#d#d-#d#d#d#d-#d#d#d#d"))
+    .create();</code></pre>
+          <p><code>gen</code>이 제공하는 주요 생성기를 정리하면 다음과 같다.</p>
+
+          <h4>숫자</h4>
+
+          <ul>
+            <li><code>gen.ints().range(1, 100)</code> — 정수 범위</li>
+            <li><code>gen.longs().min(1L).max(1000L)</code> — Long 범위</li>
+            <li><code>gen.doubles().range(0.0, 1.0)</code> — 실수 범위</li>
+            <li><code>gen.math().bigDecimal()</code> — BigDecimal</li>
+          </ul>
+
+          <h4>문자열</h4>
+
+          <ul>
+            <li><code>gen.string().minLength(3).maxLength(10)</code> — 길이 제한</li>
+            <li><code>gen.string().allowEmpty()</code> — 빈 문자열 허용</li>
+            <li><code>gen.string().nullable()</code> — null 허용</li>
+            <li><code>gen.text().pattern("#d#d#d")</code> — 패턴 기반. <code>#d</code>는 숫자, <code>#l</code>은 소문자, <code>#U</code>는 대문자</li>
+            <li><code>gen.text().uuid()</code> — UUID 문자열</li>
+          </ul>
+
+          <h4>시간</h4>
+
+          <ul>
+            <li><code>gen.temporal().localDate().past()</code> — 과거 날짜</li>
+            <li><code>gen.temporal().localDate().future()</code> — 미래 날짜</li>
+            <li><code>gen.temporal().localDate().range(from, to)</code> — 범위 지정</li>
+            <li><code>gen.temporal().localDateTime().past()</code> — 과거 일시</li>
+            <li><code>gen.temporal().instant().past()</code> — 과거 Instant</li>
+          </ul>
+
+          <h4>네트워크</h4>
+
+          <ul>
+            <li><code>gen.net().email()</code> — 이메일</li>
+            <li><code>gen.net().url()</code> — URL</li>
+            <li><code>gen.net().uri()</code> — URI</li>
+          </ul>
+
+          <h4>Enum과 선택</h4>
+
+          <ul>
+            <li><code>gen.enumOf(Status.class)</code> — Enum 값</li>
+            <li><code>gen.enumOf(Status.class).excluding(DELETED)</code> — 특정 값 제외</li>
+            <li><code>gen.oneOf("A", "B", "C")</code> — 주어진 목록 중 하나</li>
+          </ul>
+
+          <h4>컬렉션/배열</h4>
+
+          <ul>
+            <li><code>gen.collection().size(5)</code> — 크기 지정</li>
+            <li><code>gen.collection().minSize(2).maxSize(10)</code> — 크기 범위</li>
+            <li><code>gen.array().length(3)</code> — 배열 길이</li>
+            <li><code>gen.map().size(5)</code> — 맵 크기</li>
+          </ul>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">값 변환 — as() 메서드</div>
+            <p>생성기의 결과를 다른 타입으로 변환할 수 있다.</p>
+            <p>```java</p>
+            <p>// LocalDate를 String으로 변환</p>
+            <p>.generate(field("dateString"), gen -> gen.temporal().localDate().past().asString())</p>
+            <p>// Enum을 대문자 문자열로 변환</p>
+            <p>.generate(field("statusName"), gen -> gen.enumOf(Status.class).as(e -> e.name().toUpperCase()))</p>
+            <p>```</p>
+          </div>
+
+          <h3>supply() — Supplier/Generator 직접 제공</h3>
+
+          <p>내장 생성기로 표현하기 어려운 값을 직접 만들어야 할 때 쓴다. 두 가지 형태가 있다.</p>
+
+          <h4>Supplier 방식 — 외부 상태 활용</h4>
+
+<pre><code class="language-java">.supply(all(LocalDateTime.class), () -&gt; LocalDateTime.now())</code></pre>
+          <p><code>() -&gt; ...</code> 람다를 넘기는 형태다. 외부 라이브러리나 현재 시간 등 Instancio의 랜덤 시스템 밖의 값을 사용할 때 적합하다.</p>
+
+          <h4>Generator 방식 — Random 파라미터 활용</h4>
+
+<pre><code class="language-java">.supply(all(Phone.class), random -&gt; Phone.builder()
+    .countryCode(random.oneOf("+1", "+82", "+44"))
+    .number(String.valueOf(random.intRange(1000000, 9999999)))
+    .build())</code></pre>
+          <p><code>random -&gt;</code> 람다는 Instancio가 관리하는 <code>Random</code> 인스턴스를 받는다. 이걸 쓰면 <mark>seed 기반 재현성이 보장</mark>된다.</p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">Supplier vs Generator의 재현성 차이</div>
+            <p>Supplier(<code>() -&gt; ...</code>)는 Instancio의 seed와 무관하게 동작한다. 같은 seed를 줘도 <code>LocalDateTime.now()</code>는 매번 다른 값을 반환한다. 재현성이 필요한 랜덤 값은 반드시 Generator(<code>random -&gt; ...</code>)를 사용하자.</p>
+          </div>
+
+          <h3>onComplete() — 생성 후 콜백</h3>
+
+          <p>객체가 완전히 생성된 뒤에 추가 조작이 필요할 때 쓴다.</p>
+
+<pre><code class="language-java">Person person = Instancio.of(Person.class)
+    .onComplete(all(Address.class), (Address address) -&gt; {
+        address.setCity(address.getCity().toUpperCase());
+    })
+    .create();</code></pre>
+          <p><code>set()</code>이나 <code>generate()</code>로는 처리하기 어려운, 필드 간 관계가 있는 후처리에 유용하다.</p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">onComplete()가 호출되지 않는 경우</div>
+            <p>- 대상이 <code>null</code>이면 콜백이 실행되지 않는다</p>
+            <p>- <code>set()</code>이나 <code>supply(Supplier)</code>로 제공된 객체에도 콜백이 실행되지 않는다</p>
+            <p><code>supply(Generator)</code>로 제공된 객체에는 콜백이 실행된다. 이 차이는 Instancio가 "자기가 생성한 객체"에만 콜백을 적용하기 때문이다.</p>
+          </div>
+
+          <h2>ignore() — 필드 제외</h2>
+
+          <p>특정 필드를 아예 생성하지 않으려면 <code>ignore()</code>를 사용한다.</p>
+
+<pre><code class="language-java">Person person = Instancio.of(Person.class)
+    .ignore(field(Person::getId))
+    .ignore(all(LocalDateTime.class))
+    .create();</code></pre>
+          <p><code>ignore()</code>가 적용된 필드는 초기화되지 않는다. 참조 타입은 <code>null</code>, primitive 타입은 기본값(<code>0</code>, <code>false</code>)이 된다.</p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">ignore()의 우선순위</div>
+            <p><code>ignore()</code>는 <mark>모든 다른 API보다 우선순위가 높다.</mark> 같은 필드에 <code>set()</code>과 <code>ignore()</code>를 동시에 걸면, <code>ignore()</code>가 이긴다. 의도적으로 null이어야 하는 필드에 사용하자.</p>
+          </div>
+
+          <h2>withNullable() — null 허용</h2>
+
+          <p>기본적으로 Instancio는 모든 필드를 non-null로 생성한다. 특정 필드에 null이 올 수도 있게 하려면 <code>withNullable()</code>을 사용한다.</p>
+
+<pre><code class="language-java">Person person = Instancio.of(Person.class)
+    .withNullable(field(Person::getMiddleName))
+    .withNullable(allStrings())
+    .create();</code></pre>
+          <p><code>withNullable()</code>은 "null일 수도 있다"는 뜻이지, "반드시 null"이라는 뜻이 아니다. 값이 생성될 수도 있고, null이 될 수도 있다.</p>
+
+          <p><code>generate()</code> 안에서도 nullable을 지정할 수 있다.</p>
+
+<pre><code class="language-java">.generate(field(Person::getEmail), gen -&gt; gen.string().nullable())</code></pre>
+          <h2>Strict Mode와 Lenient Mode</h2>
+
+          <p>Instancio는 기본적으로 <mark>Strict Mode</mark>로 동작한다. 셀렉터를 지정했는데 실제로 매칭되는 필드가 없으면 <code>UnusedSelectorException</code>을 던진다.</p>
+
+<pre><code class="language-java">// Person에 "salary" 필드가 없으면 예외 발생
+Person person = Instancio.of(Person.class)
+    .set(field(Person.class, "salary"), 50000)
+    .create();</code></pre>
+          <p>이 설계는 의도적이다. 셀렉터 오타나 리팩토링 후 필드명 변경 같은 실수를 컴파일 시점 대신 <mark>테스트 실행 시점</mark>에라도 잡아주기 위함이다.</p>
+
+          <p>Strict Mode를 끄려면 <code>lenient()</code>를 사용한다.</p>
+
+<pre><code class="language-java">Person person = Instancio.of(Person.class)
+    .set(field(Person.class, "salary"), 50000)
+    .lenient()
+    .create();
+// 매칭 안 되는 셀렉터가 있어도 예외 없이 통과</code></pre>
+          <div class="callout callout-tip">
+            <div class="callout-title">언제 Lenient Mode를 쓰나</div>
+            <p>주로 여러 테스트에서 공유하는 Model을 만들 때 유용하다. Model에 다양한 필드 설정을 넣어두고, 각 테스트에서 필요한 것만 쓰는 구조라면, 매칭되지 않는 셀렉터가 생길 수밖에 없다. 이런 경우에 Lenient Mode를 적용한다. Model은 <a href="instancio-3-collection-model.html">다음 편</a>에서 자세히 다룬다.</p>
+          </div>
+
+          <h2>셀렉터 우선순위 정리</h2>
+
+          <p>여러 셀렉터가 같은 필드에 적용될 때, 어떤 것이 이기는지 규칙이 있다.</p>
+
+          <ul>
+            <li><code>ignore()</code> > 다른 모든 API</li>
+            <li>일반 셀렉터 > Predicate 셀렉터</li>
+            <li><code>field()</code> 셀렉터 > <code>all()</code> 타입 셀렉터</li>
+            <li>같은 종류의 셀렉터가 여럿이면 <mark>마지막에 선언된 것</mark>이 이긴다</li>
+          </ul>
+
+<pre><code class="language-java">Person person = Instancio.of(Person.class)
+    .set(allStrings(), "기본값")              // 1순위: 모든 String
+    .set(field(Person::getName), "홍길동")     // 2순위: 더 구체적
+    .create();
+// person.getName()은 "홍길동"
+// 나머지 String 필드는 "기본값"</code></pre>
+          <p>"구체적인 것이 일반적인 것보다 우선한다"로 기억하면 된다.</p>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">generate()와 supply()를 혼동</div>
+            <p><code>generate()</code>는 내장 생성기(<code>gen -&gt; ...</code>)를 사용하고, <code>supply()</code>는 직접 값을 제공(<code>() -&gt; ...</code> 또는 <code>random -&gt; ...</code>)한다. <code>generate()</code>에 <code>() -&gt; ...</code> 람다를 넘기면 컴파일 에러가 난다. "내장 생성기를 쓸 것인가, 직접 만들 것인가"로 구분하자.</p>
+            <p>[!DANGER] Strict Mode에서 오타난 셀렉터</p>
+            <p><code>field(Person.class, "naem")</code> 같은 오타는 <code>UnusedSelectorException</code>으로 잡힌다. 하지만 에러 메시지에 "unused selector"라고만 나와서 오타를 눈치채기 어려울 수 있다. 이럴 때 <code>verbose()</code>를 붙이면 셀렉터가 어떤 노드에도 매칭되지 않았다는 걸 확인할 수 있다.</p>
+            <p>[!DANGER] all() 셀렉터의 과도한 사용</p>
+            <p><code>set(allStrings(), "test")</code>를 쓰면 객체 안의 모든 String 필드가 "test"가 된다. <code>name</code>, <code>email</code>, <code>address</code> 전부 같은 값이 되어 테스트가 무의미해질 수 있다. 타입 셀렉터는 "기본값 세팅" 용도로 쓰고, 중요한 필드는 <code>field()</code> 셀렉터로 개별 지정하자.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Instancio</span>
+          <span>#셀렉터</span>
+          <span>#테스트</span>
+          <span>#Java</span>
+          <span>#커스터마이징</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="instancio-1-intro.html">&larr; 이전 글</a>
+          <a href="instancio-3-collection-model.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

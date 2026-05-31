@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[성능 테스트] 5. 병목 진단과 용량 계획 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[성능 테스트] 5. 병목 진단과 용량 계획</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">nGrinder 부하 테스트 (5/5)</div>
+            <p>이전 편: <a href="ngrinder-4-graph.html">[성능 테스트] 4. 결과 그래프 읽기</a></p>
+            <p>이 문서가 시리즈의 마지막 편입니다.</p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">시리즈</div>
+            <p>- <a href="ngrinder-1-setup.html">nGrinder 이해하기와 환경 구성</a></p>
+            <p>- <a href="스크립트-기초와-첫-실행.html">스크립트 기초와 첫 실행</a></p>
+            <p>- <a href="인증-스크립트-작성.html">인증 스크립트 작성</a></p>
+            <p>- <a href="ngrinder-4-graph.html">결과 그래프 읽기</a></p>
+            <p>- <strong>05 병목 진단과 용량 계획</strong></p>
+          </div>
+
+          <p>이전 편에서 포화 곡선을 그려서 "VUser 몇 명에서 서버가 한계에 도달하는가"를 찾았다. 이 편에서는 <mark>왜 거기서 멈추는가</mark>, 즉 병목의 원인을 진단하는 방법과, 최종적으로 "이 서버가 동시 몇 명을 감당하는가"라는 용량 계획을 도출한다.</p>
+
+          <h2>포화점에서 멈추는 이유</h2>
+
+          <p>서버가 포화되면 어딘가에서 리소스가 바닥난 것이다. 주로 세 곳 중 하나다.</p>
+
+          <h3>CPU</h3>
+
+          <p>서버의 CPU 사용률이 100%에 가까워졌다. 요청을 처리하는 연산 자체가 병목이다.</p>
+
+          <p>식당 비유: 요리사의 손이 멈출 틈 없이 계속 움직이는 상태다. 가스레인지도 남고, 재료도 있지만, <mark>요리사가 더 빠르게 움직일 수 없는 것</mark>이 한계다.</p>
+
+          <h3>DB 커넥션 풀</h3>
+
+          <p>HikariCP의 커넥션이 전부 사용 중이고, 대기 큐에 요청이 쌓이고 있다. DB 쿼리 자체는 빠르지만 커넥션을 얻기 위해 기다리는 시간이 병목이다.</p>
+
+          <p>식당 비유: 가스레인지가 4개뿐이다. 요리사는 5명인데, <mark>가스레인지 대기</mark>로 1명이 항상 놀고 있다.</p>
+
+          <h3>Tomcat Thread 풀</h3>
+
+          <p>Tomcat의 최대 Thread 수(기본 200)에 도달했다. 모든 Thread가 요청을 처리 중이고, 새 요청은 큐에서 대기한다.</p>
+
+          <p>식당 비유: 홀 종업원이 전부 서빙 중이다. 새 손님이 와도 <mark>안내해줄 종업원이 없어서</mark> 입구에서 기다린다.</p>
+
+          <h2>병목 확인 방법</h2>
+
+          <p>포화 상태에서 다음 세 가지를 동시에 확인하면 어디가 병목인지 알 수 있다.</p>
+
+          <h3>CPU 사용률 확인</h3>
+
+<pre><code class="language-bash">docker stats</code></pre>
+          <p>Spring Boot가 Docker 컨테이너에서 실행 중이면 <code>docker stats</code>로 CPU 사용률을 본다. 호스트에서 직접 실행 중이면 작업 관리자나 <code>top</code> 명령으로 확인한다.</p>
+
+          <ul>
+            <li><strong>CPU 80% 이상</strong> → CPU가 병목일 가능성이 높다</li>
+            <li><strong>CPU 50% 이하인데 TPS가 안 올라감</strong> → CPU가 아닌 다른 곳이 병목이다</li>
+          </ul>
+
+          <h3>DB 커넥션 풀 확인</h3>
+
+          <p>Spring Actuator가 활성화되어 있으면 HikariCP 메트릭을 API로 확인할 수 있다.</p>
+
+<pre><code class="language-bash"># 활성 커넥션 수
+curl localhost:8080/actuator/metrics/hikaricp.connections.active
+
+# 대기 중인 스레드 수
+curl localhost:8080/actuator/metrics/hikaricp.connections.pending</code></pre>
+          <ul>
+            <li><strong>active가 maximum에 가깝다</strong> → 커넥션 풀이 고갈되고 있다</li>
+            <li><strong>pending이 0보다 크다</strong> → 커넥션을 기다리는 요청이 있다. <mark>DB 커넥션이 병목</mark>이다</li>
+          </ul>
+
+          <h3>Tomcat Thread 풀 확인</h3>
+
+<pre><code class="language-bash"># 현재 사용 중인 Tomcat Thread 수
+curl localhost:8080/actuator/metrics/tomcat.threads.busy
+
+# 최대 Thread 수
+curl localhost:8080/actuator/metrics/tomcat.threads.config.max</code></pre>
+          <ul>
+            <li><strong>busy가 config.max에 가깝다</strong> → Thread 풀이 포화. <mark>Tomcat Thread가 병목</mark>이다</li>
+            <li><strong>busy가 config.max보다 한참 낮다</strong> → Thread 풀은 여유가 있고, 다른 곳이 병목이다</li>
+          </ul>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">Actuator 메트릭이 없을 때</div>
+            <p>Spring Actuator를 활성화하지 않았다면, 애플리케이션 로그에서 HikariCP 경고("Connection is not available, request timed out")를 찾는다. 또는 nGrinder 테스트 중 서버의 로그를 실시간으로 모니터링한다.</p>
+          </div>
+
+          <h3>진단 흐름</h3>
+
+<div class="mermaid">
+flowchart TD
+    START([포화점 도달]) --> CPU{CPU 80% 이상?}
+
+    CPU -->|그렇다| CPU_RESULT["CPU 바운드<br/>쿼리 최적화, 캐시 도입"]
+    CPU -->|아니다| CONN{DB 커넥션<br/>pending > 0?}
+
+    CONN -->|그렇다| CONN_RESULT["커넥션 풀 바운드<br/>풀 크기 조정, 쿼리 최적화"]
+    CONN -->|아니다| THREAD{Tomcat Thread<br/>busy ≈ max?}
+
+    THREAD -->|그렇다| THREAD_RESULT["Thread 풀 바운드<br/>Thread 수 조정, 비동기 처리"]
+    THREAD -->|아니다| OTHER["기타 원인<br/>네트워크, GC, 외부 서비스"]
+
+    style START fill:#FFF3E0,stroke:#FF9800,stroke-width:2px
+    style CPU fill:#E3F2FD,stroke:#2196F3,stroke-width:2px
+    style CONN fill:#E3F2FD,stroke:#2196F3,stroke-width:2px
+    style THREAD fill:#E3F2FD,stroke:#2196F3,stroke-width:2px
+    style CPU_RESULT fill:#FFEBEE,stroke:#F44336,stroke-width:2px
+    style CONN_RESULT fill:#FFEBEE,stroke:#F44336,stroke-width:2px
+    style THREAD_RESULT fill:#FFEBEE,stroke:#F44336,stroke-width:2px
+    style OTHER fill:#F3E5F5,stroke:#9C27B0,stroke-width:2px
+</div>
+          <h2>대표적 병목 패턴과 해결 방향</h2>
+
+          <h3>CPU 바운드</h3>
+
+          <p>TPS가 포화인 동시에 CPU가 80% 이상이다. 서버가 연산 자체에 바쁘다.</p>
+
+          <p>흔한 원인:</p>
+
+          <ul>
+            <li>무거운 쿼리 — N+1 문제, 풀스캔, 비효율적 JOIN</li>
+            <li>JSON 직렬화 — 응답 데이터가 크거나 순환 참조가 있다</li>
+            <li>비즈니스 로직 — 복잡한 계산이 요청마다 실행된다</li>
+          </ul>
+
+          <p>해결 방향:</p>
+
+          <ul>
+            <li>쿼리 최적화 — <a href="배치-로딩으로-n1-해결.html">배치 로딩</a>이나 인덱스 추가</li>
+            <li>캐시 도입 — 자주 조회되는 데이터를 Redis나 로컬 캐시에 저장</li>
+            <li>응답 크기 줄이기 — 필요한 필드만 반환하는 DTO 프로젝션</li>
+          </ul>
+
+          <h3>DB 커넥션 풀 바운드</h3>
+
+          <p>CPU는 여유가 있는데 커넥션 풀이 꽉 차 있다. 커넥션을 기다리는 시간이 전체 응답 시간을 지배한다.</p>
+
+          <p>흔한 원인:</p>
+
+          <ul>
+            <li>커넥션 풀 크기가 작다 — HikariCP 기본값은 10이다</li>
+            <li>쿼리 실행 시간이 길다 — 한 커넥션을 오래 점유하면 다른 요청이 대기한다</li>
+            <li>트랜잭션 범위가 넓다 — 불필요하게 긴 트랜잭션이 커넥션을 잡고 있다</li>
+          </ul>
+
+          <p>해결 방향:</p>
+
+          <ul>
+            <li>커넥션 풀 크기 조정 — <code>spring.datasource.hikari.maximum-pool-size</code> 증가. 단, 무작정 늘리면 DB 서버에 부담이 간다</li>
+            <li>쿼리 최적화 — 커넥션 점유 시간을 줄인다</li>
+            <li>트랜잭션 범위 축소 — 읽기 전용 쿼리에 <code>@Transactional(readOnly = true)</code></li>
+          </ul>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">커넥션 풀 크기의 경험 법칙</div>
+            <p>일반적으로 <code>CPU 코어 수 × 2 + 스피닝 디스크 수</code>가 시작점이다. 4코어 서버라면 10~20 정도. 무조건 크게 잡으면 DB 서버의 max_connections를 초과하거나, 커넥션 관리 오버헤드가 생긴다.</p>
+          </div>
+
+          <h3>Thread 풀 바운드</h3>
+
+          <p>CPU도 여유 있고 커넥션도 여유 있는데, Tomcat Thread가 전부 사용 중이다. 외부 서비스 호출이나 비동기 처리가 Thread를 오래 점유하고 있을 수 있다.</p>
+
+          <p>해결 방향:</p>
+
+          <ul>
+            <li><code>server.tomcat.threads.max</code> 증가 — 기본 200에서 더 올릴 수 있다</li>
+            <li>외부 호출을 비동기로 전환 — Thread를 빨리 반환한다</li>
+            <li>WebFlux 고려 — 동시 접속이 매우 많은 경우 논블로킹 방식이 적합하다</li>
+          </ul>
+
+          <h2>JMH 결과와 교차 분석</h2>
+
+          <p><a href="결과-분석과-최적화-판단.html">JMH 벤치마크</a>에서 배치 로딩이 N+1보다 13배 빠르다는 것을 확인했다. nGrinder 결과와 비교하면 "HTTP 계층이 얼마나 오버헤드를 추가하는가"를 알 수 있다.</p>
+
+          <h3>HTTP 오버헤드 산출</h3>
+
+          <p>JMH에서 배치 조회의 평균 시간이 18ms였다고 가정한다. nGrinder에서 VUser 1의 MTT가 45ms였다면, 차이인 27ms가 <mark>HTTP 오버헤드</mark>다.</p>
+
+<pre><code>HTTP 오버헤드 = nGrinder MTT(VUser 1) - JMH 평균 시간
+             = 45ms - 18ms
+             = 27ms</code></pre>
+          <p>이 27ms에는 다음이 포함된다.</p>
+
+          <ul>
+            <li>Spring Security 필터 체인 통과 시간</li>
+            <li>JSON 직렬화/역직렬화 시간</li>
+            <li>네트워크 왕복 시간 (Docker 내부이므로 작다)</li>
+            <li>Tomcat의 요청/응답 처리 시간</li>
+          </ul>
+
+          <h3>배수 비교</h3>
+
+          <p>JMH에서 13배 차이가 났다면, nGrinder에서는 그보다 작은 차이가 나는 것이 일반적이다.</p>
+
+          <p>JMH에서 N+1이 234ms, 배치가 18ms였다면(13배), nGrinder에서는 N+1이 261ms(234+27), 배치가 45ms(18+27)이 된다. 비율은 261÷45 ≈ <mark>5.8배</mark>로 줄어든다.</p>
+
+          <p>HTTP 오버헤드가 고정비용으로 양쪽에 동일하게 추가되기 때문이다. 절대 시간 차이는 여전히 크지만, 비율은 줄어든다.</p>
+
+          <div class="callout callout-info">
+            <div class="callout-title">왜 비율이 줄어드는가</div>
+            <p>JMH에서의 차이: 234 - 18 = 216ms (순수 쿼리 차이)</p>
+            <p>nGrinder에서의 차이: 261 - 45 = 216ms (동일한 쿼리 차이)</p>
+            <p>절대 차이는 같다. 하지만 분모(기준값)에 HTTP 오버헤드 27ms가 더해지면서 비율이 줄어든 것이다. 성능 최적화의 효과가 사라진 것이 아니라, HTTP 계층이 상수 비용을 추가한 것이다.</p>
+          </div>
+
+          <h2>용량 계획 도출</h2>
+
+          <p>부하 테스트의 최종 목표는 "이 서버로 동시 몇 명을 감당할 수 있는가"에 답하는 것이다.</p>
+
+          <h3>최대 동시 접속 수 산출</h3>
+
+          <p>포화 곡선에서 다음 값을 얻었다고 가정한다.</p>
+
+          <ul>
+            <li>포화점 TPS: 300</li>
+            <li>포화점 VUser: 50</li>
+            <li>포화점 MTT: 167ms</li>
+          </ul>
+
+          <p>이 서버는 <mark>동시 50명</mark>이 접속해도 평균 167ms의 응답 시간을 유지한다. TPS 300은 초당 300건의 요청을 처리할 수 있다는 뜻이다.</p>
+
+          <p>실제 서비스에서 사용자 1명이 평균 5초에 1번 요청을 보낸다고 가정하면, 동시 접속자 수는 더 늘어난다.</p>
+
+<pre><code>동시 접속자 = TPS × 평균 요청 간격
+           = 300 × 5초
+           = 1,500명</code></pre>
+          <p>1,500명이 동시에 서비스를 사용하면서 각각 5초에 한 번 요청을 보내면 TPS 300이 나온다. 이것이 서버 1대의 용량이다.</p>
+
+          <h3>면접에서 답하는 방법</h3>
+
+          <p>"서버 1대로 몇 명 처리할 수 있나요?"라는 질문에 이렇게 답할 수 있다.</p>
+
+          <blockquote>
+            <p>nGrinder로 부하 테스트를 실행해서 포화 곡선을 그렸습니다. VUser 50에서 TPS 300, MTT 167ms로 포화에 도달했고, 병목은 DB 커넥션 풀(HikariCP 기본 10개)이었습니다. 커넥션 풀을 20으로 늘리면 TPS 450까지 올라갔습니다. 사용자당 평균 요청 간격을 5초로 가정하면 서버 1대로 동시 접속자 약 2,000명을 처리할 수 있습니다.</p>
+          </blockquote>
+
+          <p>이 답변에는 도구(nGrinder), 방법론(포화 곡선), 수치(TPS, VUser), 병목 원인(HikariCP), 개선 결과(풀 크기 변경), 계산 근거(리틀의 법칙)가 모두 포함된다.</p>
+
+          <h2>면접 Q&A</h2>
+
+          <div class="callout callout-question">
+            <div class="callout-title">Q. JMH에서 13배 차이가 났는데 실제 서비스에서도 13배인가요?</div>
+            <p>아니다. nGrinder에서 측정하면 HTTP 오버헤드(Spring Security, JSON 직렬화, 네트워크)가 고정비용으로 추가된다. 절대 시간 차이는 유지되지만 비율은 줄어든다. JMH에서 13배였다면 nGrinder에서는 5~6배 정도가 일반적이다. 중요한 것은 비율이 아니라, 최적화된 쿼리가 동시 접속 상황에서도 유의미한 성능 향상을 보이느냐다.</p>
+            <p>[!QUESTION] Q. TPS가 높으면 무조건 좋은 건가요?</p>
+            <p>높은 TPS가 좋은 것은 맞지만, MTT와 함께 봐야 한다. TPS 1000인데 MTT가 5초이면 사용자 경험은 나쁘다. TPS 500에 MTT 50ms가 더 나은 서비스다. 또한 Error Rate가 0%인 상태에서의 TPS만 의미가 있다.</p>
+            <p>[!QUESTION] Q. 부하 테스트에서 얻은 수치를 프로덕션에 그대로 적용할 수 있나요?</p>
+            <p>로컬 환경의 수치를 프로덕션에 직접 대입하면 안 된다. 로컬에서는 Agent와 Target이 같은 머신에 있고, 네트워크 지연이 없고, DB 데이터가 적다. 프로덕션과 조건이 다르다. 하지만 <mark>상대적 비교</mark>는 유효하다. "커넥션 풀을 늘리면 TPS가 50% 올라간다"는 결론은 환경이 달라도 방향성이 유지된다.</p>
+            <p>[!QUESTION] Q. VUser 수와 실제 동시 접속자 수는 같은 건가요?</p>
+            <p>다르다. VUser는 쉬지 않고 연속으로 요청을 보내지만, 실제 사용자는 페이지를 읽거나 입력하는 동안 서버에 요청을 보내지 않는다. VUser 1명은 실제 사용자 여러 명의 부하에 해당한다. 리틀의 법칙으로 변환하면 <code>실제 동시 접속자 = TPS × 평균 요청 간격</code>이다.</p>
+          </div>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">병목 원인을 확인하지 않고 리소스를 무작정 늘림</div>
+            <p>"TPS가 안 올라가니까 서버 스펙을 올리자"는 접근은 비용만 낭비할 수 있다. CPU가 40%인데 서버 스펙을 올려봐야 효과가 없다. <mark>먼저 병목을 찾고, 그 리소스를 늘린다</mark>.</p>
+            <p>[!WARNING] 커넥션 풀을 무한정 늘림</p>
+            <p>HikariCP 풀 크기를 100으로 올리면 DB 서버의 <code>max_connections</code>를 초과할 수 있다. 서버가 여러 대이면 총 커넥션 수가 곱해진다. 서버 3대 × 100 = 300 커넥션인데, PostgreSQL 기본 <code>max_connections</code>는 100이다.</p>
+            <p>[!WARNING] 로컬 테스트 결과를 프로덕션 수치로 발표</p>
+            <p>"TPS 300입니다"라고 보고할 때 이것이 로컬 환경 결과라는 것을 반드시 명시한다. 로컬에서는 네트워크 지연이 없고 Agent가 리소스를 공유하므로 프로덕션과 조건이 다르다. 상대적 비교와 병목 분석은 유효하지만, 절대 수치는 환경에 따라 달라진다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#성능테스트</span>
+          <span>#nGrinder</span>
+          <span>#병목진단</span>
+          <span>#용량계획</span>
+          <span>#TPS</span>
+          <span>#면접</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="ngrinder-4-graph.html">&larr; 이전 글</a>
+          <a href="../pages/nbuntu.html">목록으로 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

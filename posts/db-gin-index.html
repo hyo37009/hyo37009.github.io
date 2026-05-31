@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[데이터베이스] GIN 인덱스 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[데이터베이스] GIN 인덱스</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+
+          <p><a href="postgresql-jsonb.html">JSONB</a> 컬럼에 필터 조건을 걸면 PostgreSQL은 테이블 전체를 훑는다. 행이 수천 건만 되어도 응답 시간이 눈에 띄게 느려진다. <mark>GIN 인덱스</mark>는 JSONB 내부의 키-값 쌍을 역색인으로 만들어, 특정 조건에 해당하는 행만 빠르게 찾아내는 인덱스 유형이다.</p>
+
+          <h2>B-tree가 JSONB에 맞지 않는 이유</h2>
+
+          <p>B-tree 인덱스는 <mark>하나의 스칼라 값</mark>을 기준으로 정렬된 트리를 구성한다. 정수, 문자열, 타임스탬프처럼 값 하나가 곧 정렬 키인 컬럼에 적합하다.</p>
+
+          <p>JSONB는 하나의 컬럼 안에 여러 키-값 쌍이 들어 있다. <code>{"skyStatus": "CLEAR", "type": "NONE", "current": 22.5}</code> 같은 데이터를 B-tree로 인덱싱하면, JSON 문서 전체를 하나의 값으로 취급해서 정렬한다. "skyStatus가 CLEAR인 행을 찾아라" 같은 <mark>내부 키 기반 검색</mark>에는 전혀 도움이 되지 않는다.</p>
+
+          <h2>역색인의 동작 원리</h2>
+
+          <p>GIN은 Generalized Inverted Index의 약자다. 전문 검색 엔진이 단어별로 "이 단어가 등장하는 문서 목록"을 관리하는 것과 같은 구조를 쓴다.</p>
+
+<div class="mermaid">
+flowchart LR
+    subgraph btree ["B-tree"]
+        direction TB
+        R1["row 1"] --- V1["22.5"]
+        R2["row 2"] --- V2["CLEAR"]
+        R3["row 3"] --- V3["NONE"]
+    end
+
+    btree ~~~ gin
+
+    subgraph gin ["GIN 역색인"]
+        direction TB
+        K1["skyStatus: CLEAR"] --- T1["row 1, row 5, row 8"]
+        K2["type: NONE"] --- T2["row 1, row 3"]
+        K3["current: 22.5"] --- T3["row 1, row 12"]
+    end
+
+    style btree fill:#f0f8f0,stroke:#4CAF50
+    style gin fill:#e3f2fd,stroke:#2196f3
+    style K1 fill:#e3f2fd,stroke:#2196f3,stroke-width:2px
+    style K2 fill:#e3f2fd,stroke:#2196f3,stroke-width:2px
+    style K3 fill:#e3f2fd,stroke:#2196f3,stroke-width:2px
+    style T1 fill:#fff3e0,stroke:#FF9800,stroke-width:2px
+    style T2 fill:#fff3e0,stroke:#FF9800,stroke-width:2px
+    style T3 fill:#fff3e0,stroke:#FF9800,stroke-width:2px
+    style R1 fill:#e8f5e9,stroke:#4CAF50,stroke-width:2px
+    style R2 fill:#e8f5e9,stroke:#4CAF50,stroke-width:2px
+    style R3 fill:#e8f5e9,stroke:#4CAF50,stroke-width:2px
+    style V1 fill:#fff3e0,stroke:#FF9800,stroke-width:2px
+    style V2 fill:#fff3e0,stroke:#FF9800,stroke-width:2px
+    style V3 fill:#fff3e0,stroke:#FF9800,stroke-width:2px
+</div>
+          <p>B-tree는 행 하나가 값 하나를 가리킨다. GIN은 반대로, <mark>키-값 조합 하나가 해당되는 행 목록</mark>을 가리킨다. <code>skyStatus: CLEAR</code>라는 엔트리 하나에 row 1, 5, 8이 연결되어 있으므로, 이 세 행만 꺼내면 된다.</p>
+
+          <p>이 구조 덕분에 "이 JSON 안에 특정 키-값이 포함되어 있는가?"라는 질문에 매우 빠르게 답할 수 있다.</p>
+
+          <h2>연산자 클래스</h2>
+
+          <p>GIN 인덱스를 생성할 때 <mark>연산자 클래스</mark>를 지정할 수 있다. 어떤 클래스를 쓰느냐에 따라 지원하는 연산자와 인덱스 크기가 달라진다.</p>
+
+          <h3>jsonb_ops</h3>
+
+          <p>기본값이다. 별도로 지정하지 않으면 이 클래스가 적용된다.</p>
+
+<pre><code class="language-sql">CREATE INDEX idx_weather ON feeds USING gin (weather_snapshot);
+-- 위와 동일
+CREATE INDEX idx_weather ON feeds USING gin (weather_snapshot jsonb_ops);</code></pre>
+          <p>JSONB의 키와 값을 <mark>모두</mark> 개별 엔트리로 인덱싱한다. 그래서 아래 연산자를 전부 지원한다.</p>
+
+          <ul>
+            <li><code>@&gt;</code> — containment. JSON이 특정 하위 구조를 포함하는가</li>
+            <li><code>?</code> — 특정 키가 존재하는가</li>
+            <li><code>?|</code> — 주어진 키 중 하나라도 존재하는가</li>
+            <li><code>?&amp;</code> — 주어진 키가 모두 존재하는가</li>
+          </ul>
+
+          <p>키 존재 여부를 검색해야 한다면 이 클래스를 써야 한다.</p>
+
+          <h3>jsonb_path_ops</h3>
+
+          <p><code>@&gt;</code> containment 연산자만 지원하는 대신, 인덱스 크기가 훨씬 작고 검색이 빠르다.</p>
+
+<pre><code class="language-sql">CREATE INDEX idx_weather ON feeds USING gin (weather_snapshot jsonb_path_ops);</code></pre>
+          <p>jsonb_ops가 키와 값을 따로 인덱싱하는 것과 달리, jsonb_path_ops는 <mark>루트부터 값까지의 전체 경로를 해시</mark>하여 하나의 엔트리로 저장한다. <code>{"skyStatus": "CLEAR"}</code>라면 <code>skyStatus → CLEAR</code>라는 경로 전체를 해시한 값 하나만 들어간다.</p>
+
+          <p>엔트리 수가 적으므로 인덱스 크기가 jsonb_ops 대비 2~3배 작다. 검색도 해시 비교만 하면 되니 더 빠르다.</p>
+
+          <h3>선택 기준</h3>
+
+          <p>대부분의 JSONB 필터링은 "특정 키에 특정 값이 있는가"를 확인하는 containment 검색이다. 키 존재 여부 검색(<code>?</code>)이 필요 없다면 <mark>jsonb_path_ops</mark>를 쓰는 것이 유리하다.</p>
+
+          <table>
+          <thead>
+          <tr><th>기준</th><th>jsonb_ops</th><th>jsonb_path_ops</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>지원 연산자</td><td><code>@&gt;</code>, <code>?</code>, `?\</td><td><code>, </code>?&`</td><td><code>@&gt;</code> 만</td></tr>
+          <tr><td>인덱스 크기</td><td>큼</td><td>2~3배 작음</td></tr>
+          <tr><td>검색 속도</td><td>보통</td><td>빠름</td></tr>
+          <tr><td>키 존재 검색</td><td>가능</td><td>불가</td></tr>
+          </tbody>
+          </table>
+
+          <h2>GIN 인덱스 생성</h2>
+
+          <p>실제 테이블에 GIN 인덱스를 추가하는 구문이다.</p>
+
+<pre><code class="language-sql">-- feeds 테이블의 weather_snapshot JSONB 컬럼
+CREATE INDEX idx_feeds_weather_snapshot
+    ON feeds USING gin (weather_snapshot jsonb_path_ops);
+
+-- feed_clothes 테이블의 clothes_snapshot JSONB 컬럼
+CREATE INDEX idx_feed_clothes_snapshot
+    ON feed_clothes USING gin (clothes_snapshot jsonb_path_ops);</code></pre>
+          <p>이미 데이터가 있는 테이블에 GIN 인덱스를 생성하면, 전체 행을 스캔하면서 인덱스를 구축한다. 행이 많으면 시간이 걸릴 수 있다. 운영 환경에서는 <code>CONCURRENTLY</code> 옵션으로 테이블 잠금 없이 생성할 수 있다.</p>
+
+<pre><code class="language-sql">CREATE INDEX CONCURRENTLY idx_feeds_weather_snapshot
+    ON feeds USING gin (weather_snapshot jsonb_path_ops);</code></pre>
+          <p><code>CONCURRENTLY</code>는 인덱스 구축 중에도 읽기/쓰기가 가능하다. 단, 트랜잭션 안에서는 사용할 수 없고, 구축 시간이 더 오래 걸린다.</p>
+
+          <h2>GIN이 동작하는 쿼리 패턴</h2>
+
+          <p>GIN 인덱스가 실제로 사용되려면 <mark>올바른 연산자</mark>를 써야 한다. 가장 중요한 것이 <code>@&gt;</code> containment 연산자다.</p>
+
+<pre><code class="language-sql">-- skyStatus가 CLEAR인 피드 조회
+SELECT * FROM feeds
+WHERE weather_snapshot @&gt; '{"skyStatus": "CLEAR"}';
+
+-- 강수 타입이 RAIN인 피드 조회
+SELECT * FROM feeds
+WHERE weather_snapshot @&gt; '{"type": "RAIN"}';
+
+-- 복합 조건도 가능
+SELECT * FROM feeds
+WHERE weather_snapshot @&gt; '{"skyStatus": "CLEAR", "type": "NONE"}';</code></pre>
+          <p><code>@&gt;</code>는 "왼쪽 JSON이 오른쪽 JSON을 포함하는가"를 검사한다. <code>weather_snapshot</code>에 <code>skyStatus: CLEAR</code>라는 키-값 쌍이 들어 있으면 참이다. GIN 역색인에서 해당 엔트리를 찾아 행 목록을 바로 반환하므로 전체 스캔이 발생하지 않는다.</p>
+
+          <p>jsonb_ops를 사용했다면 키 존재 검색도 인덱스를 탄다.</p>
+
+<pre><code class="language-sql">-- weather_snapshot에 skyStatus 키가 존재하는 행
+SELECT * FROM feeds
+WHERE weather_snapshot ? 'skyStatus';</code></pre>
+          <h2>GIN이 동작하지 않는 쿼리 패턴</h2>
+
+          <p>GIN 인덱스가 있어도 <mark>연산자가 맞지 않으면 무시</mark>된다. 다음 패턴들은 전부 Sequential Scan으로 빠진다.</p>
+
+          <h4>jsonb_extract_path_text 함수</h4>
+
+<pre><code class="language-sql">-- GIN 인덱스를 타지 않는다
+SELECT * FROM feeds
+WHERE jsonb_extract_path_text(weather_snapshot, 'skyStatus') = 'CLEAR';</code></pre>
+          <p>이 함수는 JSONB에서 값을 <mark>text로 추출</mark>한 뒤 문자열 비교를 한다. GIN은 JSONB 타입의 containment 연산을 인덱싱하는 것이지, text 비교를 인덱싱하는 것이 아니다. 반환 타입 자체가 달라서 GIN과 무관하다.</p>
+
+          <h4>화살표 연산자 + 등호 비교</h4>
+
+<pre><code class="language-sql">-- 역시 GIN 인덱스를 타지 않는다
+SELECT * FROM feeds
+WHERE weather_snapshot -&gt;&gt; 'skyStatus' = 'CLEAR';</code></pre>
+          <p><code>-&gt;&gt;</code> 연산자도 text를 반환한다. <code>jsonb_extract_path_text</code>와 같은 이유로 GIN이 무시된다.</p>
+
+          <h4>대소 비교</h4>
+
+<pre><code class="language-sql">-- GIN은 범위 검색을 지원하지 않는다
+SELECT * FROM feeds
+WHERE (weather_snapshot -&gt;&gt; 'current')::float &gt; 20.0;</code></pre>
+          <p>GIN은 "포함 여부"를 검사하는 인덱스다. 크다/작다 같은 범위 비교는 B-tree의 영역이다. 숫자 범위 검색이 필요하면 해당 값을 별도 컬럼으로 추출하고 B-tree 인덱스를 거는 것이 낫다.</p>
+
+          <h2>EXPLAIN으로 인덱스 확인</h2>
+
+          <p>인덱스를 생성했으면 실제로 쿼리가 인덱스를 사용하는지 확인해야 한다.</p>
+
+<pre><code class="language-sql">EXPLAIN ANALYZE
+SELECT * FROM feeds
+WHERE weather_snapshot @&gt; '{"skyStatus": "CLEAR"}';</code></pre>
+          <p>GIN 인덱스를 타는 경우 실행 계획에 <mark>Bitmap Index Scan</mark>이 나타난다.</p>
+
+<pre><code>Bitmap Heap Scan on feeds
+  Recheck Cond: (weather_snapshot @&gt; '{"skyStatus": "CLEAR"}'::jsonb)
+  -&gt;  Bitmap Index Scan on idx_feeds_weather_snapshot
+        Index Cond: (weather_snapshot @&gt; '{"skyStatus": "CLEAR"}'::jsonb)</code></pre>
+          <p>인덱스를 타지 않는 경우 <mark>Seq Scan</mark>이 나타난다.</p>
+
+<pre><code>Seq Scan on feeds
+  Filter: (jsonb_extract_path_text(weather_snapshot, 'skyStatus') = 'CLEAR')</code></pre>
+          <p><code>Seq Scan</code>이 보이면 쿼리의 연산자를 확인해야 한다. GIN이 지원하는 연산자를 쓰고 있는지가 첫 번째 체크 포인트다.</p>
+
+          <div class="callout callout-tip">
+            <p>행 수가 매우 적으면 PostgreSQL이 인덱스보다 Sequential Scan이 빠르다고 판단하여 인덱스를 무시할 수 있다. 테스트 시에는 충분한 데이터를 넣고 확인하거나, <code>SET enable_seqscan = off;</code>로 강제 비활성화하여 인덱스 동작을 확인한다.</p>
+          </div>
+
+          <h2>GIN 인덱스의 쓰기 비용</h2>
+
+          <p>GIN은 읽기 성능을 높이는 대신 <mark>쓰기 성능을 희생</mark>한다. INSERT나 UPDATE가 발생할 때마다 역색인 엔트리를 갱신해야 하기 때문이다.</p>
+
+          <p>PostgreSQL은 이 비용을 줄이기 위해 <mark>fastupdate</mark> 메커니즘을 사용한다. 새로운 엔트리를 즉시 인덱스에 반영하지 않고, 임시 목록에 모아두었다가 일정량이 쌓이면 한꺼번에 반영한다.</p>
+
+          <ul>
+            <li><code>fastupdate = on</code> — 기본값. 쓰기가 빠르지만, 임시 목록이 클 때 검색이 느려질 수 있다.</li>
+            <li><code>fastupdate = off</code> — 즉시 반영. 쓰기가 느려지지만 검색 성능이 일정하다.</li>
+          </ul>
+
+          <p>피드처럼 읽기가 쓰기보다 훨씬 많은 테이블에서는 기본값을 유지하는 것이 적절하다.</p>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">jsonb_extract_path_text를 쓰면서 GIN 효과를 기대</div>
+            <p><code>jsonb_extract_path_text</code>는 결과가 text 타입이다. GIN은 JSONB containment 연산을 인덱싱하므로, text 비교 쿼리에는 아무 효과가 없다. <code>@&gt;</code> 연산자로 변환해야 한다.</p>
+            <p>```sql</p>
+            <p>-- 변경 전 (GIN 무시)</p>
+            <p>WHERE jsonb_extract_path_text(weather_snapshot, 'skyStatus') = 'CLEAR'</p>
+            <p>-- 변경 후 (GIN 사용)</p>
+            <p>WHERE weather_snapshot @> '{"skyStatus": "CLEAR"}'</p>
+            <p>```</p>
+            <p>[!DANGER] jsonb_path_ops에서 키 존재 연산자 사용</p>
+            <p><code>jsonb_path_ops</code>는 <code>@&gt;</code> 연산자만 지원한다. <code>?</code> 연산자로 키 존재 여부를 검색하면 인덱스를 타지 않고 Sequential Scan이 발생한다. 키 존재 검색이 필요하면 <code>jsonb_ops</code>를 써야 한다.</p>
+            <p>[!DANGER] 소규모 테이블에 GIN을 걸고 성능 향상을 기대</p>
+            <p>GIN 인덱스는 역색인을 구축하고 유지하는 비용이 있다. 행이 수백 건 이하인 테이블에서는 Sequential Scan이 오히려 빠르다. PostgreSQL 옵티마이저도 이를 알고 있어서, 행이 적으면 인덱스를 무시한다. GIN은 <mark>데이터가 충분히 많을 때</mark> 의미가 있다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#PostgreSQL</span>
+          <span>#JSONB</span>
+          <span>#GIN</span>
+          <span>#인덱스</span>
+          <span>#역색인</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

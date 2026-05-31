@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[성능 테스트] 4. 결과 분석과 병목 진단 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[성능 테스트] 4. 결과 분석과 병목 진단</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">JMH 벤치마크 (4/4)</div>
+            <p>이전 편: <a href="jmh-3-data-seeding.html">[성능 테스트] 3. 대량 데이터 시딩과 벤치마크 설계</a></p>
+            <p>이 문서가 시리즈의 마지막 편입니다.</p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">시리즈</div>
+            <p>- <a href="jmh-1-microbenchmark.html">JMH 마이크로벤치마크</a></p>
+            <p>- <a href="jmh-2-testcontainers.html">TestContainers로 실제 인프라 테스트</a></p>
+            <p>- <a href="jmh-3-data-seeding.html">대량 데이터 시딩과 벤치마크 설계</a></p>
+            <p>- <strong>04 결과 분석과 병목 진단</strong></p>
+          </div>
+
+          <p>벤치마크를 실행하면 숫자가 나온다. "245ms vs 18ms니까 13배 빠르다"에서 끝내면 벤치마크를 돌린 의미가 절반이다. <mark>왜 그 차이가 나는지</mark>를 설명할 수 있어야 하고, Error 값이 의미하는 신뢰 구간, p99 레이턴시의 실무적 의미, EXPLAIN ANALYZE와 연결하는 방법까지 알아야 벤치마크 결과를 제대로 활용할 수 있다.</p>
+
+          <h2>JMH 결과 읽기</h2>
+
+          <h3>기본 출력 형태</h3>
+
+<pre><code>Benchmark                          Mode  Cnt    Score    Error  Units
+FeedBenchmark.n1Query              avgt   10  245.312 ± 12.456  ms/op
+FeedBenchmark.batchQuery           avgt   10   18.734 ±  2.103  ms/op
+FeedBenchmark.elasticsearchQuery   avgt   10   12.891 ±  1.567  ms/op</code></pre>
+          <p>각 컬럼의 의미를 정확히 이해해야 한다.</p>
+
+          <ul>
+            <li><strong>Mode</strong> — <code>avgt</code>는 Average Time. 한 번 실행하는 데 걸린 평균 시간이다.</li>
+            <li><strong>Cnt</strong> — 측정 횟수. Fork 2 × Iteration 5 = 10회.</li>
+            <li><strong>Score</strong> — 측정된 평균값. <code>245.312 ms/op</code>은 "한 번 호출에 평균 245ms"다.</li>
+            <li><strong>Error</strong> — <mark>95% 신뢰 구간의 반폭</mark>. <code>± 12.456</code>이면 진짜 평균이 232.856 ~ 257.768ms 사이에 있을 확률이 95%라는 뜻이다.</li>
+          </ul>
+
+          <h4>Error 비율과 신뢰도</h4>
+
+          <p>Error / Score 비율이 10%를 넘으면 측정이 불안정하다는 신호다.</p>
+
+          <table>
+          <thead>
+          <tr><th>Score</th><th>Error</th><th>비율</th><th>판단</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>245.3</td><td>±12.4</td><td>5%</td><td>안정적</td></tr>
+          <tr><td>245.3</td><td>±45.0</td><td>18%</td><td>불안정 — 측정 횟수 증가 필요</td></tr>
+          <tr><td>245.3</td><td>±120.0</td><td>49%</td><td>무의미 — 환경 문제 의심</td></tr>
+          </tbody>
+          </table>
+
+          <p>Error가 큰 원인은 대부분 외부 요인이다. GC가 측정 구간에 침범했거나, 컨테이너 DB의 캐시 상태가 Iteration마다 달랐거나, 호스트 머신의 CPU가 다른 프로세스에 점유당한 경우다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">Error 줄이는 방법</div>
+            <p>- Fork 수를 3~5로 늘린다. 서로 다른 JVM 상태를 평균화한다.</p>
+            <p>- Measurement의 time을 10초 이상으로 늘린다. Iteration 안에서 충분한 반복이 이루어져야 평균이 안정된다.</p>
+            <p>- 벤치마크 실행 중 다른 프로세스(IDE, 브라우저 등)를 최소화한다.</p>
+          </div>
+
+          <h2>백분위수 분석 — SampleTime</h2>
+
+          <p><code>AverageTime</code>은 평균만 보여준다. 평균이 18ms여도 p99가 200ms면 100번 중 1번은 사용자가 0.2초를 기다린다. <code>SampleTime</code> 모드를 사용하면 분포를 확인할 수 있다.</p>
+
+<pre><code class="language-java">@BenchmarkMode(Mode.SampleTime)
+@OutputTimeUnit(TimeUnit.MILLISECONDS)</code></pre>
+          <p>결과에 백분위수가 추가된다.</p>
+
+<pre><code>Benchmark                                    Mode  Cnt    Score   Error  Units
+FeedBenchmark.batchQuery                   sample  500   18.734 ± 2.103  ms/op
+FeedBenchmark.batchQuery:p0.50            sample        16.121          ms/op
+FeedBenchmark.batchQuery:p0.90            sample        22.456          ms/op
+FeedBenchmark.batchQuery:p0.95            sample        28.789          ms/op
+FeedBenchmark.batchQuery:p0.99            sample        45.123          ms/op
+FeedBenchmark.batchQuery:p0.999           sample       112.456          ms/op
+FeedBenchmark.batchQuery:p1.00            sample       187.654          ms/op</code></pre>
+          <h4>각 백분위수의 실무적 의미</h4>
+
+          <ul>
+            <li><strong>p50 (중앙값)</strong> — 절반의 요청이 이보다 빠르게 처리된다. 평균보다 중앙값이 "체감 성능"에 가깝다.</li>
+            <li><strong>p90</strong> — 10번 중 9번은 이 시간 안에 처리된다.</li>
+            <li><strong>p99</strong> — 100번 중 99번. SLA 기준으로 자주 사용된다. "API 응답 시간 p99 < 100ms" 같은 형태.</li>
+            <li><strong>p99.9</strong> — 1000번 중 999번. GC 스파이크나 커넥션 풀 대기 같은 간헐적 지연이 여기서 드러난다.</li>
+            <li><strong>p100 (최대값)</strong> — 최악의 경우. 아웃라이어 하나에 좌우되므로 이것만으로 판단하면 안 된다.</li>
+          </ul>
+
+<div class="mermaid">
+flowchart LR
+    subgraph Distribution ["응답 시간 분포"]
+        direction LR
+        P50["p50<br/>16ms"] --> P90["p90<br/>22ms"]
+        P90 --> P99["p99<br/>45ms"]
+        P99 --> P999["p99.9<br/>112ms"]
+    end
+
+    style P50 fill:#E8F5E9,stroke:#4CAF50,stroke-width:2px
+    style P90 fill:#E3F2FD,stroke:#2196F3,stroke-width:2px
+    style P99 fill:#FFF3E0,stroke:#FF9800,stroke-width:2px
+    style P999 fill:#FFEBEE,stroke:#F44336,stroke-width:2px
+    style Distribution fill:#fafafa,stroke:#999
+</div>
+          <p>p50과 p99의 차이가 크다면(위 예시에서 16ms vs 45ms, 약 3배), 간헐적 성능 저하 원인을 추적할 필요가 있다. DB 커넥션 풀 경합, GC pause, 디스크 I/O 스파이크 등이 원인이 될 수 있다.</p>
+
+          <h2>EXPLAIN ANALYZE로 쿼리 플랜 확인</h2>
+
+          <p>JMH가 "얼마나 걸리는지"를 알려준다면, EXPLAIN ANALYZE는 "왜 그만큼 걸리는지"를 알려준다. 벤치마크 결과에서 차이가 확인되면, 해당 쿼리의 실행 계획을 반드시 확인해야 한다.</p>
+
+          <h3>기본 사용법</h3>
+
+<pre><code class="language-sql">EXPLAIN ANALYZE
+SELECT f.*
+FROM feeds f
+WHERE f.created_at &lt; '2026-04-14T00:00:00Z'
+ORDER BY f.created_at DESC
+LIMIT 21;</code></pre>
+          <p>결과는 이런 형태다.</p>
+
+<pre><code>Limit  (cost=0.42..1.85 rows=21 width=456)
+       (actual time=0.032..0.045 rows=21 loops=1)
+  -&gt;  Index Scan Backward using idx_feeds_created_at on feeds
+        (cost=0.42..68234.42 rows=1000000 width=456)
+        (actual time=0.031..0.042 rows=21 loops=1)
+Planning Time: 0.089 ms
+Execution Time: 0.058 ms</code></pre>
+          <h4>읽는 순서</h4>
+
+          <p>실행 계획은 안쪽(들여쓰기가 깊은 곳)에서 바깥쪽으로 읽는다.</p>
+
+          <ul>
+            <li><strong>cost</strong> — 플래너가 추정한 비용. 첫 번째 값은 첫 행을 반환하는 비용, 두 번째 값은 전체 비용.</li>
+            <li><strong>actual time</strong> — 실제 소요 시간 (ms). 이것이 진짜 측정값이다.</li>
+            <li><strong>rows</strong> — 처리한 행 수. 추정(rows)과 실제(actual rows)가 크게 차이나면 통계가 부정확한 것이다.</li>
+            <li><strong>loops</strong> — 이 노드가 몇 번 실행됐는지.</li>
+          </ul>
+
+          <h3>N+1 vs 배치의 쿼리 플랜 차이</h3>
+
+          <h4>N+1 방식의 좋아요 카운트</h4>
+
+<pre><code class="language-sql">-- 이 쿼리가 피드 20건마다 반복
+EXPLAIN ANALYZE
+SELECT COUNT(*) FROM feed_likes WHERE feed_id = '특정-uuid';</code></pre>
+
+<pre><code>Aggregate  (cost=8.30..8.31 rows=1 width=8)
+           (actual time=0.025..0.025 rows=1 loops=1)
+  -&gt;  Index Only Scan using idx_feed_likes_feed_id on feed_likes
+        (cost=0.43..8.29 rows=5 width=0)
+        (actual time=0.018..0.021 rows=5 loops=1)</code></pre>
+          <p>한 번에 0.025ms. 가볍다. 하지만 20번 반복하면 <mark>0.5ms + 네트워크 RTT 20회</mark>다.</p>
+
+          <h4>배치 방식의 좋아요 카운트</h4>
+
+<pre><code class="language-sql">EXPLAIN ANALYZE
+SELECT fl.feed_id, COUNT(fl)
+FROM feed_likes fl
+WHERE fl.feed_id IN ('uuid-1', 'uuid-2', ..., 'uuid-20')
+GROUP BY fl.feed_id;</code></pre>
+
+<pre><code>HashAggregate  (cost=12.45..12.65 rows=20 width=24)
+               (actual time=0.089..0.095 rows=20 loops=1)
+  -&gt;  Index Scan using idx_feed_likes_feed_id on feed_likes
+        (cost=0.43..12.20 rows=100 width=16)
+        (actual time=0.012..0.065 rows=100 loops=1)</code></pre>
+          <p>한 번에 0.095ms로 20건의 카운트를 모두 가져온다. 개별 쿼리(0.025ms × 20 = 0.5ms)보다 빠르고, 네트워크 왕복도 <mark>1회</mark>다.</p>
+
+          <p>쿼리 자체의 실행 시간 차이보다 네트워크 왕복 횟수 차이가 더 큰 영향을 미친다. TestContainers 환경에서도 localhost 소켓 통신이므로 RTT가 0.1~0.5ms 정도인데, 이것이 쿼리 수에 곱해지면 무시할 수 없는 차이가 된다.</p>
+
+          <h2>병목 구간 식별</h2>
+
+          <p>JMH 결과에서 "느리다"는 것을 확인한 후, 어디가 느린지를 좁혀야 한다. 쿼리 성능 벤치마크에서 병목은 대체로 세 곳 중 하나에 있다.</p>
+
+          <h3>DB 쿼리 실행 시간</h3>
+
+          <p>EXPLAIN ANALYZE의 <code>Execution Time</code>이 길면 DB 내부 처리가 병목이다. 원인은 보통 세 가지다.</p>
+
+          <ul>
+            <li><strong>Seq Scan</strong> — 인덱스를 안 타고 전체 테이블을 스캔. 100만 건 테이블에서 Seq Scan이면 수백 ms가 걸린다.</li>
+            <li><strong>Nested Loop</strong> — 조인 전략이 Nested Loop인데 내부 테이블이 크면 O(N × M)이 된다.</li>
+            <li><strong>Sort</strong> — ORDER BY에 인덱스를 못 쓰면 메모리나 디스크에서 정렬. <code>Sort Method: external merge</code> 가 보이면 디스크 정렬이다.</li>
+          </ul>
+
+          <h3>네트워크 왕복</h3>
+
+          <p>DB 쿼리 하나하나는 빠른데 벤치마크 결과가 느리면, 쿼리 <mark>횟수</mark>가 문제다. N+1이 대표적이다. p6spy나 <code>spring.jpa.show-sql=true</code>로 실제 발생하는 쿼리 수를 세어 확인한다.</p>
+
+          <h3>애플리케이션 레이어 처리</h3>
+
+          <p>DB에서 가져온 데이터를 DTO로 변환하는 과정에서 시간이 걸릴 수 있다. S3 URL 생성, JSON 직렬화, 컬렉션 변환 등이 여기에 해당한다. JMH에서 DB 조회 부분과 DTO 변환 부분을 분리해서 측정하면 구간을 좁힐 수 있다.</p>
+
+          <h2>결과 시각화</h2>
+
+          <h3>JSON 결과 활용</h3>
+
+          <p>JMH의 <code>resultFormat = 'JSON'</code> 설정으로 결과를 JSON 파일로 저장하면, 시각화 도구로 그래프를 그릴 수 있다.</p>
+
+          <h4>JMH Visual Chart</h4>
+
+          <p>JMH JSON 결과를 웹에서 그래프로 변환해주는 도구들이 있다.</p>
+
+          <ul>
+            <li><strong>JMH Visualizer</strong> — JSON 파일을 업로드하면 막대 그래프를 생성한다</li>
+            <li><strong>jmh-result-processor</strong> — 여러 실행 결과를 비교하는 차트를 만든다</li>
+          </ul>
+
+          <h4>직접 정리</h4>
+
+          <p>단순 비교라면 표 하나로 충분하다.</p>
+
+<pre><code>| 방식 | 평균 (ms) | p99 (ms) | 쿼리 수 | 비고 |
+|------|-----------|----------|---------|------|
+| N+1 | 245.3 | 312.4 | 81 | 피드당 4쿼리 |
+| 배치 | 18.7 | 45.1 | 5 | IN절 일괄 조회 |
+| ES | 12.9 | 32.8 | 1+4 | 검색 1 + DTO 변환 4 |</code></pre>
+          <p>숫자만 나열하지 말고, <mark>왜 그 차이가 나는지</mark>를 쿼리 수와 실행 계획으로 설명하는 것이 핵심이다.</p>
+
+          <h2>벤치마크 결과의 한계</h2>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">벤치마크 ≠ 프로덕션 성능</div>
+            <p>TestContainers DB는 Docker 컨테이너 안에서 돌아간다. 디스크 I/O, 메모리, CPU가 프로덕션 환경과 다르다. 절대값("18ms")보다 <mark>상대 비교</mark>("13배 빠르다")에 의미를 두어야 한다.</p>
+          </div>
+
+          <p>그 외에도 벤치마크에서 재현하기 어려운 요소들이 있다.</p>
+
+          <ul>
+            <li><strong>동시 접속</strong> — JMH 단일 스레드 벤치마크는 커넥션 풀 경합, 락 대기를 반영하지 않는다</li>
+            <li><strong>캐시 히트율</strong> — 프로덕션에서는 자주 조회되는 데이터가 DB 버퍼 캐시에 올라가 있다</li>
+            <li><strong>네트워크 지연</strong> — 로컬 Docker vs 원격 RDS의 RTT 차이</li>
+            <li><strong>데이터 업데이트 부하</strong> — INSERT/UPDATE/DELETE가 동시에 발생하면 쿼리 성능이 달라진다</li>
+          </ul>
+
+          <p>이런 한계를 인지하면서도, 벤치마크는 <mark>구조적 차이를 수치로 확인</mark>하는 데 충분한 가치가 있다. "N+1이 배치보다 느리다"는 감이 아닌, "13배 느리고, 그 원인은 쿼리 수 81 vs 5의 차이다"라고 말할 수 있게 된다.</p>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">평균만 비교</div>
+            <p>평균이 같아도 분포가 다를 수 있다. 방식 A는 안정적으로 20ms 부근인데, 방식 B는 10~200ms를 오간다면 평균이 같아도 B가 더 위험하다. <code>SampleTime</code> 모드로 p99까지 확인한다.</p>
+            <p>[!WARNING] 한 번의 결과로 결론</p>
+            <p>벤치마크를 한 번만 돌리고 결론을 내면, 그날의 컨테이너 상태나 호스트 부하에 의존한 결과일 수 있다. 최소 2~3번 독립적으로 실행해서 결과가 일관되는지 확인한다.</p>
+            <p>[!WARNING] EXPLAIN 없이 숫자만 보고 끝내기</p>
+            <p>"배치가 빠르다"는 것만 알면 절반이다. EXPLAIN ANALYZE로 인덱스를 타는지, Hash Join인지 Nested Loop인지 확인해야 최적화 방향을 잡을 수 있다. 숫자 뒤에 있는 <mark>실행 계획을 반드시 확인</mark>한다.</p>
+            <p>[!WARNING] 캐시가 켜진 상태에서 벤치마크</p>
+            <p>Spring Cache나 Redis가 활성화된 상태에서 벤치마크를 돌리면, 첫 Iteration만 실제 DB를 치고 나머지는 캐시에서 반환된다. 쿼리 성능 비교가 목적이면 캐시를 반드시 비활성화한다.</p>
+          </div>
+
+          <h2>면접 Q&A</h2>
+
+          <div class="callout callout-question">
+            <div class="callout-title">N+1 문제를 배치 쿼리로 해결했다고 했는데, 실제 성능 차이를 측정해 본 적이 있나요?</div>
+            <p>JMH + TestContainers 환경에서 100만 건 데이터 기준으로 벤치마크했다. N+1 방식은 피드 20건 조회 시 81쿼리가 발생해 평균 245ms, 배치 방식은 5쿼리로 줄여 평균 18ms였다. 약 13배 차이가 났고, 원인은 쿼리 수 차이(81 → 5)와 네트워크 왕복 횟수 감소다. EXPLAIN ANALYZE로 확인하면 개별 쿼리 실행 시간은 0.025ms로 가벼웠지만, 80번의 추가 왕복이 쌓이면서 전체 응답 시간을 끌어올렸다.</p>
+            <p>[!QUESTION] System.currentTimeMillis()로 측정하면 안 되나요? JMH를 써야 하는 이유가 뭐죠?</p>
+            <p>JVM은 JIT 컴파일로 코드를 최적화하고, 결과를 쓰지 않는 코드를 제거하며, GC가 예측 불가능한 시점에 개입한다. 수동 측정은 이 세 가지를 통제할 수 없어서 결과가 재현 불가능하다. JMH는 워밍업 단계로 JIT을 안정화하고, Blackhole로 데드 코드 제거를 방지하고, 별도 JVM(Fork)에서 실행해 이전 벤치마크의 오염을 차단한다.</p>
+            <p>[!QUESTION] 벤치마크 결과의 Error(±) 값은 무슨 의미인가요?</p>
+            <p>95% 신뢰 구간의 반폭이다. <code>18.7 ± 2.1 ms</code>면 진짜 평균이 16.6~20.8ms 사이에 있을 확률이 95%다. Error / Score 비율이 10%를 넘으면 측정이 불안정한 것이므로, Fork나 Iteration 수를 늘려야 한다.</p>
+            <p>[!QUESTION] 벤치마크에서 측정한 절대값을 프로덕션 성능으로 볼 수 있나요? (함정 질문)</p>
+            <p>아니다. TestContainers는 Docker 안에서 동작하므로 I/O, 메모리, 네트워크 조건이 프로덕션과 다르다. 동시 접속, 캐시 히트율, 실제 네트워크 지연도 반영되지 않는다. 절대값보다 <mark>상대 비교</mark>(방식 A가 방식 B보다 N배 빠르다)에 의미를 두어야 한다. 프로덕션 성능은 APM 도구(Pinpoint, Datadog 등)로 실제 트래픽에서 측정해야 한다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#성능테스트</span>
+          <span>#JMH</span>
+          <span>#EXPLAIN</span>
+          <span>#결과분석</span>
+          <span>#병목진단</span>
+          <span>#면접</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="jmh-3-data-seeding.html">&larr; 이전 글</a>
+          <a href="../pages/nbuntu.html">목록으로 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

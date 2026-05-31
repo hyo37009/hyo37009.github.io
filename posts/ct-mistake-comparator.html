@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Java 자료구조] Comparator 정렬 기준 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Java 자료구조] Comparator 정렬 기준</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+
+          <div class="callout callout-warning">
+            <div class="callout-title">기준</div>
+            <p><code>compare(a, b)</code>가 음수면 <code>a</code>가 앞에 온다. 이 문장 하나를 기준으로 오름차순과 내림차순을 판단한다.</p>
+          </div>
+
+          <h2>반환값의 의미</h2>
+
+          <table>
+          <thead>
+          <tr><th>반환값</th><th>정렬 결과</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>음수</td><td><code>a</code>가 <code>b</code>보다 앞</td></tr>
+          <tr><td>양수</td><td><code>b</code>가 <code>a</code>보다 앞</td></tr>
+          <tr><td>0</td><td>같은 순서</td></tr>
+          </tbody>
+          </table>
+
+          <p>오름차순은 작은 값이 앞이다.</p>
+
+<pre><code class="language-java">Integer.compare(a, b)</code></pre>
+          <p>내림차순은 큰 값이 앞이다.</p>
+
+<pre><code class="language-java">Integer.compare(b, a)</code></pre>
+          <h2>숫자로 검산하기</h2>
+
+          <p>헷갈리면 <code>a = 3</code>, <code>b = 10</code>을 넣는다.</p>
+
+          <p>내림차순이면 <code>10</code>이 앞에 와야 하므로 <code>a = 3</code>은 뒤로 가야 한다. 따라서 <code>compare(a, b)</code>는 양수가 나와야 한다.</p>
+
+<pre><code class="language-java">Integer.compare(b, a)
+Integer.compare(10, 3) // 양수</code></pre>
+          <p>양수면 <code>b</code>가 앞에 온다. 그래서 내림차순은 <code>b, a</code>다.</p>
+
+          <h2>동률 조건 작성 순서</h2>
+
+          <p>정렬 기준이 여러 개일 때는 우선순위가 높은 조건부터 비교한다.</p>
+
+<pre><code class="language-java">list.sort((a, b) -&gt; {
+    if (a.score != b.score) {
+        return Integer.compare(b.score, a.score); // score 내림차순
+    }
+    return Integer.compare(a.id, b.id); // id 오름차순
+});</code></pre>
+          <p>베스트 앨범 문제에서는 다음과 같다.</p>
+
+          <table>
+          <thead>
+          <tr><th>기준</th><th>방향</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>재생 횟수</td><td>내림차순</td></tr>
+          <tr><td>고유 번호</td><td>오름차순</td></tr>
+          </tbody>
+          </table>
+
+          <h2>뺄셈 비교보다 Integer.compare</h2>
+
+          <p>다음 방식은 짧지만 추천하지 않는다.</p>
+
+<pre><code class="language-java">return b.score - a.score;</code></pre>
+          <p>값 범위가 커지면 오버플로우가 날 수 있고, 정렬 방향도 헷갈리기 쉽다.</p>
+
+          <p>다음처럼 쓴다.</p>
+
+<pre><code class="language-java">return Integer.compare(b.score, a.score);</code></pre>
+          <h2>Comparator.comparing도 가능하다</h2>
+
+          <p>단일 기준이면 다음처럼 쓸 수 있다.</p>
+
+<pre><code class="language-java">list.sort(Comparator.comparingInt(Song::play));</code></pre>
+          <p>내림차순이면 <code>reversed()</code>를 붙인다.</p>
+
+<pre><code class="language-java">list.sort(Comparator.comparingInt(Song::play).reversed());</code></pre>
+          <p>여러 기준은 <code>thenComparing</code>으로 연결한다.</p>
+
+<pre><code class="language-java">list.sort(
+        Comparator.comparingInt(Song::play).reversed()
+                .thenComparingInt(Song::id)
+);</code></pre>
+          <p>다만 코딩테스트 중 람다가 더 즉각적으로 읽히는 경우도 많다. 헷갈리면 직접 람다로 조건을 풀어 쓰는 편이 안전하다.</p>
+
+          <h2>실수 체크</h2>
+
+          <ul class="task-list">
+            <li><input type="checkbox" disabled> <code>compare(a, b)</code> 음수면 <code>a</code>가 앞이라는 기준을 떠올렸는가</li>
+            <li><input type="checkbox" disabled> 내림차순에서 <code>Integer.compare(b, a)</code>를 썼는가</li>
+            <li><input type="checkbox" disabled> 동률 조건을 문제 순서대로 넣었는가</li>
+            <li><input type="checkbox" disabled> <code>a - b</code>, <code>b - a</code> 대신 <code>Integer.compare</code>를 썼는가</li>
+          </ul>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#코딩테스트</span>
+          <span>#자주하는실수</span>
+          <span>#Java</span>
+          <span>#Comparator</span>
+          <span>#정렬</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

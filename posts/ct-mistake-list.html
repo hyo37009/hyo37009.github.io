@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Java 자료구조] List 사용 시 자주 틀리는 사례 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Java 자료구조] List 사용 시 자주 틀리는 사례</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+
+          <div class="callout callout-warning">
+            <div class="callout-title">기준</div>
+            <p><code>List</code>는 "순서가 있는 배열형 컬렉션"이다. 값 조회보다 <mark>인덱스, 삭제 비용, 크기 변경 가능 여부</mark>를 먼저 확인한다.</p>
+          </div>
+
+          <h2>사례 지도</h2>
+
+          <table>
+          <thead>
+          <tr><th>장면</th><th>실수</th><th>다음 기준</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>값 1을 지우려 함</td><td><code>remove(1)</code>로 인덱스 1 삭제</td><td>값 삭제는 <code>Integer.valueOf(1)</code></td></tr>
+          <tr><td>후보를 계속 제거</td><td><code>ArrayList</code> 중간 삭제 반복</td><td>남길 값만 새 리스트에 담기</td></tr>
+          <tr><td>존재 여부 확인</td><td><code>contains()</code> 반복 호출</td><td><code>HashSet</code>으로 옮긴 뒤 조회</td></tr>
+          <tr><td>첫 값 꺼내기</td><td>빈 리스트에서 <code>get(0)</code></td><td>필터 결과는 항상 비어 있을 수 있음</td></tr>
+          <tr><td>배열을 리스트로 변환</td><td><code>Arrays.asList()</code>에 <code>add()</code></td><td>크기 변경이면 <code>new ArrayList&lt;&gt;()</code></td></tr>
+          </tbody>
+          </table>
+
+<div class="mermaid">
+flowchart TD
+    Need["List를 쓰려는 이유"] --> Ordered{"순서가 필요한가"}
+    Ordered -->|아니오| Set["Set이나 Map 검토"]
+    Ordered -->|예| Operation{"반복 작업은 무엇인가"}
+    Operation -->|인덱스 조회| ListOK["List 적합"]
+    Operation -->|존재 확인 반복| HashSet["HashSet으로 보조"]
+    Operation -->|중간 삭제 반복| Rebuild["새 List로 재구성"]
+    Operation -->|앞뒤 삽입 삭제| Deque["Deque 검토"]
+</div>
+          <h2>값 삭제인 줄 알고 인덱스를 삭제</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">증상</div>
+            <p><code>List&lt;Integer&gt;</code>에서 값 <code>1</code>을 지우려 했는데 두 번째 원소가 삭제된다.</p>
+          </div>
+
+<pre><code class="language-java">List&lt;Integer&gt; list = new ArrayList&lt;&gt;(List.of(1, 2, 3));
+list.remove(1); // 인덱스 1번인 2가 삭제된다</code></pre>
+          <h4>고치는 기준</h4>
+
+<pre><code class="language-java">list.remove(Integer.valueOf(1));</code></pre>
+          <p><code>remove(int index)</code>와 <code>remove(Object value)</code>가 오버로드되어 있다. 숫자 리터럴을 넣으면 인덱스 삭제로 해석된다.</p>
+
+          <h2>중간 삭제를 반복해서 느려짐</h2>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">장면</div>
+            <p>조건에 맞지 않는 값을 지우려고 <code>ArrayList</code>를 순회하면서 계속 <code>remove()</code>한다.</p>
+          </div>
+
+<pre><code class="language-java">for (int i = 0; i &lt; list.size(); i++) {
+    if (list.get(i) &lt; 0) {
+        list.remove(i);
+    }
+}</code></pre>
+          <p><code>ArrayList</code>는 중간 원소가 삭제될 때 뒤 원소를 당긴다. 반복 삭제가 많으면 <code>O(N^2)</code>이 되기 쉽다.</p>
+
+          <h4>고치는 기준</h4>
+
+<pre><code class="language-java">List&lt;Integer&gt; next = new ArrayList&lt;&gt;();
+for (int value : list) {
+    if (value &gt;= 0) {
+        next.add(value);
+    }
+}</code></pre>
+          <p>필터링이 목적이면 삭제보다 재구성이 읽기 쉽고 안전하다.</p>
+
+          <h2><code>contains()</code>를 반복해서 시간초과</h2>
+
+          <p><code>List.contains()</code>는 내부를 순회한다. 바깥 반복문과 만나면 바로 <code>O(N^2)</code>이 된다.</p>
+
+          <table>
+          <thead>
+          <tr><th>코드</th><th>조회 비용</th><th>반복 시 위험</th></tr>
+          </thead>
+          <tbody>
+          <tr><td><code>list.contains(x)</code></td><td><code>O(N)</code></td><td>큼</td></tr>
+          <tr><td><code>set.contains(x)</code></td><td>평균 <code>O(1)</code></td><td>낮음</td></tr>
+          </tbody>
+          </table>
+
+<pre><code class="language-java">Set&lt;Integer&gt; exists = new HashSet&lt;&gt;(list);
+if (exists.contains(target)) {
+    // 존재 여부만 필요할 때
+}</code></pre>
+          <h2><code>Arrays.asList()</code>를 일반 리스트처럼 사용</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">증상</div>
+            <p>배열을 리스트로 바꾼 뒤 <code>add()</code>를 호출하면 실패한다.</p>
+          </div>
+
+<pre><code class="language-java">List&lt;Integer&gt; list = Arrays.asList(1, 2, 3);
+list.add(4); // UnsupportedOperationException</code></pre>
+          <h4>고치는 기준</h4>
+
+<pre><code class="language-java">List&lt;Integer&gt; list = new ArrayList&lt;&gt;(Arrays.asList(1, 2, 3));
+list.add(4);</code></pre>
+          <p>크기를 바꿀 가능성이 있으면 <code>ArrayList</code>로 감싼다.</p>
+
+          <h2>관련 문서</h2>
+
+          <ul>
+            <li><a href="set-map.html">Set Map</a></li>
+            <li><a href="복잡도-분석.html">복잡도 분석</a></li>
+            <li><a href="deque-stack-queue.html">Deque Stack Queue</a></li>
+          </ul>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#코딩테스트</span>
+          <span>#자주하는실수</span>
+          <span>#Java</span>
+          <span>#List</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

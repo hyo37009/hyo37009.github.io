@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Spring 테스트] 4. @SpringBootTest로 통합 검증하기 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Spring 테스트] 4. @SpringBootTest로 통합 검증하기</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Spring 테스트 (4/4)</div>
+            <p>이전 편: <a href="spring-test-3-webmvc.html">[Spring 테스트] 3. @WebMvcTest로 API 검증하기</a></p>
+            <p>이 문서가 시리즈의 마지막 편입니다.</p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">Spring 테스트 시리즈</div>
+            <p>- <a href="spring-test-1-overview.html">개요 — 슬라이스 테스트와 통합 테스트</a></p>
+            <p>- <a href="spring-test-2-datajpa.html">1편 — @DataJpaTest로 쿼리 검증하기</a></p>
+            <p>- <a href="spring-test-3-webmvc.html">2편 — @WebMvcTest로 API 검증하기</a></p>
+            <p>- <a href="spring-test-4-springboot.html">3편 — @SpringBootTest로 통합 검증하기</a> ← 현재</p>
+          </div>
+
+          <p><code>@DataJpaTest</code>로 쿼리를 검증하고 <code>@WebMvcTest</code>로 API를 검증했다. 하지만 레이어를 관통하는 문제는 슬라이스로 잡을 수 없다. Service가 Repository를 호출하고, 그 결과를 DTO로 변환해서 반환하는 <mark>전체 흐름</mark>이 맞물려 돌아가는지는 통합 테스트에서 확인해야 한다.</p>
+
+          <h2><code>@SpringBootTest</code>가 해주는 일</h2>
+
+          <ul>
+            <li><mark>전체 Spring 컨텍스트</mark>를 띄운다. 실제 앱과 동일한 빈 구성이다.</li>
+            <li>Controller, Service, Repository, DB 전부 실제로 동작한다.</li>
+            <li><code>@MockBean</code>이 필요 없다. 진짜 빈끼리 연동한다.</li>
+          </ul>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant Test as 테스트 코드
+    participant Svc as MessageService
+    participant Repo as MessageRepository
+    participant DB as 내장 H2
+
+    rect rgb(232, 248, 232)
+        Note over Test, DB: 데이터 준비
+        Test->>DB: userRepository.save()
+        Test->>DB: profileRepository.save()
+        Test->>DB: messageRepository.save()
+    end
+
+    rect rgb(240, 248, 255)
+        Note over Test, DB: 실제 흐름 실행
+        Test->>Svc: getByCursor(request)
+        Svc->>Repo: getByCursor(request)
+        Repo->>DB: SELECT 쿼리
+        DB-->>Repo: 결과
+        Repo-->>Svc: List<Message>
+        Svc->>DB: profileRepository.findByUserId()
+        Note right of Svc: UserSummary 변환
+        Svc-->>Test: MessageGetResponse
+    end
+
+    rect rgb(232, 248, 232)
+        Note over Test: 결과 검증
+        Note right of Test: data 크기, sender 정보,<br/>hasNext 등
+    end
+</div>
+          <p>초록 영역에서 실제 DB에 데이터를 넣고, 파란 영역에서 Service → Repository → DB → Profile 조회까지 <mark>진짜 레이어 간 흐름</mark>이 실행된다. 슬라이스에서는 각 레이어를 분리해서 테스트했지만, 여기서는 합쳐서 동작하는 것을 본다.</p>
+
+          <h2>기본 셋업</h2>
+
+<pre><code class="language-java">@SpringBootTest
+@Transactional
+class MessageIntegrationTest {
+
+    @Autowired
+    private MessageService messageService;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private ProfileRepository profileRepository;
+
+    @Autowired
+    private MessageRepository messageRepository;
+}</code></pre>
+          <p><code>@Transactional</code>이 핵심이다. 이게 테스트 메서드를 하나의 트랜잭션으로 감싸서 <mark>끝나면 자동 롤백</mark>한다.</p>
+
+          <div class="callout callout-warning">
+            <p><code>@Transactional</code> 없이 테스트를 돌리면 데이터가 DB에 남는다. 다른 테스트가 이 데이터를 만나서 예상치 못한 실패가 발생한다. 특히 CI에서 테스트 순서가 랜덤이면 "로컬에서 되는데 CI에서 안 된다"는 상황이 생긴다.</p>
+          </div>
+
+          <h2>전체 흐름 테스트</h2>
+
+          <h3>데이터 준비</h3>
+
+          <p>통합 테스트에서는 <code>TestEntityManager</code> 대신 <mark>실제 Repository</mark>로 데이터를 넣는다. 실제 앱이 데이터를 생성하는 방식과 동일하게 가야 진짜 흐름을 테스트하는 것이다.</p>
+
+<pre><code class="language-java">private User createAndSaveUser(String name) {
+    User user = User.create(name + "@test.com", "password123", name);
+    User saved = userRepository.save(user);
+    profileRepository.save(Profile.create(saved));
+    return saved;
+}</code></pre>
+          <p>User와 Profile을 함께 만드는 헬퍼를 두면 테스트마다 반복 코드가 줄어든다.</p>
+
+          <h3>DM 조회 전체 흐름</h3>
+
+<pre><code class="language-java">@Test
+void DM_조회_전체_흐름을_검증한다() {
+    // given
+    User sender = createAndSaveUser("sender");
+    User receiver = createAndSaveUser("receiver");
+
+    for (int i = 0; i &lt; 5; i++) {
+        messageRepository.save(
+                Message.create(sender, receiver, "msg" + i));
+    }
+
+    MessageGetRequest request = new MessageGetRequest(
+            sender.getId(), null, null, 3);
+
+    // when
+    MessageGetResponse response = messageService.getByCursor(request);
+
+    // then
+    assertThat(response.data()).hasSize(3);
+    assertThat(response.hasNext()).isTrue();
+    assertThat(response.data().get(0).sender().userId())
+            .isEqualTo(sender.getId());
+    assertThat(response.data().get(0).sender().name())
+            .isEqualTo("sender");
+}</code></pre>
+          <p>이 테스트가 검증하는 것들을 풀어보면 이렇다.</p>
+
+          <ul>
+            <li>Repository의 커서 쿼리가 올바른 데이터를 반환하는지</li>
+            <li>Service의 <code>limit + 1</code> 트릭과 <code>hasNext</code> 판정이 맞는지</li>
+            <li><code>UserSummary</code> 변환에서 Profile 조회가 정상 동작하는지</li>
+            <li>최종 DTO의 필드가 올바르게 채워지는지</li>
+          </ul>
+
+          <p>슬라이스 테스트 하나로는 이 전체를 볼 수 없다.</p>
+
+          <h2><code>@Transactional</code>의 함정</h2>
+
+          <p><code>@Transactional</code>이 테스트를 편리하게 만들어주지만, <mark>실제 동작과 다른 결과</mark>를 줄 수 있는 케이스가 있다.</p>
+
+          <h3>Lazy Loading이 항상 성공한다</h3>
+
+<div class="mermaid">
+flowchart TD
+    subgraph Test ["테스트 (@Transactional)"]
+        direction TB
+        A["messageRepository.save()"] --> B["messageService.getByCursor()"]
+        B --> C["message.getSender()"]
+        C --> D["Lazy 프록시 초기화 성공"]
+    end
+
+    subgraph Prod ["실제 운영"]
+        direction TB
+        E["Controller 호출"] --> F["Service (트랜잭션)"]
+        F --> G["트랜잭션 종료"]
+        G --> H["Controller에서<br/>message.getSender()"]
+        H --> I["LazyInitializationException"]
+    end
+
+    style D fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px
+    style I fill:#FFE6E6,stroke:#F44336,stroke-width:2px
+    style Test fill:#f0f8f0,stroke:#4CAF50
+    style Prod fill:#fff0f0,stroke:#F44336
+</div>
+          <p>왼쪽(테스트)에서는 <code>@Transactional</code>이 테스트 전체를 감싸니까 Lazy Loading이 어디서든 성공한다. 하지만 오른쪽(운영)에서는 Service의 트랜잭션이 끝난 뒤 Controller에서 Lazy 접근하면 <code>LazyInitializationException</code>이 터진다.</p>
+
+          <p>이런 문제를 잡고 싶으면 <code>@Transactional</code> 없이 테스트하거나, Service 레이어에서 DTO로 변환을 완료하는 구조를 확인해야 한다.</p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">REQUIRES_NEW 전파</div>
+            <p>서비스에서 <code>@Transactional(propagation = REQUIRES_NEW)</code>를 쓰는 경우, 테스트의 <code>@Transactional</code>과 별개의 트랜잭션이 생긴다. 이 트랜잭션은 <mark>테스트가 끝나도 롤백되지 않는다</mark>. 데이터가 DB에 남을 수 있다.</p>
+          </div>
+
+          <h2>N+1 쿼리 검증</h2>
+
+          <p>통합 테스트에서만 잡을 수 있는 대표적인 문제가 N+1 쿼리다. 쿼리 로그를 켜고 카운트하면 된다.</p>
+
+          <h3><code>application-test.yml</code> 설정</h3>
+
+<pre><code class="language-yaml">spring:
+  jpa:
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true</code></pre>
+          <h3>쿼리 수 검증</h3>
+
+          <p>로그를 눈으로 확인하는 것도 방법이지만, 정량적으로 검증하고 싶으면 <code>CountQueryInterceptor</code> 같은 유틸을 만들 수 있다. 가장 간단한 방법은 콘솔 로그에서 SELECT 수를 세는 것이다.</p>
+
+<pre><code class="language-java">@Test
+void 메시지_조회_시_N_plus_1이_발생하지_않는다() {
+    // given
+    User sender = createAndSaveUser("sender");
+    User receiver = createAndSaveUser("receiver");
+    for (int i = 0; i &lt; 10; i++) {
+        messageRepository.save(
+                Message.create(sender, receiver, "msg" + i));
+    }
+
+    MessageGetRequest request = new MessageGetRequest(
+            sender.getId(), null, null, 10);
+
+    // when
+    MessageGetResponse response = messageService.getByCursor(request);
+
+    // then
+    assertThat(response.data()).hasSize(10);
+    // 콘솔에서 SELECT 쿼리 수를 확인한다.
+    // 메시지 1회 + 프로필 2회(sender, receiver) = 총 3회여야 한다.
+    // 메시지 10개마다 프로필을 조회하면 N+1이다.
+}</code></pre>
+          <div class="callout callout-tip">
+            <p>눈으로 확인이 불편하면 <code>hibernate.session.events.log.LOG_QUERIES_SLOWER_THAN_MS</code> 설정이나 서드파티 라이브러리(spring-data-jpa-query-counter 등)를 활용할 수 있다.</p>
+          </div>
+
+          <h2>슬라이스 vs 통합, 무엇을 언제</h2>
+
+<div class="mermaid">
+flowchart TD
+    A{뭘 검증하는가?}
+    A -->|"쿼리 자체"| B["@DataJpaTest"]
+    A -->|"HTTP 요청/응답"| C["@WebMvcTest"]
+    A -->|"레이어 간 연동"| D["@SpringBootTest"]
+
+    B --> E(["빠름 ✓"])
+    C --> F(["빠름 ✓"])
+    D --> G(["느림, 필요할 때만"])
+
+    style A fill:#FFF3E0,stroke:#FF9800,stroke-width:2px
+    style B fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px
+    style C fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px
+    style D fill:#E8F4F8,stroke:#2196F3,stroke-width:2px
+    style E fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px
+    style F fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px
+    style G fill:#FFF3E0,stroke:#FF9800,stroke-width:2px
+</div>
+          <p>기본 원칙은 <mark>가장 좁은 범위부터</mark>다. 쿼리만 검증하면 되면 <code>@DataJpaTest</code>, HTTP 레이어만 보면 <code>@WebMvcTest</code>를 쓴다. <code>@SpringBootTest</code>는 전체 흐름이 맞물려야만 잡히는 문제가 있을 때 쓴다.</p>
+
+          <p>통합 테스트가 많아지면 CI가 느려진다. 핵심 시나리오만 통합으로 커버하고, 나머지는 슬라이스와 유닛으로 충분하다.</p>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title"><code>@Transactional</code> 의존으로 LazyInitializationException 놓치기</div>
+            <p>테스트에서는 트랜잭션이 끝까지 살아있으니 Lazy Loading이 항상 성공한다. 운영에서 Controller나 비동기 콜백에서 Lazy 접근하면 터진다. Service에서 DTO 변환을 완료하는 습관이 중요하다.</p>
+            <p>[!DANGER] 통합 테스트만으로 모든 것을 커버하려는 시도</p>
+            <p><code>@SpringBootTest</code> 하나에 모든 케이스를 넣으면 테스트가 느리고 실패 원인을 특정하기 어렵다. 쿼리 조건 분기 5가지를 전부 통합 테스트로 검증할 필요 없다. 그건 <code>@DataJpaTest</code>가 빠르게 해준다.</p>
+            <p>[!DANGER] 테스트 데이터 간섭</p>
+            <p><code>@Transactional</code>을 빼먹거나 <code>REQUIRES_NEW</code> 전파가 섞이면 테스트 데이터가 롤백되지 않는다. 다음 테스트가 이전 데이터를 만나서 깨진다. <code>@AfterEach</code>에서 직접 정리하거나, <code>@Transactional</code>이 제대로 걸려있는지 확인한다.</p>
+          </div>
+
+          <h2>면접 Q&A</h2>
+
+          <div class="callout callout-question">
+            <div class="callout-title"><code>@SpringBootTest</code>와 <code>@DataJpaTest</code>의 차이는?</div>
+            <p><code>@DataJpaTest</code>는 JPA 관련 빈만 로드하는 슬라이스 테스트다. 빠르고 Repository 쿼리 검증에 적합하다. <code>@SpringBootTest</code>는 전체 컨텍스트를 올리는 통합 테스트로, 레이어 간 연동을 검증한다. 느리지만 실제 동작에 가장 가깝다.</p>
+            <p>[!QUESTION] <code>@SpringBootTest</code>에 <code>@Transactional</code>을 붙이면 어떤 문제가 생길 수 있는가?</p>
+            <p>함정 질문이다. <code>@Transactional</code>이 테스트 전체를 감싸기 때문에 Lazy Loading이 항상 성공한다. 운영에서는 트랜잭션 경계 밖에서 Lazy 접근하면 <code>LazyInitializationException</code>이 터지는데, 테스트에서는 이 버그를 잡지 못한다. 또한 <code>REQUIRES_NEW</code> 전파를 쓰는 서비스의 커밋은 테스트 롤백 대상이 아니다.</p>
+            <p>[!QUESTION] 슬라이스 테스트에서 <code>@MockBean</code>을 쓰는 이유는?</p>
+            <p><code>@WebMvcTest</code>는 컨트롤러 빈만 올린다. 컨트롤러가 의존하는 서비스 빈이 컨텍스트에 없기 때문에 <code>@MockBean</code>으로 가짜 빈을 등록해야 한다. <code>@Mock</code>은 Spring 컨텍스트와 무관하므로 컨트롤러에 주입되지 않는다.</p>
+            <p>[!QUESTION] N+1 문제를 테스트로 어떻게 잡는가?</p>
+            <p>슬라이스 테스트에서는 잡기 어렵다. <code>@SpringBootTest</code>에서 <code>show-sql: true</code>로 쿼리 로그를 켜고, 예상 쿼리 수와 실제 실행된 쿼리 수를 비교한다. 메시지 10건에 프로필 쿼리가 20번 나가면 N+1이다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#테스트</span>
+          <span>#SpringBootTest</span>
+          <span>#통합테스트</span>
+          <span>#Transactional</span>
+          <span>#N</span>
+          <span>#LazyLoading</span>
+          <span>#Spring</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="spring-test-3-webmvc.html">&larr; 이전 글</a>
+          <a href="../pages/nbuntu.html">목록으로 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

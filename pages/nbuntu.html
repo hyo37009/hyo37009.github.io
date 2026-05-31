@@ -269,27 +269,47 @@
             <div class="lab-cat-tabs">
               <button class="lab-cat-tab active" data-cat="spring">
                 Spring
-                <span class="cat-tab-count">19편</span>
+                <span class="cat-tab-count">120편</span>
               </button>
               <button class="lab-cat-tab" data-cat="java">
                 Java
-                <span class="cat-tab-count">3편</span>
+                <span class="cat-tab-count">43편</span>
               </button>
-              <button class="lab-cat-tab" data-cat="aws">
-                AWS
-                <span class="cat-tab-count">1편</span>
+              <button class="lab-cat-tab" data-cat="kotlin">
+                Kotlin
+                <span class="cat-tab-count">25편</span>
               </button>
               <button class="lab-cat-tab" data-cat="jwt">
                 JWT
-                <span class="cat-tab-count">2편</span>
+                <span class="cat-tab-count">7편</span>
+              </button>
+              <button class="lab-cat-tab" data-cat="codingtest">
+                코딩테스트
+                <span class="cat-tab-count">22편</span>
+              </button>
+              <button class="lab-cat-tab" data-cat="perf">
+                성능 테스트
+                <span class="cat-tab-count">9편</span>
+              </button>
+              <button class="lab-cat-tab" data-cat="docker">
+                Docker
+                <span class="cat-tab-count">9편</span>
+              </button>
+              <button class="lab-cat-tab" data-cat="db">
+                DB
+                <span class="cat-tab-count">4편</span>
               </button>
               <button class="lab-cat-tab" data-cat="tools">
                 도구
                 <span class="cat-tab-count">2편</span>
               </button>
-              <button class="lab-cat-tab" data-cat="codingtest">
-                코딩테스트
-                <span class="cat-tab-count">6편</span>
+              <button class="lab-cat-tab" data-cat="aws">
+                AWS
+                <span class="cat-tab-count">1편</span>
+              </button>
+              <button class="lab-cat-tab" data-cat="mistakes">
+                자주하는 실수
+                <span class="cat-tab-count">1편</span>
               </button>
             </div>
 
@@ -298,88 +318,566 @@
 
               <!-- Spring -->
               <div class="lab-content-section active" id="cat-spring">
-                <div class="lab-content-heading">Spring <span class="hcount">19편</span></div>
+                <div class="lab-content-heading">Spring <span class="hcount">120편</span></div>
 
                 <div class="lab-series">
-                  <div class="lab-series-name-col">
-                    <div class="lab-series-name">CSRF</div>
-                    <span class="lab-series-count">4편</span>
-                  </div>
-                  <div class="lab-series-list-col">
-                    <ul class="lab-post-list">
-                      <li><span class="pnum">01</span><a href="../posts/spring-csrf-1-concept.html">CSRF 공격의 원리와 방어 전략</a></li>
-                      <li><span class="pnum">02</span><a href="../posts/spring-csrf-2-token-repository.html">CSRF 토큰 저장소 설정</a></li>
-                      <li><span class="pnum">03</span><a href="../posts/spring-csrf-3-handler.html">CSRF 핸들러 커스터마이징</a></li>
-                      <li><span class="pnum">04</span><a href="../posts/spring-csrf-4-api-endpoint.html">CSRF API 엔드포인트 구현</a></li>
-                    </ul>
-                  </div>
+                  <div class="lab-series-name-col"><div class="lab-series-name">CSRF</div><span class="lab-series-count">4편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><span class="pnum">01</span><a href="../posts/spring-csrf-1-concept.html">CSRF 공격의 원리와 방어 전략</a></li>
+                    <li><span class="pnum">02</span><a href="../posts/spring-csrf-2-token-repository.html">CSRF 토큰 저장소 설정</a></li>
+                    <li><span class="pnum">03</span><a href="../posts/spring-csrf-3-handler.html">CSRF 핸들러 커스터마이징</a></li>
+                    <li><span class="pnum">04</span><a href="../posts/spring-csrf-4-api-endpoint.html">CSRF API 엔드포인트 구현</a></li>
+                  </ul></div>
                 </div>
 
                 <div class="lab-series">
-                  <div class="lab-series-name-col">
-                    <div class="lab-series-name">세션 관리 고도화</div>
-                    <span class="lab-series-count">4편</span>
-                  </div>
-                  <div class="lab-series-list-col">
-                    <ul class="lab-post-list">
-                      <li><span class="pnum">01</span><a href="../posts/spring-session-1-concurrent-login.html">동시 로그인 방지와 SessionRegistry</a></li>
-                      <li><span class="pnum">02</span><a href="../posts/spring-session-2-privilege-invalidation.html">권한 변경 시 세션 무효화</a></li>
-                      <li><span class="pnum">03</span><a href="../posts/spring-session-3-online-status.html">SessionRegistry로 온라인 상태 관리</a></li>
-                      <li><span class="pnum">04</span><a href="../posts/spring-session-4-remember-me.html">RememberMe 자동 로그인</a></li>
-                    </ul>
-                  </div>
+                  <div class="lab-series-name-col"><div class="lab-series-name">UserDetails</div><span class="lab-series-count">4편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><span class="pnum">01</span><a href="../posts/spring-userdetails-1-basics.html">UserDetails와 GrantedAuthority</a></li>
+                    <li><span class="pnum">02</span><a href="../posts/spring-userdetails-2-success-handler.html">AuthenticationSuccessHandler 구현</a></li>
+                    <li><span class="pnum">03</span><a href="../posts/spring-userdetails-3-login-handler.html">로그인 성공·실패 핸들러</a></li>
+                    <li><span class="pnum">04</span><a href="../posts/spring-userdetails-4-session.html">세션 기반 인증과 @AuthenticationPrincipal</a></li>
+                  </ul></div>
                 </div>
 
                 <div class="lab-series">
-                  <div class="lab-series-name-col">
-                    <div class="lab-series-name">비동기</div>
-                    <span class="lab-series-count">6편</span>
-                  </div>
-                  <div class="lab-series-list-col">
-                    <ul class="lab-post-list">
-                      <li><span class="pnum">01</span><a href="../posts/spring-async-1-basics.html">@Async와 비동기 처리의 기본</a></li>
-                      <li><span class="pnum">02</span><a href="../posts/spring-async-2-thread-pool.html">ThreadPoolTaskExecutor 설정과 스레드 풀 관리</a></li>
-                      <li><span class="pnum">03</span><a href="../posts/spring-async-3-event.html">Spring Event 기반 비동기 처리</a></li>
-                      <li><span class="pnum">04</span><a href="../posts/spring-async-4-exception.html">비동기 예외 처리와 재시도 전략</a></li>
-                      <li><span class="pnum">05</span><a href="../posts/spring-async-5-decorator.html">TaskDecorator와 컨텍스트 전파</a></li>
-                      <li><span class="pnum">06</span><a href="../posts/spring-async-6-webclient.html">WebClient를 활용한 비동기 HTTP 통신</a></li>
-                    </ul>
-                  </div>
+                  <div class="lab-series-name-col"><div class="lab-series-name">세션 관리</div><span class="lab-series-count">4편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><span class="pnum">01</span><a href="../posts/spring-session-1-concurrent-login.html">동시 로그인 방지와 SessionRegistry</a></li>
+                    <li><span class="pnum">02</span><a href="../posts/spring-session-2-privilege-invalidation.html">권한 변경 시 세션 무효화</a></li>
+                    <li><span class="pnum">03</span><a href="../posts/spring-session-3-online-status.html">SessionRegistry로 온라인 상태 관리</a></li>
+                    <li><span class="pnum">04</span><a href="../posts/spring-session-4-remember-me.html">RememberMe 자동 로그인</a></li>
+                  </ul></div>
                 </div>
 
                 <div class="lab-series">
-                  <div class="lab-series-name-col">
-                    <div class="lab-series-name">리팩토링 패턴</div>
-                    <span class="lab-series-count">5편</span>
-                  </div>
-                  <div class="lab-series-list-col">
-                    <ul class="lab-post-list">
-                      <li><span class="pnum">01</span><a href="../posts/refactoring-1-configuration-properties.html">설정 관리와 @ConfigurationProperties</a></li>
-                      <li><span class="pnum">02</span><a href="../posts/refactoring-2-transaction.html">트랜잭션과 데이터 일관성</a></li>
-                      <li><span class="pnum">03</span><a href="../posts/refactoring-3-exception-handling.html">예외 처리 전략 설계</a></li>
-                      <li><span class="pnum">04</span><a href="../posts/refactoring-4-rest-api.html">REST API 설계 원칙</a></li>
-                      <li><span class="pnum">05</span><a href="../posts/refactoring-5-code-consistency.html">코드 일관성과 쿼리 최적화</a></li>
-                    </ul>
-                  </div>
+                  <div class="lab-series-name-col"><div class="lab-series-name">Security 단독</div><span class="lab-series-count">1편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><a href="../posts/spring-password-hashing.html">비밀번호 해시 저장 — PasswordEncoder</a></li>
+                  </ul></div>
                 </div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col"><div class="lab-series-name">AOP</div><span class="lab-series-count">3편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><span class="pnum">01</span><a href="../posts/spring-aop-1-concepts.html">AOP 개념과 용어 정리</a></li>
+                    <li><span class="pnum">02</span><a href="../posts/spring-aop-2-advice-pointcut.html">Advice와 Pointcut 활용</a></li>
+                    <li><span class="pnum">03</span><a href="../posts/spring-aop-3-internals.html">AOP 동작 원리와 주의사항</a></li>
+                  </ul></div>
+                </div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col"><div class="lab-series-name">비동기</div><span class="lab-series-count">7편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><span class="pnum">01</span><a href="../posts/spring-async-1-basics.html">@Async와 비동기 처리의 기본</a></li>
+                    <li><span class="pnum">02</span><a href="../posts/spring-async-2-thread-pool.html">ThreadPoolTaskExecutor 설정</a></li>
+                    <li><span class="pnum">03</span><a href="../posts/spring-async-3-event.html">Spring Event 기반 비동기 처리</a></li>
+                    <li><span class="pnum">04</span><a href="../posts/spring-async-4-exception.html">비동기 예외 처리와 재시도 전략</a></li>
+                    <li><span class="pnum">05</span><a href="../posts/spring-async-5-decorator.html">TaskDecorator와 컨텍스트 전파</a></li>
+                    <li><span class="pnum">06</span><a href="../posts/spring-async-6-webclient.html">WebClient를 활용한 비동기 HTTP 통신</a></li>
+                    <li><span class="pnum">07</span><a href="../posts/spring-async-7-patterns.html">실전 패턴과 면접 대비</a></li>
+                  </ul></div>
+                </div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col"><div class="lab-series-name">Spring Batch</div><span class="lab-series-count">8편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><span class="pnum">01</span><a href="../posts/spring-batch-1-what-is-batch.html">배치 처리란 무엇인가</a></li>
+                    <li><span class="pnum">02</span><a href="../posts/spring-batch-2-job-step.html">Job과 Step 구조</a></li>
+                    <li><span class="pnum">03</span><a href="../posts/spring-batch-3-chunk.html">Chunk 기반 처리</a></li>
+                    <li><span class="pnum">04</span><a href="../posts/spring-batch-4-readers-writers.html">다양한 Reader와 Writer</a></li>
+                    <li><span class="pnum">05</span><a href="../posts/spring-batch-5-flow.html">실행 제어와 흐름</a></li>
+                    <li><span class="pnum">06</span><a href="../posts/spring-batch-6-retry-skip.html">재시도와 건너뛰기</a></li>
+                    <li><span class="pnum">07</span><a href="../posts/spring-batch-7-scheduling.html">스케줄링과 운영</a></li>
+                    <li><span class="pnum">08</span><a href="../posts/spring-batch-8-interview.html">면접 대비</a></li>
+                  </ul></div>
+                </div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col"><div class="lab-series-name">Cache 입문</div><span class="lab-series-count">5편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><span class="pnum">01</span><a href="../posts/spring-cache-1-what-is-cache.html">캐시란 무엇인가</a></li>
+                    <li><span class="pnum">02</span><a href="../posts/spring-cache-2-abstraction.html">Spring Cache 추상화</a></li>
+                    <li><span class="pnum">03</span><a href="../posts/spring-cache-3-caffeine.html">Caffeine 설정과 활용</a></li>
+                    <li><span class="pnum">04</span><a href="../posts/spring-cache-4-loading-cache.html">LoadingCache와 캐시 스탬피드</a></li>
+                    <li><span class="pnum">05</span><a href="../posts/spring-cache-5-actuator.html">Actuator로 캐시 모니터링</a></li>
+                  </ul></div>
+                </div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col"><div class="lab-series-name">캐시 심화</div><span class="lab-series-count">11편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><span class="pnum">01</span><a href="../posts/spring-cache2-1-concept.html">캐시의 개념과 동작 원리</a></li>
+                    <li><span class="pnum">02</span><a href="../posts/spring-cache2-2-layers.html">캐시 계층과 유형</a></li>
+                    <li><span class="pnum">03</span><a href="../posts/spring-cache2-3-patterns.html">캐시 전략과 패턴</a></li>
+                    <li><span class="pnum">04</span><a href="../posts/spring-cache2-4-abstraction.html">Spring Cache 추상화</a></li>
+                    <li><span class="pnum">05</span><a href="../posts/spring-cache2-5-annotations.html">캐시 어노테이션 완전 정복</a></li>
+                    <li><span class="pnum">06</span><a href="../posts/spring-cache2-6-key-strategy.html">캐시 키 전략과 조건부 캐싱</a></li>
+                    <li><span class="pnum">07</span><a href="../posts/spring-cache2-7-caffeine.html">CacheManager와 Caffeine</a></li>
+                    <li><span class="pnum">08</span><a href="../posts/spring-cache2-8-redis.html">Redis 분산 캐시</a></li>
+                    <li><span class="pnum">09</span><a href="../posts/spring-cache2-9-consistency.html">캐시 일관성과 갱신 전략</a></li>
+                    <li><span class="pnum">10</span><a href="../posts/spring-cache2-10-antipatterns.html">안티패턴과 트러블슈팅</a></li>
+                    <li><span class="pnum">11</span><a href="../posts/spring-cache2-11-interview.html">면접 대비</a></li>
+                  </ul></div>
+                </div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col"><div class="lab-series-name">Spring Event</div><span class="lab-series-count">2편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><span class="pnum">01</span><a href="../posts/spring-event-1-design.html">이벤트 기반 설계란</a></li>
+                    <li><span class="pnum">02</span><a href="../posts/spring-event-2-transactional.html">@TransactionalEventListener</a></li>
+                  </ul></div>
+                </div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col"><div class="lab-series-name">이벤트 · 트랜잭션 설계</div><span class="lab-series-count">3편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><span class="pnum">01</span><a href="../posts/spring-event-tx-1-boundary.html">직접 호출과 이벤트의 경계</a></li>
+                    <li><span class="pnum">02</span><a href="../posts/spring-event-tx-2-side-effects.html">트랜잭션 경계와 부수효과</a></li>
+                    <li><span class="pnum">03</span><a href="../posts/spring-event-tx-3-compensation.html">실패 허용 설계와 보상 전략</a></li>
+                  </ul></div>
+                </div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col"><div class="lab-series-name">Spring GraphQL</div><span class="lab-series-count">8편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><span class="pnum">01</span><a href="../posts/spring-graphql-1-concepts.html">GraphQL 등장 배경과 핵심 개념</a></li>
+                    <li><span class="pnum">02</span><a href="../posts/spring-graphql-2-architecture.html">Spring GraphQL 아키텍처와 Resolver</a></li>
+                    <li><span class="pnum">03</span><a href="../posts/spring-graphql-3-n-plus-one.html">N+1 문제와 @BatchMapping</a></li>
+                    <li><span class="pnum">04</span><a href="../posts/spring-graphql-4-subscription.html">Subscription과 예외 처리</a></li>
+                    <li><span class="pnum">05</span><a href="../posts/spring-graphql-5-setup.html">프로젝트 세팅과 스키마 작성</a></li>
+                    <li><span class="pnum">06</span><a href="../posts/spring-graphql-6-domain.html">도메인 모델과 서비스 계층 구현</a></li>
+                    <li><span class="pnum">07</span><a href="../posts/spring-graphql-7-resolver.html">Resolver 작성과 GraphiQL 실습</a></li>
+                    <li><span class="pnum">08</span><a href="../posts/spring-graphql-8-advanced.html">N+1 해결, Subscription, 예외 처리</a></li>
+                  </ul></div>
+                </div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col"><div class="lab-series-name">Spring Retry</div><span class="lab-series-count">3편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><a href="../posts/spring-retryable.html">@Retryable 자동 재시도</a></li>
+                    <li><span class="pnum">01</span><a href="../posts/spring-retry-1-retryable.html">@Retryable과 백오프 전략</a></li>
+                    <li><span class="pnum">02</span><a href="../posts/spring-retry-2-patterns.html">재시도 책임과 실전 패턴</a></li>
+                  </ul></div>
+                </div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col"><div class="lab-series-name">SSE 실시간 알림</div><span class="lab-series-count">8편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><span class="pnum">01</span><a href="../posts/spring-sse-1-protocol.html">SSE와 실시간 통신</a></li>
+                    <li><span class="pnum">02</span><a href="../posts/spring-sse-2-connection.html">SSE 연결 관리와 동시성</a></li>
+                    <li><span class="pnum">03</span><a href="../posts/spring-sse-3-architecture.html">실시간 알림 아키텍처</a></li>
+                    <li><span class="pnum">04</span><a href="../posts/spring-sse-4-reliability.html">SSE 안정성과 이벤트 유실 복구</a></li>
+                    <li><span class="pnum">05</span><a href="../posts/spring-sse-5-setup.html">프로젝트 세팅과 도메인 설계</a></li>
+                    <li><span class="pnum">06</span><a href="../posts/spring-sse-6-service.html">SSE 연결 서비스 구현</a></li>
+                    <li><span class="pnum">07</span><a href="../posts/spring-sse-7-integration.html">알림 서비스와 프론트엔드 통합</a></li>
+                    <li><span class="pnum">08</span><a href="../posts/spring-sse-8-heartbeat.html">Heartbeat와 이벤트 유실 복구 구현</a></li>
+                  </ul></div>
+                </div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col"><div class="lab-series-name">Spring 테스트</div><span class="lab-series-count">4편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><span class="pnum">01</span><a href="../posts/spring-test-1-overview.html">슬라이스 테스트와 통합 테스트</a></li>
+                    <li><span class="pnum">02</span><a href="../posts/spring-test-2-datajpa.html">@DataJpaTest로 쿼리 검증하기</a></li>
+                    <li><span class="pnum">03</span><a href="../posts/spring-test-3-webmvc.html">@WebMvcTest로 API 검증하기</a></li>
+                    <li><span class="pnum">04</span><a href="../posts/spring-test-4-springboot.html">@SpringBootTest로 통합 검증하기</a></li>
+                  </ul></div>
+                </div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col"><div class="lab-series-name">MapStruct</div><span class="lab-series-count">2편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><span class="pnum">01</span><a href="../posts/spring-mapstruct-1-basics.html">MapStruct 기본, 직접 만든 Mapper와 비교</a></li>
+                    <li><span class="pnum">02</span><a href="../posts/spring-mapstruct-2-advanced.html">MapStruct 심화, 의존성 주입과 커스텀 변환</a></li>
+                  </ul></div>
+                </div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col"><div class="lab-series-name">커서 페이지네이션</div><span class="lab-series-count">6편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><span class="pnum">01</span><a href="../posts/cursor-pagination-1-intro.html">커서는 북마크다</a></li>
+                    <li><span class="pnum">02</span><a href="../posts/cursor-pagination-2-offset-limit.html">Offset의 한계와 Cursor의 등장</a></li>
+                    <li><span class="pnum">03</span><a href="../posts/cursor-pagination-3-design.html">커서 설계 전략</a></li>
+                    <li><span class="pnum">04</span><a href="../posts/cursor-pagination-4-querydsl.html">QueryDSL 커서 조회 구현</a></li>
+                    <li><span class="pnum">05</span><a href="../posts/cursor-pagination-5-sort-filter.html">동적 정렬과 필터링</a></li>
+                    <li><span class="pnum">06</span><a href="../posts/cursor-pagination-6-api-interview.html">API 통합과 면접 대비</a></li>
+                  </ul></div>
+                </div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col"><div class="lab-series-name">Nginx API Gateway</div><span class="lab-series-count">7편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><span class="pnum">01</span><a href="../posts/nginx-gateway-1-microservice.html">마이크로서비스와 API Gateway</a></li>
+                    <li><span class="pnum">02</span><a href="../posts/nginx-gateway-2-reverse-proxy.html">Nginx 리버스 프록시의 동작 원리</a></li>
+                    <li><span class="pnum">03</span><a href="../posts/nginx-gateway-3-rate-limiting.html">Rate Limiting과 트래픽 제어</a></li>
+                    <li><span class="pnum">04</span><a href="../posts/nginx-gateway-4-docker-deploy.html">Docker로 마이크로서비스 배포하기</a></li>
+                    <li><span class="pnum">05</span><a href="../posts/nginx-gateway-5-spring-boot.html">Spring Boot 마이크로서비스 구성하기</a></li>
+                    <li><span class="pnum">06</span><a href="../posts/nginx-gateway-6-nginx-config.html">Nginx API Gateway 설정하기</a></li>
+                    <li><span class="pnum">07</span><a href="../posts/nginx-gateway-7-docker-compose.html">Docker Compose로 전체 시스템 실행하기</a></li>
+                  </ul></div>
+                </div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col"><div class="lab-series-name">Redis</div><span class="lab-series-count">7편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><a href="../posts/spring-redis-cache-intro.html">Redis Cache 도입</a></li>
+                    <li><span class="pnum">01</span><a href="../posts/redis-template-1-basics.html">RedisTemplate 개념과 기본 사용법</a></li>
+                    <li><span class="pnum">02</span><a href="../posts/redis-template-2-operations.html">자료구조별 Operations</a></li>
+                    <li><span class="pnum">03</span><a href="../posts/redis-template-3-patterns.html">RedisTemplate 실전 패턴</a></li>
+                    <li><span class="pnum">01</span><a href="../posts/redis-cache-1-n-plus-one.html">N+1 쿼리와 성능 병목</a></li>
+                    <li><span class="pnum">02</span><a href="../posts/redis-cache-2-patterns.html">캐시 패턴과 무효화 전략</a></li>
+                    <li><span class="pnum">03</span><a href="../posts/redis-cache-3-architecture.html">프로젝트 캐시 아키텍처 설계</a></li>
+                  </ul></div>
+                </div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col"><div class="lab-series-name">Elasticsearch 도입</div><span class="lab-series-count">3편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><span class="pnum">01</span><a href="../posts/elasticsearch-1-fulltext.html">LIKE 검색의 한계와 역색인</a></li>
+                    <li><span class="pnum">02</span><a href="../posts/elasticsearch-2-index-mapping.html">인덱스와 매핑 설계</a></li>
+                    <li><span class="pnum">03</span><a href="../posts/elasticsearch-3-query-sync.html">검색 쿼리와 동기화 전략</a></li>
+                  </ul></div>
+                </div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col"><div class="lab-series-name">리팩토링 패턴</div><span class="lab-series-count">5편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><span class="pnum">01</span><a href="../posts/refactoring-1-configuration-properties.html">설정 관리와 @ConfigurationProperties</a></li>
+                    <li><span class="pnum">02</span><a href="../posts/refactoring-2-transaction.html">트랜잭션과 데이터 일관성</a></li>
+                    <li><span class="pnum">03</span><a href="../posts/refactoring-3-exception-handling.html">예외 처리 전략 설계</a></li>
+                    <li><span class="pnum">04</span><a href="../posts/refactoring-4-rest-api.html">REST API 설계 원칙</a></li>
+                    <li><span class="pnum">05</span><a href="../posts/refactoring-5-code-consistency.html">코드 일관성과 쿼리 최적화</a></li>
+                  </ul></div>
+                </div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col"><div class="lab-series-name">단독 글</div><span class="lab-series-count">5편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><a href="../posts/spring-bean-validation.html">Bean Validation 제대로 쓰기</a></li>
+                    <li><a href="../posts/spring-config-properties.html">ConfigurationProperties 세팅 가이드</a></li>
+                    <li><a href="../posts/spring-kafka-intro.html">Spring Kafka 입문</a></li>
+                    <li><a href="../posts/spring-https-local.html">HTTPS와 인증서의 이해</a></li>
+                    <li><a href="../posts/spring-validation-strategy.html">입력 검증, 어디서 뭘 검증해야 할까</a></li>
+                  </ul></div>
+                </div>
+
               </div>
 
               <!-- Java -->
               <div class="lab-content-section" id="cat-java">
-                <div class="lab-content-heading">Java <span class="hcount">3편</span></div>
+                <div class="lab-content-heading">Java <span class="hcount">43편</span></div>
 
                 <div class="lab-series">
-                  <div class="lab-series-name-col">
-                    <div class="lab-series-name">예외처리</div>
-                    <span class="lab-series-count">3편</span>
-                  </div>
-                  <div class="lab-series-list-col">
-                    <ul class="lab-post-list">
-                      <li><a href="../posts/java-catch-axis.html">catch 축 구분법</a></li>
-                      <li><a href="../posts/java-sdk-exception-hierarchy.html">SDK 예외 계층 확인법</a></li>
-                      <li><a href="../posts/java-custom-exception-cause.html">커스텀 예외에서 cause 전달 시점과 이유</a></li>
-                    </ul>
-                  </div>
+                  <div class="lab-series-name-col"><div class="lab-series-name">JPA JOIN</div><span class="lab-series-count">5편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><span class="pnum">01</span><a href="../posts/jpa-join-1-overview.html">JOIN 유형 개요</a></li>
+                    <li><span class="pnum">02</span><a href="../posts/jpa-join-2-inner.html">INNER JOIN</a></li>
+                    <li><span class="pnum">03</span><a href="../posts/jpa-join-3-left-outer.html">LEFT OUTER JOIN</a></li>
+                    <li><span class="pnum">04</span><a href="../posts/jpa-join-4-right-outer.html">RIGHT OUTER JOIN</a></li>
+                    <li><span class="pnum">05</span><a href="../posts/jpa-join-5-fetch-join.html">JPA fetch join</a></li>
+                  </ul></div>
+                </div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col"><div class="lab-series-name">JPA 단독</div><span class="lab-series-count">5편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><a href="../posts/jpa-n-plus-one.html">N+1 문제와 해결 전략</a></li>
+                    <li><a href="../posts/jpa-fetch-type.html">JPA Fetch 타입 완전 정복</a></li>
+                    <li><a href="../posts/jpa-eager-default.html">ManyToOne·OneToOne의 기본값이 EAGER인 이유</a></li>
+                    <li><a href="../posts/jpa-batch-strategy.html">Batch 조회 전략</a></li>
+                    <li><a href="../posts/jpa-batch-loading.html">단건 반복에서 배치 로딩으로</a></li>
+                  </ul></div>
+                </div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col"><div class="lab-series-name">QueryDSL</div><span class="lab-series-count">8편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><span class="pnum">01</span><a href="../posts/querydsl-1-setup.html">환경 설정과 Q클래스</a></li>
+                    <li><span class="pnum">02</span><a href="../posts/querydsl-2-basic-query.html">기본 쿼리 작성</a></li>
+                    <li><span class="pnum">03</span><a href="../posts/querydsl-3-join-subquery.html">조인과 서브쿼리</a></li>
+                    <li><span class="pnum">04</span><a href="../posts/querydsl-4-dynamic-query.html">동적 쿼리</a></li>
+                    <li><span class="pnum">05</span><a href="../posts/querydsl-5-projection-dto.html">프로젝션과 DTO 매핑</a></li>
+                    <li><span class="pnum">06</span><a href="../posts/querydsl-6-spring-data.html">Spring Data JPA 통합</a></li>
+                    <li><span class="pnum">07</span><a href="../posts/querydsl-7-performance.html">성능 최적화</a></li>
+                    <li><span class="pnum">08</span><a href="../posts/querydsl-8-patterns.html">실전 패턴과 면접 대비</a></li>
+                  </ul></div>
+                </div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col"><div class="lab-series-name">Mockito</div><span class="lab-series-count">2편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><span class="pnum">01</span><a href="../posts/mockito-1-basics.html">Mockito 테스트 기초</a></li>
+                    <li><span class="pnum">02</span><a href="../posts/mockito-2-stubbing.html">Mockito Stubbing 심화</a></li>
+                  </ul></div>
+                </div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col"><div class="lab-series-name">Instancio</div><span class="lab-series-count">5편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><span class="pnum">01</span><a href="../posts/instancio-1-intro.html">테스트 객체, 직접 만들지 마라</a></li>
+                    <li><span class="pnum">02</span><a href="../posts/instancio-2-selector.html">셀렉터와 커스터마이징</a></li>
+                    <li><span class="pnum">03</span><a href="../posts/instancio-3-collection-model.html">컬렉션과 Model</a></li>
+                    <li><span class="pnum">04</span><a href="../posts/instancio-4-advanced.html">고급 기능</a></li>
+                    <li><span class="pnum">05</span><a href="../posts/instancio-5-practical.html">실전 활용과 면접 대비</a></li>
+                  </ul></div>
+                </div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col"><div class="lab-series-name">Java 기초</div><span class="lab-series-count">5편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><a href="../posts/java-catch-axis.html">catch 축 구분법</a></li>
+                    <li><a href="../posts/java-sdk-exception-hierarchy.html">SDK 예외 계층 확인법</a></li>
+                    <li><a href="../posts/java-custom-exception-cause.html">커스텀 예외에서 cause 전달 시점과 이유</a></li>
+                    <li><a href="../posts/java-time-api.html">Java 시간 API 핵심 정리</a></li>
+                    <li><a href="../posts/java-uri-url.html">URI와 URL의 차이</a></li>
+                  </ul></div>
+                </div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col"><div class="lab-series-name">Java 자료구조 실수</div><span class="lab-series-count">13편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><a href="../posts/ct-mistake-comparable.html">Comparable과 compareTo</a></li>
+                    <li><a href="../posts/ct-mistake-comparator.html">Comparator 정렬 기준</a></li>
+                    <li><a href="../posts/ct-mistake-deque.html">Deque Stack Queue</a></li>
+                    <li><a href="../posts/ct-mistake-foreach.html">forEach 사용 기준</a></li>
+                    <li><a href="../posts/ct-mistake-list.html">List 자주 틀리는 사례</a></li>
+                    <li><a href="../posts/ct-mistake-map.html">Map 정렬과 computeIfAbsent</a></li>
+                    <li><a href="../posts/ct-mistake-priorityqueue.html">PriorityQueue 자주 틀리는 사례</a></li>
+                    <li><a href="../posts/ct-mistake-set-map.html">Set Map 자주 틀리는 사례</a></li>
+                    <li><a href="../posts/ct-mistake-stream.html">Stream sum과 Collectors</a></li>
+                    <li><a href="../posts/ct-mistake-string-sb.html">String StringBuilder 자주 틀리는 사례</a></li>
+                    <li><a href="../posts/ct-mistake-toarray.html">toArray와 primitive 배열 변환</a></li>
+                    <li><a href="../posts/ct-mistake-object-copy.html">객체와 복사 자주 틀리는 사례</a></li>
+                    <li><a href="../posts/ct-mistake-nested-map.html">중첩 Map과 의미 있는 타입</a></li>
+                  </ul></div>
+                </div>
+
+              </div>
+
+              <!-- Kotlin -->
+              <div class="lab-content-section" id="cat-kotlin">
+                <div class="lab-content-heading">Kotlin <span class="hcount">25편</span></div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col"><div class="lab-series-name">Java 개발자를 위한 Kotlin</div><span class="lab-series-count">4편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><span class="pnum">01</span><a href="../posts/kotlin-java-1-syntax.html">핵심 문법 전환</a></li>
+                    <li><span class="pnum">02</span><a href="../posts/kotlin-java-2-advanced.html">Kotlin 고급 기능</a></li>
+                    <li><span class="pnum">03</span><a href="../posts/kotlin-java-3-springboot.html">Spring Boot에서의 Kotlin (코프링)</a></li>
+                    <li><span class="pnum">04</span><a href="../posts/kotlin-java-4-test.html">코프링 테스트 가이드</a></li>
+                  </ul></div>
+                </div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col"><div class="lab-series-name">Kotlin 문법 복습</div><span class="lab-series-count">4편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><span class="pnum">01</span><a href="../posts/kotlin-syntax-1-variables.html">변수, 타입, 함수</a></li>
+                    <li><span class="pnum">02</span><a href="../posts/kotlin-syntax-2-classes.html">클래스와 객체</a></li>
+                    <li><span class="pnum">03</span><a href="../posts/kotlin-syntax-3-null-collections.html">Null Safety와 컬렉션</a></li>
+                    <li><span class="pnum">04</span><a href="../posts/kotlin-syntax-4-extensions.html">확장 함수, 스코프 함수, 람다</a></li>
+                  </ul></div>
+                </div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col"><div class="lab-series-name">Kotlin 사고방식</div><span class="lab-series-count">7편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><span class="pnum">01</span><a href="../posts/kotlin-mindset-1-idioms.html">Kotlin 이디엄</a></li>
+                    <li><span class="pnum">02</span><a href="../posts/kotlin-mindset-2-types.html">타입 시스템 마스터</a></li>
+                    <li><span class="pnum">03</span><a href="../posts/kotlin-mindset-3-functions.html">함수는 일급 시민이다</a></li>
+                    <li><span class="pnum">04</span><a href="../posts/kotlin-mindset-4-collections.html">컬렉션의 모든 것</a></li>
+                    <li><span class="pnum">05</span><a href="../posts/kotlin-mindset-5-null-safety.html">Null Safety 완전 정복</a></li>
+                    <li><span class="pnum">06</span><a href="../posts/kotlin-mindset-6-dsl.html">DSL 설계</a></li>
+                    <li><span class="pnum">07</span><a href="../posts/kotlin-mindset-7-java-interop.html">Java 상호운용 완전 가이드</a></li>
+                  </ul></div>
+                </div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col"><div class="lab-series-name">Kotlin 코루틴</div><span class="lab-series-count">5편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><span class="pnum">01</span><a href="../posts/kotlin-coroutine-1-suspend.html">suspend 함수의 동작 원리</a></li>
+                    <li><span class="pnum">02</span><a href="../posts/kotlin-coroutine-2-scope-context.html">CoroutineScope, Context, Dispatcher</a></li>
+                    <li><span class="pnum">03</span><a href="../posts/kotlin-coroutine-3-structured.html">구조화된 동시성과 예외 처리</a></li>
+                    <li><span class="pnum">04</span><a href="../posts/kotlin-coroutine-4-flow.html">Flow</a></li>
+                    <li><span class="pnum">05</span><a href="../posts/kotlin-coroutine-5-test.html">코루틴 테스트</a></li>
+                  </ul></div>
+                </div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col"><div class="lab-series-name">코프링 실전</div><span class="lab-series-count">5편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><span class="pnum">01</span><a href="../posts/kopring-1-jpa-entity.html">JPA + Kotlin 엔티티 설계</a></li>
+                    <li><span class="pnum">02</span><a href="../posts/kopring-2-exception-validation.html">예외 처리 &amp; Validation 전략</a></li>
+                    <li><span class="pnum">03</span><a href="../posts/kopring-3-querydsl.html">QueryDSL + Kotlin</a></li>
+                    <li><span class="pnum">04</span><a href="../posts/kopring-4-config-profile.html">설정 관리와 프로파일 전략</a></li>
+                    <li><span class="pnum">05</span><a href="../posts/kopring-5-security.html">Spring Security + Kotlin 심화</a></li>
+                  </ul></div>
+                </div>
+
+              </div>
+
+              <!-- JWT -->
+              <div class="lab-content-section" id="cat-jwt">
+                <div class="lab-content-heading">JWT <span class="hcount">7편</span></div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col"><div class="lab-series-name">JWT 입문</div><span class="lab-series-count">2편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><span class="pnum">01</span><a href="../posts/jwt-1-token-auth.html">토큰 기반 인증의 개념과 필요성</a></li>
+                    <li><span class="pnum">02</span><a href="../posts/jwt-2-structure.html">JWT의 구조와 원리</a></li>
+                  </ul></div>
+                </div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col"><div class="lab-series-name">JWT deep dive</div><span class="lab-series-count">5편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><span class="pnum">01</span><a href="../posts/jwt-deep-dive-1-session-limits.html">세션의 한계와 토큰의 등장</a></li>
+                    <li><span class="pnum">02</span><a href="../posts/jwt-deep-dive-2-stateless.html">Stateless 인증이란</a></li>
+                    <li><span class="pnum">03</span><a href="../posts/jwt-deep-dive-3-structure.html">JWT의 구조 해부</a></li>
+                    <li><span class="pnum">04</span><a href="../posts/jwt-deep-dive-4-signature.html">서명과 검증의 원리</a></li>
+                    <li><span class="pnum">05</span><a href="../posts/jwt-deep-dive-5-tips.html">JWT 실전 팁과 면접 대비</a></li>
+                  </ul></div>
+                </div>
+
+              </div>
+
+              <!-- 코딩테스트 -->
+              <div class="lab-content-section" id="cat-codingtest">
+                <div class="lab-content-heading">코딩테스트 <span class="hcount">22편</span></div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col"><div class="lab-series-name">시간복잡도</div><span class="lab-series-count">3편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><span class="pnum">01</span><a href="../posts/time-complexity-1-basics.html">시간복잡도 기본 개념</a></li>
+                    <li><span class="pnum">02</span><a href="../posts/time-complexity-2-input-size.html">입력 크기로 허용 복잡도 판단하기</a></li>
+                    <li><span class="pnum">03</span><a href="../posts/time-complexity-3-case-study.html">실전 사례 분석</a></li>
+                  </ul></div>
+                </div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col"><div class="lab-series-name">백트래킹</div><span class="lab-series-count">3편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><span class="pnum">01</span><a href="../posts/backtracking-1-basics.html">기본 개념</a></li>
+                    <li><span class="pnum">02</span><a href="../posts/backtracking-2-pruning.html">가지치기와 최적화</a></li>
+                    <li><span class="pnum">03</span><a href="../posts/backtracking-3-patterns.html">실전 패턴과 면접 대비</a></li>
+                  </ul></div>
+                </div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col"><div class="lab-series-name">DP 가이드</div><span class="lab-series-count">11편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><span class="pnum">01</span><a href="../posts/dp-1-recursion-limits.html">재귀의 한계</a></li>
+                    <li><span class="pnum">02</span><a href="../posts/dp-2-memoization.html">메모이제이션</a></li>
+                    <li><span class="pnum">03</span><a href="../posts/dp-3-tabulation.html">타뷸레이션</a></li>
+                    <li><span class="pnum">04</span><a href="../posts/dp-4-state-definition.html">상태 정의</a></li>
+                    <li><span class="pnum">05</span><a href="../posts/dp-5-recurrence.html">점화식 도출</a></li>
+                    <li><span class="pnum">06</span><a href="../posts/dp-6-initialization.html">초기값과 탐색 순서</a></li>
+                    <li><span class="pnum">07</span><a href="../posts/dp-7-linear.html">선형 DP</a></li>
+                    <li><span class="pnum">08</span><a href="../posts/dp-8-grid.html">격자 DP</a></li>
+                    <li><span class="pnum">09</span><a href="../posts/dp-9-lis.html">LIS</a></li>
+                    <li><span class="pnum">10</span><a href="../posts/dp-10-knapsack.html">배낭 문제</a></li>
+                    <li><span class="pnum">11</span><a href="../posts/dp-11-interview.html">실전 패턴과 면접 대비</a></li>
+                  </ul></div>
+                </div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col"><div class="lab-series-name">HashSet 가이드</div><span class="lab-series-count">3편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><span class="pnum">01</span><a href="../posts/algo-hashset-1-principles.html">HashSet 기본 원리와 시간복잡도</a></li>
+                    <li><span class="pnum">02</span><a href="../posts/algo-hashset-2-patterns.html">HashSet 활용 패턴</a></li>
+                    <li><span class="pnum">03</span><a href="../posts/algo-hashset-3-vs-hashmap.html">HashSet과 HashMap 선택 기준</a></li>
+                  </ul></div>
+                </div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col"><div class="lab-series-name">단독 알고리즘</div><span class="lab-series-count">2편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><a href="../posts/algo-memoization.html">메모이제이션 가이드</a></li>
+                    <li><a href="../posts/algo-grid-backtracking.html">격자 시뮬레이션 백트래킹</a></li>
+                  </ul></div>
+                </div>
+
+              </div>
+
+              <!-- 성능 테스트 -->
+              <div class="lab-content-section" id="cat-perf">
+                <div class="lab-content-heading">성능 테스트 <span class="hcount">9편</span></div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col"><div class="lab-series-name">JMH 벤치마크</div><span class="lab-series-count">4편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><span class="pnum">01</span><a href="../posts/jmh-1-microbenchmark.html">JMH 마이크로벤치마크</a></li>
+                    <li><span class="pnum">02</span><a href="../posts/jmh-2-testcontainers.html">TestContainers로 실제 인프라 테스트</a></li>
+                    <li><span class="pnum">03</span><a href="../posts/jmh-3-data-seeding.html">대량 데이터 시딩과 벤치마크 설계</a></li>
+                    <li><span class="pnum">04</span><a href="../posts/jmh-4-result-analysis.html">결과 분석과 병목 진단</a></li>
+                  </ul></div>
+                </div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col"><div class="lab-series-name">nGrinder 부하 테스트</div><span class="lab-series-count">5편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><span class="pnum">01</span><a href="../posts/ngrinder-1-setup.html">nGrinder 이해하기와 환경 구성</a></li>
+                    <li><span class="pnum">02</span><a href="../posts/ngrinder-2-script.html">Groovy 스크립트와 테스트 설계</a></li>
+                    <li><span class="pnum">03</span><a href="../posts/ngrinder-3-analysis.html">결과 해석과 병목 진단</a></li>
+                    <li><span class="pnum">04</span><a href="../posts/ngrinder-4-graph.html">결과 그래프 읽기</a></li>
+                    <li><span class="pnum">05</span><a href="../posts/ngrinder-5-bottleneck.html">병목 진단과 용량 계획</a></li>
+                  </ul></div>
+                </div>
+
+              </div>
+
+              <!-- Docker -->
+              <div class="lab-content-section" id="cat-docker">
+                <div class="lab-content-heading">Docker <span class="hcount">9편</span></div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col"><div class="lab-series-name">Docker Compose 정리</div><span class="lab-series-count">9편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><span class="pnum">01</span><a href="../posts/docker-compose-1-env-concept.html">Compose 파일이 표현하는 실행 환경</a></li>
+                    <li><span class="pnum">02</span><a href="../posts/docker-compose-2-service-image-port.html">서비스 이미지 컨테이너 포트의 관계</a></li>
+                    <li><span class="pnum">03</span><a href="../posts/docker-compose-3-network-volume.html">네트워크와 볼륨이 상태를 만드는 방식</a></li>
+                    <li><span class="pnum">04</span><a href="../posts/docker-compose-4-env-vars-order.html">환경 변수와 시작 순서 설계</a></li>
+                    <li><span class="pnum">05</span><a href="../posts/docker-compose-5-diagnose.html">현재 docker-compose.yml 진단하기</a></li>
+                    <li><span class="pnum">06</span><a href="../posts/docker-compose-6-refine.html">Compose 파일 1차 정리하기</a></li>
+                    <li><span class="pnum">07</span><a href="../posts/docker-compose-7-spring-boot.html">Spring Boot 컨테이너 설정 맞추기</a></li>
+                    <li><span class="pnum">08</span><a href="../posts/docker-compose-8-postgresql.html">PostgreSQL 볼륨과 초기화 다루기</a></li>
+                    <li><span class="pnum">09</span><a href="../posts/docker-compose-9-verify.html">실행 검증과 문제 해결 루틴</a></li>
+                  </ul></div>
+                </div>
+
+              </div>
+
+              <!-- DB -->
+              <div class="lab-content-section" id="cat-db">
+                <div class="lab-content-heading">DB <span class="hcount">4편</span></div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col"><div class="lab-series-name">스냅샷 패턴</div><span class="lab-series-count">3편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><span class="pnum">01</span><a href="../posts/db-snapshot-1-concept.html">스냅샷 패턴의 개념</a></li>
+                    <li><span class="pnum">02</span><a href="../posts/db-snapshot-2-jsonb.html">PostgreSQL JSONB</a></li>
+                    <li><span class="pnum">03</span><a href="../posts/db-snapshot-3-design.html">스냅샷 설계 원칙</a></li>
+                  </ul></div>
+                </div>
+
+                <div class="lab-series">
+                  <div class="lab-series-name-col"><div class="lab-series-name">단독</div><span class="lab-series-count">1편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><a href="../posts/db-gin-index.html">GIN 인덱스</a></li>
+                  </ul></div>
+                </div>
+
+              </div>
+
+              <!-- 도구 -->
+              <div class="lab-content-section" id="cat-tools">
+                <div class="lab-content-heading">도구 <span class="hcount">2편</span></div>
+                <div class="lab-series">
+                  <div class="lab-series-name-col"><div class="lab-series-name">도구</div><span class="lab-series-count">2편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><a href="../posts/firebase-overview.html">Firebase 개요</a></li>
+                    <li><a href="../posts/intellij-mcp-guide.html">Gemini CLI와 MCP로 스마트하게 작업하는 방법</a></li>
+                  </ul></div>
                 </div>
               </div>
 
@@ -387,82 +885,21 @@
               <div class="lab-content-section" id="cat-aws">
                 <div class="lab-content-heading">AWS <span class="hcount">1편</span></div>
                 <div class="lab-series">
-                  <div class="lab-series-name-col">
-                    <div class="lab-series-name">S3</div>
-                    <span class="lab-series-count">1편</span>
-                  </div>
-                  <div class="lab-series-list-col">
-                    <ul class="lab-post-list">
-                      <li><a href="../posts/spring-s3-exception-handling.html">S3BinaryContentStorage 예외 처리</a></li>
-                    </ul>
-                  </div>
+                  <div class="lab-series-name-col"><div class="lab-series-name">S3</div><span class="lab-series-count">1편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><a href="../posts/spring-s3-exception-handling.html">S3BinaryContentStorage 예외 처리</a></li>
+                  </ul></div>
                 </div>
               </div>
 
-              <!-- JWT -->
-              <div class="lab-content-section" id="cat-jwt">
-                <div class="lab-content-heading">JWT <span class="hcount">2편</span></div>
+              <!-- 자주하는 실수 -->
+              <div class="lab-content-section" id="cat-mistakes">
+                <div class="lab-content-heading">자주하는 실수 <span class="hcount">1편</span></div>
                 <div class="lab-series">
-                  <div class="lab-series-name-col">
-                    <div class="lab-series-name">JWT</div>
-                    <span class="lab-series-count">2편</span>
-                  </div>
-                  <div class="lab-series-list-col">
-                    <ul class="lab-post-list">
-                      <li><span class="pnum">01</span><a href="../posts/jwt-1-token-auth.html">토큰 기반 인증의 개념과 필요성</a></li>
-                      <li><span class="pnum">02</span><a href="../posts/jwt-2-structure.html">JWT의 구조와 원리</a></li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-
-              <!-- 도구 -->
-              <div class="lab-content-section" id="cat-tools">
-                <div class="lab-content-heading">도구 <span class="hcount">2편</span></div>
-                <div class="lab-series">
-                  <div class="lab-series-name-col">
-                    <div class="lab-series-name">도구</div>
-                    <span class="lab-series-count">2편</span>
-                  </div>
-                  <div class="lab-series-list-col">
-                    <ul class="lab-post-list">
-                      <li><a href="../posts/firebase-overview.html">Firebase 개요</a></li>
-                      <li><a href="../posts/intellij-mcp-guide.html">Gemini CLI와 MCP로 스마트하게 작업하는 방법</a></li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-
-              <!-- 코딩테스트 -->
-              <div class="lab-content-section" id="cat-codingtest">
-                <div class="lab-content-heading">코딩테스트 <span class="hcount">6편</span></div>
-
-                <div class="lab-series">
-                  <div class="lab-series-name-col">
-                    <div class="lab-series-name">시간복잡도</div>
-                    <span class="lab-series-count">3편</span>
-                  </div>
-                  <div class="lab-series-list-col">
-                    <ul class="lab-post-list">
-                      <li><span class="pnum">01</span><a href="../posts/time-complexity-1-basics.html">시간복잡도 기본 개념</a></li>
-                      <li><span class="pnum">02</span><a href="../posts/time-complexity-2-input-size.html">입력 크기로 허용 복잡도 판단하기</a></li>
-                      <li><span class="pnum">03</span><a href="../posts/time-complexity-3-case-study.html">실전 사례 분석</a></li>
-                    </ul>
-                  </div>
-                </div>
-
-                <div class="lab-series">
-                  <div class="lab-series-name-col">
-                    <div class="lab-series-name">백트래킹</div>
-                    <span class="lab-series-count">3편</span>
-                  </div>
-                  <div class="lab-series-list-col">
-                    <ul class="lab-post-list">
-                      <li><span class="pnum">01</span><a href="../posts/backtracking-1-basics.html">기본 개념</a></li>
-                      <li><span class="pnum">02</span><a href="../posts/backtracking-2-pruning.html">가지치기와 최적화</a></li>
-                      <li><span class="pnum">03</span><a href="../posts/backtracking-3-patterns.html">실전 패턴과 면접 대비</a></li>
-                    </ul>
-                  </div>
+                  <div class="lab-series-name-col"><div class="lab-series-name">로직 실수</div><span class="lab-series-count">1편</span></div>
+                  <div class="lab-series-list-col"><ul class="lab-post-list">
+                    <li><a href="../posts/mistake-logic.html">로직 실수 모음</a></li>
+                  </ul></div>
                 </div>
               </div>
 

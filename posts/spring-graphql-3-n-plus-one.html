@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Spring GraphQL] 3. N+1 문제와 @BatchMapping - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Spring GraphQL] 3. N+1 문제와 @BatchMapping</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Spring GraphQL (3/8)</div>
+            <p>이전 편: <a href="spring-graphql-2-architecture.html">[Spring GraphQL] 2. Spring GraphQL 아키텍처와 Resolver</a></p>
+            <p>다음 편: <a href="spring-graphql-4-subscription.html">[Spring GraphQL] 4. Subscription과 예외 처리</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">Spring GraphQL 개념 시리즈</div>
+            <p>1. <a href="spring-graphql-1-concepts.html">GraphQL 등장 배경과 핵심 개념</a></p>
+            <p>2. <a href="spring-graphql-2-architecture.html">Spring GraphQL 아키텍처와 Resolver</a></p>
+            <p>3. <a href="spring-graphql-3-n-plus-one.html">N+1 문제와 @BatchMapping</a> ← 현재 문서</p>
+            <p>4. <a href="spring-graphql-4-subscription.html">Subscription과 예외 처리</a></p>
+          </div>
+
+          <p>GraphQL을 처음 만들고 "잘 되네!" 하고 넘어가면 높은 확률로 N+1 문제를 안고 있다. 쿼리 하나에 SQL이 수십 개 날아가는 상황이다. 이번 편에서는 왜 이 문제가 발생하고, <code>@BatchMapping</code>으로 어떻게 해결하는지 파고든다.</p>
+
+          <h2>N+1 문제란</h2>
+
+          <p>N+1 문제는 JPA에서도 자주 만나는 성능 이슈다. 부모 레코드 1건을 조회하는 쿼리 1개가 실행되고, 그 부모에 연결된 자식 레코드를 가져오기 위해 N개의 추가 쿼리가 실행되는 현상이다.</p>
+
+          <p>REST에서는 컨트롤러가 응답 전체를 한 번에 구성하기 때문에, <code>JOIN FETCH</code>나 <code>@EntityGraph</code>로 비교적 쉽게 해결할 수 있다. 하지만 <mark>GraphQL에서는 구조적으로 N+1이 발생하기 더 쉽다</mark>.</p>
+
+          <h2>GraphQL에서 N+1이 발생하는 구조</h2>
+
+          <p>이유는 GraphQL의 필드 리졸빙 방식에 있다. GraphQL은 각 필드를 <mark>독립적으로</mark> 리졸빙한다. <code>books</code> 쿼리의 결과로 Book 10권이 돌아왔을 때, 각 Book의 <code>author</code> 필드는 별도의 리졸빙 과정을 거친다.</p>
+
+<pre><code class="language-graphql">query {
+  books {
+    title
+    author {
+      name
+    }
+  }
+}</code></pre>
+          <p>이 쿼리를 실행하면 어떤 일이 일어나는지 보자.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant C as 클라이언트
+    participant R as Resolver
+    participant DB
+
+    rect rgb(255, 230, 230)
+        Note over C, DB: 1 + N 쿼리 발생
+        C->>R: { books { title, author { name } } }
+        R->>DB: SELECT * FROM books
+        Note right of DB: 1번 쿼리 → 10권 반환
+
+        loop 책 10권 각각에 대해
+            R->>DB: SELECT * FROM authors WHERE id = ?
+            Note right of DB: 각 책마다 작가 조회
+        end
+
+        R-->>C: 응답
+    end
+</div>
+          <p>분홍 영역을 보면, 1번 쿼리로 책 10권을 가져온 뒤, 각 책의 author를 가져오기 위해 <mark>10번의 추가 쿼리</mark>가 발생한다. 총 11번의 SQL이 실행되는 것이다. 책이 100권이면 101번, 1000권이면 1001번이 된다.</p>
+
+          <p>REST에서는 <code>findAllWithAuthor()</code> 같은 JOIN FETCH 메서드를 만들면 끝이다. 하지만 GraphQL에서는 클라이언트가 <code>author</code> 필드를 요청할 수도 있고 안 할 수도 있다. 항상 JOIN FETCH를 걸 수는 없는 구조다.</p>
+
+          <h2>@BatchMapping이 해결하는 방법</h2>
+
+          <p><code>@BatchMapping</code>은 개별 호출을 <mark>모아서 한 번에 처리</mark>한다. 책 10권의 author를 하나씩 조회하는 대신, 10권의 authorId를 모아서 <code>WHERE id IN (1, 2, 3)</code> 쿼리 하나로 해결한다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant C as 클라이언트
+    participant R as Resolver
+    participant DB
+
+    rect rgb(232, 248, 232)
+        Note over C, DB: 1 + 1 쿼리로 해결
+        C->>R: { books { title, author { name } } }
+        R->>DB: SELECT * FROM books
+        Note right of DB: 1번 쿼리 → 10권 반환
+
+        R->>DB: SELECT * FROM authors WHERE id IN (1, 2, 3)
+        Note right of DB: 1번 배치 쿼리로 작가 일괄 조회
+        DB-->>R: 3명의 작가 반환
+        R-->>C: 응답
+    end
+</div>
+          <p>위의 N+1 다이어그램과 비교하면 차이가 뚜렷하다. 분홍색 루프가 초록색 단일 쿼리로 바뀌었다.</p>
+
+          <h2>@BatchMapping 동작 원리</h2>
+
+          <p><code>@BatchMapping</code> 메서드는 개별 Book이 아니라 <mark>Book 리스트</mark>를 받는다. Spring GraphQL이 author가 필요한 모든 Book을 모아서 한 번에 전달하는 것이다.</p>
+
+<pre><code class="language-java">@BatchMapping(typeName = "Book", field = "author")
+public Map&lt;Book, Author&gt; author(List&lt;Book&gt; books) {
+    log.info("도서 {}권에 대한 작가 정보를 일괄 조회!", books.size());
+
+    List&lt;Long&gt; authorIds = books.stream()
+            .map(book -&gt; book.getAuthor().getId())
+            .distinct()
+            .collect(Collectors.toList());
+
+    List&lt;Author&gt; authors = authorService.findAllById(authorIds);
+
+    Map&lt;Long, Author&gt; authorMap = authors.stream()
+            .collect(Collectors.toMap(Author::getId, author -&gt; author));
+
+    return books.stream()
+            .collect(Collectors.toMap(
+                    book -&gt; book,
+                    book -&gt; authorMap.get(book.getAuthor().getId())
+            ));
+}</code></pre>
+          <p>코드가 하는 일을 단계별로 풀어보면 이렇다.</p>
+
+<div class="mermaid">
+flowchart TD
+    A["Book 리스트 수신<br/>(10권)"] --> B["authorId 추출 + 중복 제거<br/>[1, 2, 3]"]
+    B --> C["findAllById로<br/>작가 일괄 조회"]
+    C --> D["Author를 Map으로 변환<br/>{1: 김영한, 2: 마틴, 3: ...}"]
+    D --> E["Book → Author<br/>매핑 Map 반환"]
+
+    style A fill:#E8F4F8,stroke:#2196F3,stroke-width:2px,color:#000
+    style B fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#000
+    style C fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style D fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#000
+    style E fill:#E8F4F8,stroke:#2196F3,stroke-width:2px,color:#000
+</div>
+          <p>핵심은 <mark>반환 타입이 <code>Map&lt;Book, Author&gt;</code></mark>라는 점이다. Spring GraphQL은 이 Map을 받아서 각 Book에 해당하는 Author를 매칭한다.</p>
+
+          <p><code>typeName = "Book"</code>은 이 배치 매핑이 Book 타입의 필드를 리졸빙한다는 뜻이고, <code>field = "author"</code>는 Book 타입의 author 필드를 담당한다는 뜻이다.</p>
+
+          <h2>@EqualsAndHashCode를 신경 써야 하는 이유</h2>
+
+          <p><code>@BatchMapping</code>의 반환 타입이 <code>Map&lt;Book, Author&gt;</code>이므로, Book 객체가 Map의 키로 사용된다. HashMap의 키로 제대로 동작하려면 <mark><code>equals()</code>와 <code>hashCode()</code>가 올바르게 구현</mark>되어 있어야 한다.</p>
+
+          <p>Lombok의 <code>@Data</code>를 사용하면 모든 필드를 기반으로 <code>equals()</code>와 <code>hashCode()</code>가 생성되는데, 여기서 문제가 생긴다.</p>
+
+          <ul>
+            <li><code>Book</code>이 <code>Author</code>를 참조하고, <code>Author</code>가 <code>List&lt;Book&gt;</code>을 참조하는 양방향 관계다</li>
+            <li><code>@Data</code>의 <code>toString()</code>이 양방향 참조를 따라가면 <mark>무한 순환</mark>에 빠진다</li>
+            <li><code>hashCode()</code> 계산도 마찬가지로 순환한다</li>
+          </ul>
+
+          <p>그래서 <code>@Data</code> 대신 개별 어노테이션을 조합해야 한다.</p>
+
+<pre><code class="language-java">@Getter
+@Setter
+@ToString(exclude = "author")
+@EqualsAndHashCode(of = "id")
+public class Book {
+    // ...
+}</code></pre>
+          <ul>
+            <li><code>@ToString(exclude = "author")</code> : toString에서 author 참조를 제외해 순환 방지</li>
+            <li><code>@EqualsAndHashCode(of = "id")</code> : <mark>id만으로</mark> 동등성을 판단. Map 키로 안전하게 사용 가능</li>
+          </ul>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">@Data와 양방향 관계의 함정</div>
+            <p>JPA 엔티티에 <code>@Data</code>를 쓰면 편리하지만, 양방향 관계가 있을 때 <code>StackOverflowError</code>가 발생할 수 있다. 엔티티에서는 <code>@Getter</code>, <code>@Setter</code>, <code>@ToString(exclude = ...)</code>, <code>@EqualsAndHashCode(of = "id")</code>를 개별로 지정하는 것이 안전하다.</p>
+          </div>
+
+          <h2>성능 비교</h2>
+
+          <p>실제로 얼마나 차이가 나는지 정리하면 이렇다.</p>
+
+          <table>
+          <thead>
+          <tr><th>상황</th><th>@BatchMapping 없음</th><th>@BatchMapping 적용</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>책 10권 + 작가 조회</td><td>11 쿼리 (1 + 10)</td><td>2 쿼리 (1 + 1)</td></tr>
+          <tr><td>책 100권 + 작가 조회</td><td>101 쿼리</td><td>2 쿼리</td></tr>
+          <tr><td>책 1000권 + 작가 조회</td><td>1001 쿼리</td><td>2 쿼리</td></tr>
+          </tbody>
+          </table>
+
+          <p>데이터가 늘어날수록 차이는 극적으로 벌어진다. N+1은 개발 단계에서는 데이터가 적어 눈에 안 띄다가, <mark>운영 환경에서 데이터가 쌓이면 갑자기 터지는</mark> 시한폭탄이다.</p>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">@BatchMapping 메서드의 반환 Map에서 Book 누락</div>
+            <p>입력으로 받은 <code>List&lt;Book&gt;</code>의 모든 Book이 반환 Map의 키에 포함되어야 한다. 빠진 Book이 있으면 해당 Book의 author가 null로 응답된다. <code>distinct()</code>로 authorId 중복을 제거하는 건 맞지만, <mark>Map 변환 시 모든 Book을 포함</mark>하는지 확인해야 한다.</p>
+            <p>[!DANGER] @BatchMapping 없이 @SchemaMapping으로 해결하려는 시도</p>
+            <p><code>@SchemaMapping</code>은 개별 Book마다 호출되는 필드 리졸버다. author 필드에 <code>@SchemaMapping</code>을 사용하면 N+1 문제가 그대로 남는다. <mark>목록 조회에서 관계 필드를 리졸빙할 때는 반드시 <code>@BatchMapping</code></mark>을 사용해야 한다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Spring</span>
+          <span>#GraphQL</span>
+          <span>#N</span>
+          <span>#BatchMapping</span>
+          <span>#성능최적화</span>
+          <span>#DataLoader</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="spring-graphql-2-architecture.html">&larr; 이전 글</a>
+          <a href="spring-graphql-4-subscription.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

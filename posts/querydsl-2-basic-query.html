@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[QueryDSL] 2. 기본 쿼리 작성 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[QueryDSL] 2. 기본 쿼리 작성</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">QueryDSL 가이드 (2/8)</div>
+            <p>이전 편: <a href="querydsl-1-setup.html">[QueryDSL] 1. 환경 설정과 Q클래스</a></p>
+            <p>다음 편: <a href="querydsl-3-join-subquery.html">[QueryDSL] 3. 조인과 서브쿼리</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">QueryDSL 시리즈</div>
+            <p><strong>01 기본</strong></p>
+            <p>1. <a href="querydsl-1-setup.html">환경 설정과 Q클래스</a></p>
+            <p>2. <a href="querydsl-2-basic-query.html">기본 쿼리 작성</a> ← 현재 편</p>
+            <p>3. <a href="querydsl-3-join-subquery.html">조인과 서브쿼리</a></p>
+            <p><strong>02 실전</strong></p>
+            <p>4. <a href="querydsl-4-dynamic-query.html">동적 쿼리</a></p>
+            <p>5. <a href="querydsl-5-projection-dto.html">프로젝션과 DTO 매핑</a></p>
+            <p>6. <a href="querydsl-6-spring-data.html">Spring Data JPA 통합</a></p>
+            <p><strong>03 심화</strong></p>
+            <p>7. <a href="querydsl-7-performance.html">성능 최적화</a></p>
+            <p>8. <a href="querydsl-8-patterns.html">실전 패턴과 면접 대비</a></p>
+          </div>
+
+          <p>이전 편에서 환경 설정과 Q클래스의 구조를 파악했다. 이제 실제로 쿼리를 작성하는 법을 다룬다. SQL의 SELECT, WHERE, ORDER BY에 대응하는 QueryDSL API를 하나씩 살펴보자.</p>
+
+<div class="mermaid">
+graph LR
+    A[selectFrom / select] --> B[from]
+    B --> C[join]
+    C --> D[where]
+    D --> E[orderBy]
+    E --> F[offset / limit]
+    F --> G["fetch() / fetchOne() / fetchFirst()"]
+
+    style G fill:#f9f,stroke:#333,stroke-width:2px
+</div>
+          <h2>조회의 시작점</h2>
+
+          <p>QueryDSL에서 조회 쿼리는 <code>select</code>와 <code>from</code>으로 시작한다.</p>
+
+<pre><code class="language-java">// 방법 1: selectFrom — 엔티티 전체 조회 시
+List&lt;User&gt; users = queryFactory
+        .selectFrom(user)
+        .fetch();
+
+// 방법 2: select + from 분리 — 특정 컬럼만 조회하거나 DTO 매핑 시
+List&lt;String&gt; names = queryFactory
+        .select(user.name)
+        .from(user)
+        .fetch();</code></pre>
+          <p><code>selectFrom(user)</code>는 <code>select(user).from(user)</code>의 축약형이다. 엔티티 전체를 가져올 때 쓴다. 특정 컬럼만 골라서 조회하려면 <code>select</code>와 <code>from</code>을 분리해야 한다. 프로젝션에 대한 자세한 내용은 <a href="querydsl-5-projection-dto.html">프로젝션과 DTO 매핑</a> 편에서 다룬다.</p>
+
+          <h2>결과 반환 메서드</h2>
+
+          <p>쿼리를 구성한 뒤 마지막에 호출하는 메서드가 결과를 반환한다.</p>
+
+<pre><code class="language-java">// 리스트 반환
+List&lt;User&gt; users = queryFactory
+        .selectFrom(user)
+        .fetch();
+
+// 단건 반환 — 결과가 2건 이상이면 NonUniqueResultException
+User singleUser = queryFactory
+        .selectFrom(user)
+        .where(user.email.eq("a@b.com"))
+        .fetchOne();
+
+// 첫 번째 결과만 — 내부적으로 LIMIT 1
+User firstUser = queryFactory
+        .selectFrom(user)
+        .fetchFirst();</code></pre>
+          <p>각 메서드의 동작을 정리하면 이렇다.</p>
+
+<div class="mermaid">
+graph TD
+    Q[쿼리 실행] --> F["fetch()"]
+    Q --> FO["fetchOne()"]
+    Q --> FF["fetchFirst()"]
+
+    F --> FR["List 반환<br/>0건 → 빈 리스트"]
+    FO --> FOR1["0건 → null"]
+    FO --> FOR2["1건 → 객체"]
+    FO --> FOR3["2건+ → 예외 발생"]
+    FF --> FFR["첫 번째 결과<br/>내부: limit 1 + fetchOne"]
+
+    style FOR3 fill:#f96,stroke:#333
+</div>
+          <ul>
+            <li><code>fetch()</code> — 결과를 <code>List</code>로 반환한다. 결과가 없으면 빈 리스트를 반환한다.</li>
+            <li><code>fetchOne()</code> — 결과가 정확히 0건 또는 1건일 때 사용한다. 0건이면 <code>null</code>, 1건이면 해당 객체, 2건 이상이면 예외가 발생한다.</li>
+            <li><code>fetchFirst()</code> — 결과 중 첫 번째만 반환한다. 내부적으로 <code>limit(1).fetchOne()</code>과 같다. 결과가 없으면 <code>null</code>이다.</li>
+          </ul>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">fetchResults()와 fetchCount()의 폐기</div>
+            <p>QueryDSL 5.0부터 <code>fetchResults()</code>와 <code>fetchCount()</code>는 deprecated되었다. 복잡한 쿼리에서 자동 생성되는 count 쿼리가 정확하지 않은 경우가 있기 때문이다. 카운트가 필요하면 <mark>별도의 count 쿼리를 직접 작성</mark>하는 것이 안전하다.</p>
+            <p>```java</p>
+            <p>long count = queryFactory</p>
+            <p>.select(user.count())</p>
+            <p>.from(user)</p>
+            <p>.fetchOne();</p>
+            <p>```</p>
+          </div>
+
+          <h2>where 조건</h2>
+
+          <p><code>where</code>에는 <code>BooleanExpression</code>을 전달한다. Q클래스의 Path 필드에서 조건 메서드를 호출하면 <code>BooleanExpression</code>이 만들어진다.</p>
+
+          <h3>비교 연산자</h3>
+
+<pre><code class="language-java">user.age.eq(25)        // age = 25
+user.age.ne(25)        // age != 25
+user.age.gt(25)        // age &gt; 25
+user.age.goe(25)       // age &gt;= 25  (greater or equal)
+user.age.lt(25)        // age &lt; 25
+user.age.loe(25)       // age &lt;= 25  (less or equal)</code></pre>
+          <p><code>goe</code>와 <code>loe</code>는 각각 "greater or equal", "less or equal"의 약자다. <code>ge</code>, <code>le</code>가 아니라 <mark><code>goe</code>, <code>loe</code></mark>인 점에 주의한다.</p>
+
+          <h3>문자열 연산자</h3>
+
+<pre><code class="language-java">user.name.like("%kim%")         // LIKE '%kim%'
+user.name.contains("kim")       // LIKE '%kim%' (contains가 %를 자동으로 감싸준다)
+user.name.startsWith("kim")     // LIKE 'kim%'
+user.name.endsWith("kim")       // LIKE '%kim'
+user.name.eq("kim")             // = 'kim' (정확히 일치)
+user.name.equalsIgnoreCase("kim") // 대소문자 무시 비교</code></pre>
+          <p><code>like()</code>를 쓸 때는 <code>%</code>를 직접 넣어야 한다. <code>contains()</code>는 앞뒤에 <code>%</code>를 자동으로 붙여주므로 더 편리하다.</p>
+
+          <h3>null 체크와 범위</h3>
+
+<pre><code class="language-java">user.email.isNull()              // email IS NULL
+user.email.isNotNull()           // email IS NOT NULL
+user.age.in(20, 25, 30)         // age IN (20, 25, 30)
+user.age.notIn(20, 25, 30)      // age NOT IN (20, 25, 30)
+user.age.between(20, 30)        // age BETWEEN 20 AND 30</code></pre>
+          <p><code>in()</code>에는 가변인자 또는 <code>Collection</code>을 전달할 수 있다.</p>
+
+          <h3>조건 조합</h3>
+
+          <p>여러 조건을 조합하는 방법은 두 가지다.</p>
+
+<pre><code class="language-java">// 방법 1: where에 콤마로 나열 — 모두 AND로 연결
+queryFactory
+        .selectFrom(user)
+        .where(
+                user.name.eq("kim"),
+                user.age.gt(20)
+        )
+        .fetch();
+
+// 방법 2: and(), or() 메서드 체이닝
+queryFactory
+        .selectFrom(user)
+        .where(
+                user.name.eq("kim")
+                        .and(user.age.gt(20))
+                        .or(user.role.eq(Role.ADMIN))
+        )
+        .fetch();</code></pre>
+
+<div class="mermaid">
+graph LR
+    subgraph "where(조건1, 조건2, 조건3)"
+        C1[조건1] --- AND1(AND)
+        AND1 --- C2[조건2]
+        C2 --- AND2(AND)
+        AND2 --- C3[조건3]
+    end
+</div>
+          <p><code>where</code>에 콤마로 조건을 나열하면 자동으로 AND로 연결된다. 이 방식이 가독성이 좋고, <mark><code>null</code>인 조건은 자동으로 무시</mark>되기 때문에 동적 쿼리에서도 유용하다. 동적 쿼리의 자세한 내용은 <a href="querydsl-4-dynamic-query.html">동적 쿼리</a> 편에서 다룬다.</p>
+
+          <p>OR 조건이 필요할 때는 <code>or()</code> 메서드를 사용한다.</p>
+
+          <h2>정렬</h2>
+
+          <p><code>orderBy</code>에 정렬 조건을 넣는다.</p>
+
+<pre><code class="language-java">queryFactory
+        .selectFrom(user)
+        .orderBy(user.createdAt.desc())
+        .fetch();</code></pre>
+          <p>여러 컬럼으로 정렬할 때는 콤마로 나열한다.</p>
+
+<pre><code class="language-java">queryFactory
+        .selectFrom(user)
+        .orderBy(
+                user.name.asc(),
+                user.createdAt.desc()
+        )
+        .fetch();</code></pre>
+          <p><code>name</code> 오름차순으로 먼저 정렬하고, 같은 이름이면 <code>createdAt</code> 내림차순으로 정렬한다.</p>
+
+          <h3>null 값 정렬</h3>
+
+          <p>null 값이 포함된 컬럼을 정렬할 때는 null의 위치를 지정할 수 있다.</p>
+
+<pre><code class="language-java">user.name.asc().nullsLast()    // null을 마지막에 배치
+user.name.asc().nullsFirst()   // null을 처음에 배치</code></pre>
+          <h2>페이징</h2>
+
+          <p><code>offset</code>과 <code>limit</code>으로 페이징을 구현한다.</p>
+
+<pre><code class="language-java">List&lt;User&gt; users = queryFactory
+        .selectFrom(user)
+        .orderBy(user.createdAt.desc())
+        .offset(20)   // 0부터 시작, 20번째부터
+        .limit(10)    // 10건 조회
+        .fetch();</code></pre>
+          <p><code>offset</code>은 건너뛸 행 수, <code>limit</code>은 가져올 최대 행 수다. 페이지 번호 기반이라면 <code>offset = (page - 1) * size</code>, <code>limit = size</code>로 계산하면 된다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">offset 페이징의 한계</div>
+            <p>offset이 커질수록 DB가 앞의 행을 모두 읽고 버리는 비용이 생긴다. 데이터가 많을 때는 커서 기반 페이지네이션이 더 효율적이다. 자세한 내용은 <a href="offset의-한계와-cursor의-등장.html">커서 기반 페이지네이션</a> 시리즈를 참고한다.</p>
+          </div>
+
+          <h2>집계</h2>
+
+          <p><code>groupBy</code>와 <code>having</code>으로 집계 쿼리를 작성할 수 있다.</p>
+
+<pre><code class="language-java">List&lt;Tuple&gt; result = queryFactory
+        .select(user.role, user.count())
+        .from(user)
+        .groupBy(user.role)
+        .having(user.count().gt(5))
+        .fetch();</code></pre>
+          <p>이 쿼리는 역할별 사용자 수를 구하되, 5명 이상인 역할만 조회한다. <code>Tuple</code>은 여러 컬럼을 담는 제네릭 컨테이너다.</p>
+
+<div class="mermaid">
+graph LR
+    D[데이터] --> G["groupBy(기준)"]
+    G --> H["having(조건)"]
+    H --> R[집계 결과]
+
+    subgraph "집계 함수"
+        count --- sum
+        sum --- avg
+        avg --- max
+        max --- min
+    end
+</div>
+          <p>집계에 사용할 수 있는 함수는 다음과 같다.</p>
+
+          <ul>
+            <li><code>count()</code> — 행 수</li>
+            <li><code>sum()</code> — 합계</li>
+            <li><code>avg()</code> — 평균</li>
+            <li><code>max()</code> — 최댓값</li>
+            <li><code>min()</code> — 최솟값</li>
+          </ul>
+
+<pre><code class="language-java">// 집계 함수 예시
+Long totalCount = queryFactory
+        .select(user.count())
+        .from(user)
+        .fetchOne();
+
+Integer maxAge = queryFactory
+        .select(user.age.max())
+        .from(user)
+        .fetchOne();</code></pre>
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">goe/loe를 ge/le로 착각</div>
+            <p>QueryDSL의 크거나 같음은 <code>goe()</code>, 작거나 같음은 <code>loe()</code>다. <code>ge()</code>, <code>le()</code>라고 쓰면 컴파일 에러가 난다. "greater or equal", "less or equal"의 약자로 기억하면 된다.</p>
+            <p>[!DANGER] fetchOne()에 결과가 2건 이상</p>
+            <p><code>fetchOne()</code>은 결과가 1건이라는 것을 보장할 때만 써야 한다. 유니크하지 않은 조건으로 조회하면 <code>NonUniqueResultException</code>이 발생한다. 확신이 없으면 <code>fetchFirst()</code>를 쓰는 것이 안전하다.</p>
+            <p>[!DANGER] like()에 와일드카드 누락</p>
+            <p><code>user.name.like("kim")</code>은 <code>LIKE 'kim'</code>으로 변환되어 정확히 "kim"과 일치하는 행만 찾는다. 부분 일치를 원한다면 <code>like("%kim%")</code>으로 와일드카드를 직접 넣거나, <code>contains("kim")</code>을 사용해야 한다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#QueryDSL</span>
+          <span>#JPA</span>
+          <span>#Spring</span>
+          <span>#쿼리</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="querydsl-1-setup.html">&larr; 이전 글</a>
+          <a href="querydsl-3-join-subquery.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

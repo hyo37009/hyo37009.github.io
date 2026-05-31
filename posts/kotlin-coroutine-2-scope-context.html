@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Kotlin] 2. CoroutineScope, Context, Dispatcher - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Kotlin] 2. CoroutineScope, Context, Dispatcher</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Kotlin 코루틴 (2/5)</div>
+            <p>이전 편: <a href="kotlin-coroutine-1-suspend.html">[Kotlin] 1. suspend 함수의 동작 원리</a></p>
+            <p>다음 편: <a href="kotlin-coroutine-3-structured.html">[Kotlin] 3. 구조화된 동시성과 예외 처리</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">Kotlin 코루틴 시리즈 (2/5)</div>
+            <p>이전 편: <a href="kotlin-coroutine-1-suspend.html">1 suspend 함수의 동작 원리</a></p>
+            <p>다음 편: <a href="kotlin-coroutine-3-structured.html">3 구조화된 동시성과 예외 처리</a></p>
+          </div>
+
+          <p><code>suspend</code> 함수가 "중단될 수 있는 함수"라면, 이 함수를 <strong>어디서, 어떤 환경에서</strong> 실행할지를 결정하는 것이 <code>CoroutineScope</code>, <code>CoroutineContext</code>, <code>Dispatcher</code>다.</p>
+
+          <p>비유하자면 <code>suspend</code> 함수는 레시피(어떤 작업을 할지)이고, Scope은 주방(작업 환경), Context는 주방의 설비(필요한 도구와 규칙), Dispatcher는 셰프(실제로 일하는 스레드)다. 레시피만 있으면 요리를 할 수 없다. 주방과 셰프가 있어야 한다.</p>
+
+          <h2>코루틴 빌더</h2>
+
+          <p><code>suspend</code> 함수를 실행하려면 코루틴을 시작해야 한다. 이 역할을 하는 것이 <strong>코루틴 빌더</strong>다.</p>
+
+          <h3>launch — 결과가 필요 없을 때</h3>
+
+<pre><code class="language-kotlin">val scope = CoroutineScope(Dispatchers.Default)
+
+scope.launch {
+    val data = fetchData()   // suspend 함수 호출 가능
+    println(data)
+}</code></pre>
+          <ul>
+            <li><code>launch</code>는 <code>Job</code>을 반환한다. 결과값이 아니라 <strong>작업의 핸들</strong>이다.</li>
+            <li>"이 작업을 시작하고, 완료 여부만 추적한다"는 의미.</li>
+            <li>반환값이 필요 없는 작업 (로깅, 알림 전송, 이벤트 발행 등)에 적합하다.</li>
+          </ul>
+
+          <hr>
+
+          <h3>async — 결과가 필요할 때</h3>
+
+<pre><code class="language-kotlin">val deferred: Deferred&lt;String&gt; = scope.async {
+    fetchData()
+}
+
+val result: String = deferred.await()  // 결과를 기다림</code></pre>
+          <ul>
+            <li><code>async</code>는 <code>Deferred&lt;T&gt;</code>를 반환한다. <code>Deferred</code>는 <code>Job</code>의 확장으로, <strong>결과값을 가진 Job</strong>이다.</li>
+            <li><code>await()</code>로 결과를 받을 수 있다. <code>await()</code>도 <code>suspend</code> 함수이므로 스레드를 블로킹하지 않는다.</li>
+          </ul>
+
+          <p><code>async</code>의 진짜 강점은 <strong>병렬 실행</strong>이다.</p>
+
+<pre><code class="language-kotlin">suspend fun fetchUserProfile(userId: Long): UserProfile {
+    val user = async { userService.findById(userId) }
+    val posts = async { postService.findByUserId(userId) }
+
+    // 두 작업이 동시에 실행되고, 둘 다 완료될 때까지 기다림
+    return UserProfile(user.await(), posts.await())
+}</code></pre>
+          <p>순차 실행이면 <code>findById</code> → <code>findByUserId</code>로 총 2초 걸릴 작업이, 병렬 실행이면 1초로 줄어든다.</p>
+
+          <hr>
+
+          <h3>runBlocking — 코루틴과 일반 세계의 다리</h3>
+
+<pre><code class="language-kotlin">fun main() = runBlocking {
+    val result = fetchData()
+    println(result)
+}</code></pre>
+          <ul>
+            <li><code>runBlocking</code>은 <strong>현재 스레드를 블로킹</strong>하면서 코루틴을 실행한다.</li>
+            <li>코루틴 세계와 일반(non-suspend) 세계를 연결하는 다리 역할이다.</li>
+            <li><code>main</code> 함수나 테스트에서 쓴다. 프로덕션 코드에서는 가급적 쓰지 않는다.</li>
+          </ul>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">runBlocking을 프로덕션에서 쓰지 말 것</div>
+            <p><code>runBlocking</code>은 스레드를 블로킹한다. 코루틴의 장점(스레드를 효율적으로 쓰는 것)을 무력화시킨다. Spring에서 코루틴을 쓸 때는 Spring이 제공하는 코루틴 지원(<code>suspend</code> 컨트롤러 등)을 활용해야 한다.</p>
+          </div>
+
+          <hr>
+
+          <h2>CoroutineScope</h2>
+
+          <p><code>CoroutineScope</code>은 코루틴의 <strong>생명주기</strong>를 관리한다. 스코프가 취소되면 그 안에서 실행 중인 모든 코루틴도 취소된다.</p>
+
+<pre><code class="language-kotlin">class PostService : CoroutineScope {
+    private val job = Job()
+    override val coroutineContext = Dispatchers.IO + job
+
+    fun fetchPosts() {
+        launch {
+            // 이 코루틴은 PostService의 스코프에 속한다
+        }
+    }
+
+    fun cleanup() {
+        job.cancel()  // 스코프 내 모든 코루틴 취소
+    }
+}</code></pre>
+          <p>실무에서 직접 <code>CoroutineScope</code>을 구현하는 경우는 드물다. 프레임워크가 제공하는 스코프를 쓰는 것이 일반적이다.</p>
+
+          <ul>
+            <li><strong><code>viewModelScope</code></strong> — Android ViewModel의 생명주기에 연결.</li>
+            <li><strong><code>lifecycleScope</code></strong> — Android Activity/Fragment의 생명주기에 연결.</li>
+            <li><strong>Spring</strong> — <code>suspend</code> 함수를 컨트롤러에 사용하면 Spring이 자체적으로 스코프를 관리한다.</li>
+          </ul>
+
+          <p>스코프의 핵심 역할은 <mark>코루틴이 "어디에 속하는지"를 정의</mark>하는 것이다. 부모 스코프가 취소되면 자식 코루틴도 모두 취소된다. 이것이 구조화된 동시성의 기반이다. 자세한 내용은 <a href="kotlin-coroutine-3-structured.html">다음 문서</a>에서 다룬다.</p>
+
+          <hr>
+
+          <h2>CoroutineContext</h2>
+
+          <p><code>CoroutineContext</code>는 코루틴이 실행되는 <strong>환경 정보</strong>를 담은 맵이다. 여러 요소(Element)로 구성된다.</p>
+
+<div class="mermaid">
+graph TD
+    Context["CoroutineContext"]
+    Context --> Job["Job — 코루틴의 생명주기"]
+    Context --> Dispatcher["Dispatcher — 실행 스레드"]
+    Context --> Name["CoroutineName — 디버깅용 이름"]
+    Context --> Handler["CoroutineExceptionHandler"]
+
+    style Context fill:#e1f5fe
+</div>
+          <p>Context 요소들은 <code>+</code> 연산자로 합칠 수 있다.</p>
+
+<pre><code class="language-kotlin">val context = Dispatchers.IO + CoroutineName("data-fetch") + SupervisorJob()</code></pre>
+          <ul>
+            <li><code>+</code>로 요소를 합치면 새 Context가 만들어진다.</li>
+            <li>같은 키의 요소가 있으면 오른쪽이 왼쪽을 덮어쓴다.</li>
+          </ul>
+
+          <p><code>CoroutineScope</code>은 본질적으로 <code>CoroutineContext</code>의 래퍼다. 스코프가 가진 context가 그 안에서 생성되는 모든 코루틴에 상속된다.</p>
+
+          <hr>
+
+          <h2>Dispatcher — 어떤 스레드에서 실행할 것인가</h2>
+
+          <p>Dispatcher는 코루틴이 <strong>어떤 스레드(풀)에서</strong> 실행될지를 결정한다. 가장 중요한 Context 요소 중 하나다.</p>
+
+          <h3>Dispatchers.Default</h3>
+
+          <p>CPU 바운드 작업에 적합하다. JSON 파싱, 정렬, 복잡한 계산 등.</p>
+
+          <ul>
+            <li>공유 스레드풀을 사용하며, 코어 수만큼 스레드가 있다.</li>
+            <li><code>launch { }</code>, <code>async { }</code>의 기본 Dispatcher.</li>
+          </ul>
+
+          <hr>
+
+          <h3>Dispatchers.IO</h3>
+
+          <p>I/O 바운드 작업에 적합하다. 네트워크 요청, 파일 읽기/쓰기, DB 쿼리 등.</p>
+
+          <ul>
+            <li>Default와 스레드풀을 공유하지만, <strong>최대 64개</strong>(또는 코어 수)까지 스레드를 추가로 만들 수 있다.</li>
+            <li>I/O 작업은 대기 시간이 길기 때문에 스레드를 더 많이 써도 괜찮다.</li>
+          </ul>
+
+<pre><code class="language-kotlin">suspend fun readFile(path: String): String = withContext(Dispatchers.IO) {
+    File(path).readText()  // 블로킹 I/O를 IO Dispatcher에서 실행
+}</code></pre>
+          <p><code>withContext</code>는 <mark>코루틴의 실행 스레드를 전환</mark>하는 함수다. 블로킹 코드를 <code>withContext(Dispatchers.IO)</code>로 감싸면, I/O 전용 스레드에서 실행되어 다른 코루틴을 블로킹하지 않는다.</p>
+
+          <hr>
+
+          <h3>Dispatchers.Main</h3>
+
+          <p>UI 스레드에서 실행한다. Android에서 UI를 업데이트할 때 사용한다. 서버 개발에서는 거의 쓰지 않는다.</p>
+
+          <hr>
+
+          <h3>Dispatchers.Unconfined</h3>
+
+          <p>코루틴이 처음 중단될 때까지는 호출한 스레드에서 실행되고, 재개 시에는 중단된 suspend 함수가 사용한 스레드에서 실행된다. 일반적으로 사용을 권장하지 않는다. 테스트나 특수한 경우에만 쓴다.</p>
+
+          <hr>
+
+          <h3>선택 기준 정리</h3>
+
+          <table>
+          <thead>
+          <tr><th>Dispatcher</th><th>용도</th><th>예시</th></tr>
+          </thead>
+          <tbody>
+          <tr><td><code>Default</code></td><td>CPU 바운드</td><td>JSON 파싱, 정렬, 계산</td></tr>
+          <tr><td><code>IO</code></td><td>I/O 바운드</td><td>네트워크, 파일, DB</td></tr>
+          <tr><td><code>Main</code></td><td>UI 업데이트</td><td>Android UI</td></tr>
+          <tr><td><code>Unconfined</code></td><td>특수 용도</td><td>테스트</td></tr>
+          </tbody>
+          </table>
+
+          <hr>
+
+          <h2>withContext — Dispatcher 전환</h2>
+
+          <p><code>withContext</code>는 코루틴의 Context를 전환하고, 블록이 끝나면 원래 Context로 돌아온다.</p>
+
+<pre><code class="language-kotlin">suspend fun processData(): Result {
+    val raw = withContext(Dispatchers.IO) {
+        fetchFromNetwork()           // IO 스레드에서
+    }
+    val parsed = withContext(Dispatchers.Default) {
+        parseJson(raw)               // CPU 스레드에서
+    }
+    return parsed
+}</code></pre>
+          <p><code>withContext</code>는 새 코루틴을 만드는 것이 아니다. <mark>같은 코루틴의 실행 스레드만 전환</mark>한다. <code>launch</code>나 <code>async</code>와 달리 병렬 실행이 아니라 순차 실행이다.</p>
+
+          <hr>
+
+          <h2>심화 분석</h2>
+
+          <h4>Context 상속</h4>
+
+          <p>자식 코루틴은 부모의 Context를 <strong>상속</strong>받되, 자신이 지정한 요소로 오버라이드한다.</p>
+
+<pre><code class="language-kotlin">val scope = CoroutineScope(Dispatchers.Default + CoroutineName("parent"))
+
+scope.launch(Dispatchers.IO) {
+    // Dispatcher: IO (오버라이드)
+    // CoroutineName: "parent" (상속)
+    // Job: 새 Job이 생성되되, parent의 Job이 부모가 됨
+}</code></pre>
+          <p>Job은 특별하다. 자식 코루틴에 새 Job이 자동으로 생성되지만, 부모의 Job과 <strong>부모-자식 관계</strong>를 맺는다. 이 관계가 구조화된 동시성의 기반이 된다.</p>
+
+          <h4>GlobalScope은 왜 안 좋은가</h4>
+
+<pre><code class="language-kotlin">// 쓰지 말 것
+GlobalScope.launch {
+    // 이 코루틴은 아무 스코프에도 속하지 않는다
+}</code></pre>
+          <p><code>GlobalScope</code>은 애플리케이션 전체 생명주기를 가진다. 이 안에서 시작된 코루틴은 누구도 취소하지 않는다. 메모리 누수의 원인이 되고, 구조화된 동시성의 이점을 포기하는 것이다.</p>
+
+          <p>항상 <mark>적절한 생명주기를 가진 스코프</mark>를 사용하자.</p>
+
+          <hr>
+
+          <h2>자주 하는 실수</h2>
+
+          <h4>launch와 async 혼동</h4>
+
+<pre><code class="language-kotlin">// 결과를 쓰는데 launch를 쓴 경우 — 결과를 받을 수 없다
+val job = launch { fetchData() }  // job.결과? → 없다
+
+// 결과가 필요하면 async
+val deferred = async { fetchData() }
+val result = deferred.await()</code></pre>
+          <p>결과값이 필요하면 <code>async</code>, 필요 없으면 <code>launch</code>. 단순한 규칙이다.</p>
+
+          <h4>withContext 대신 async + await</h4>
+
+<pre><code class="language-kotlin">// 나쁜 예 — 순차 실행인데 async를 불필요하게 사용
+val result = async(Dispatchers.IO) { fetchData() }.await()
+
+// 좋은 예 — 순차 실행이면 withContext
+val result = withContext(Dispatchers.IO) { fetchData() }</code></pre>
+          <p><code>async { }.await()</code>를 바로 하면 병렬 실행의 이점이 없다. 순차적 Context 전환이면 <code>withContext</code>가 더 적합하고 효율적이다.</p>
+
+          <h4>Dispatcher.IO를 모든 곳에 사용</h4>
+
+<pre><code class="language-kotlin">// 불필요한 IO 전환 — CPU 작업인데 IO에서 실행
+withContext(Dispatchers.IO) {
+    list.sortedBy { it.name }  // CPU 작업인데?
+}</code></pre>
+          <p>정렬, 계산, 파싱 등 CPU 바운드 작업은 <code>Dispatchers.Default</code>에서 실행해야 한다. <code>IO</code>는 I/O 대기 시간이 있는 작업에만 사용한다.</p>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Kotlin</span>
+          <span>#코루틴</span>
+          <span>#CoroutineScope</span>
+          <span>#Dispatcher</span>
+          <span>#Context</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="kotlin-coroutine-1-suspend.html">&larr; 이전 글</a>
+          <a href="kotlin-coroutine-3-structured.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

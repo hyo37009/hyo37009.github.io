@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[옷장을 부탁해] 2. 인덱스와 매핑 설계 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[옷장을 부탁해] 2. 인덱스와 매핑 설계</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Elasticsearch 도입 (2/3)</div>
+            <p>이전 편: <a href="elasticsearch-1-fulltext.html">[옷장을 부탁해] 1. LIKE 검색의 한계와 역색인</a></p>
+            <p>다음 편: <a href="elasticsearch-3-query-sync.html">[옷장을 부탁해] 3. 검색 쿼리와 동기화 전략</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">Elasticsearch 도입 — 개념</div>
+            <p>- <a href="elasticsearch-1-fulltext.html">LIKE 검색의 한계와 역색인</a></p>
+            <p>- <a href="elasticsearch-2-index-mapping.html">인덱스와 매핑 설계</a> ← 현재 문서</p>
+            <p>- <a href="elasticsearch-3-query-sync.html">검색 쿼리와 동기화 전략</a></p>
+          </div>
+
+          <p>Elasticsearch에 데이터를 넣으려면 "어떤 구조로 저장할지"를 먼저 정의해야 한다. RDB에서 테이블을 만들고 컬럼 타입을 지정하듯, ES에도 인덱스를 만들고 필드의 매핑을 설정하는 과정이 필요하다. 이 문서에서는 RDB와 ES의 개념을 대응시킨 뒤, 이 프로젝트의 피드 검색에 맞는 인덱스를 설계한다.</p>
+
+          <h2>RDB와 ES 용어 대응</h2>
+
+          <p>Elasticsearch를 처음 접하면 용어가 낯설다. 하지만 이미 알고 있는 RDB 개념과 1:1로 대응시키면 금방 감이 잡힌다.</p>
+
+          <p>RDB와 ES의 용어를 나란히 놓고 보면 구조가 거의 같다는 걸 알 수 있다.</p>
+
+<div class="mermaid">
+block-beta
+    columns 2
+
+    block:rdb["RDB"]
+        columns 1
+        A["데이터베이스"]
+        B["테이블"]
+        C["행"]
+        D["컬럼"]
+        E["스키마"]
+    end
+
+    block:es["Elasticsearch"]
+        columns 1
+        F["클러스터"]
+        G["인덱스"]
+        H["도큐먼트"]
+        I["필드"]
+        J["매핑"]
+    end
+
+    A --> F
+    B --> G
+    C --> H
+    D --> I
+    E --> J
+
+    style rdb fill:#E8F4F8,stroke:#2196F3,color:#000
+    style es fill:#E8F8E8,stroke:#4CAF50,color:#000
+    style A fill:#E8F4F8,stroke:#2196F3,stroke-width:2px,color:#000
+    style B fill:#E8F4F8,stroke:#2196F3,stroke-width:2px,color:#000
+    style C fill:#E8F4F8,stroke:#2196F3,stroke-width:2px,color:#000
+    style D fill:#E8F4F8,stroke:#2196F3,stroke-width:2px,color:#000
+    style E fill:#E8F4F8,stroke:#2196F3,stroke-width:2px,color:#000
+    style F fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style G fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style H fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style I fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style J fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+</div>
+          <p>파란 블록이 RDB, 초록 블록이 ES다. 화살표로 연결된 쌍을 하나씩 보면 이렇다.</p>
+
+          <ul>
+            <li><strong>데이터베이스 → 클러스터</strong> : RDB에서 하나의 데이터베이스가 여러 테이블을 담듯, ES에서 하나의 클러스터가 여러 인덱스를 담는다.</li>
+            <li><strong>테이블 → 인덱스</strong> : 데이터를 저장하는 단위. RDB의 <code>feeds</code> 테이블이 ES에서는 <code>feeds</code> 인덱스가 된다.</li>
+            <li><strong>행 → 도큐먼트</strong> : 테이블의 한 행이 ES에서는 하나의 JSON 도큐먼트다. 이 프로젝트에서 <mark>피드 1개 = 도큐먼트 1개</mark>다.</li>
+            <li><strong>컬럼 → 필드</strong> : 행의 각 컬럼이 도큐먼트의 필드에 대응한다.</li>
+            <li><strong>스키마 → 매핑</strong> : 컬럼 타입을 정의하는 스키마가 ES에서는 매핑이다. 어떤 필드가 어떤 타입인지 정의한다.</li>
+          </ul>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">RDB와의 결정적 차이</div>
+            <p>RDB는 정규화된 관계형 구조라서 여러 테이블을 JOIN해서 데이터를 조합한다. ES는 <mark>비정규화된 도큐먼트 구조</mark>라서 검색에 필요한 데이터를 하나의 도큐먼트에 몰아넣는다. JOIN이 없으므로 검색은 빠르지만, 데이터 중복이 생길 수 있다.</p>
+          </div>
+
+          <h2>필드 타입</h2>
+
+          <p>매핑을 정의할 때 가장 중요한 결정이 필드 타입이다. 같은 문자열이라도 어떤 타입을 지정하느냐에 따라 ES가 데이터를 저장하고 검색하는 방식이 완전히 달라진다.</p>
+
+          <h3>text 타입</h3>
+
+          <p>전문 검색용 타입이다. 데이터를 저장할 때 분석기가 텍스트를 단어 단위로 쪼개고, 각 단어로 역색인을 생성한다. "오늘 날씨 좋아서 반팔 입었다"라는 문장이 들어오면 <mark>개별 단어로 분해돼서 저장</mark>되기 때문에, 나중에 "반팔"이라는 단어 하나로도 이 도큐먼트를 찾을 수 있다.</p>
+
+          <p>피드의 <code>content</code> 필드가 대표적인 text 타입 후보다. 사용자가 "반팔", "날씨", "코트" 같은 키워드로 피드를 검색할 수 있어야 하기 때문이다.</p>
+
+          <p>text 타입이 데이터를 어떻게 처리하는지 흐름으로 보면 더 명확하다.</p>
+
+<div class="mermaid">
+flowchart TD
+    A["원본 텍스트<br/>오늘 날씨 좋아서 반팔 입었다"]
+    B["분석기 실행"]
+
+    subgraph Tokenize ["토큰화"]
+        direction LR
+        T1["오늘"]
+        T2["날씨"]
+        T3["좋다"]
+        T4["반팔"]
+        T5["입다"]
+    end
+
+    subgraph Index ["역색인 저장"]
+        direction LR
+        I1["오늘 → doc1"]
+        I2["날씨 → doc1"]
+        I3["좋다 → doc1"]
+        I4["반팔 → doc1"]
+        I5["입다 → doc1"]
+    end
+
+    A ==> B
+    B ==> Tokenize
+    Tokenize ==> Index
+
+    style A fill:#E8F4F8,stroke:#2196F3,stroke-width:2px,color:#000
+    style B fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#000
+    style Tokenize fill:#f0f8f0,stroke:#4CAF50
+    style Index fill:#E8F8E8,stroke:#4CAF50
+    style T1 fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style T2 fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style T3 fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style T4 fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style T5 fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style I1 fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style I2 fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style I3 fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style I4 fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style I5 fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+</div>
+          <p>파란 노드의 원본 텍스트가 주황 노드의 분석기를 거치면, 초록 영역처럼 개별 토큰으로 분리된다. "좋아서"가 "좋다"로, "입었다"가 "입다"로 원형 변환된 점에 주목해야 한다. 이 토큰 각각이 역색인에 등록되므로, 어떤 단어로 검색하든 해당 도큐먼트를 찾아낼 수 있다.</p>
+
+          <h3>keyword 타입</h3>
+
+          <p>keyword 타입은 text와 정반대다. <mark>분석 과정 없이 원본 그대로 저장</mark>된다. "CLEAR"라는 값이 들어오면 토큰화 없이 "CLEAR" 그 자체가 색인된다.</p>
+
+          <p>text와 keyword의 차이를 나란히 보면 확실하다.</p>
+
+<div class="mermaid">
+flowchart TD
+    subgraph TextType ["text 타입"]
+        direction TB
+        TA["오늘 날씨 좋아서<br/>반팔 입었다"]
+        TB["분석기 실행"]
+        TC["오늘, 날씨,<br/>좋다, 반팔, 입다"]
+        TA ==> TB ==> TC
+    end
+
+    TextType ~~~ KeywordType
+
+    subgraph KeywordType ["keyword 타입"]
+        direction TB
+        KA["CLEAR"]
+        KB["분석 없음"]
+        KC["CLEAR"]
+        KA ==> KB ==> KC
+    end
+
+    style TextType fill:#f0f8f0,stroke:#4CAF50
+    style KeywordType fill:#E8F4F8,stroke:#2196F3
+    style TA fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style TB fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#000
+    style TC fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px,color:#000
+    style KA fill:#E8F4F8,stroke:#2196F3,stroke-width:2px,color:#000
+    style KB fill:#F3E5F5,stroke:#9C27B0,stroke-width:2px,color:#000
+    style KC fill:#E8F4F8,stroke:#2196F3,stroke-width:2px,color:#000
+</div>
+          <p>왼쪽 초록 영역의 text 타입은 분석기를 거쳐 여러 토큰으로 쪼개진다. 오른쪽 파란 영역의 keyword 타입은 분석 과정 자체가 없어서 원본이 그대로 색인된다.</p>
+
+          <p>keyword는 <mark>정확히 일치하는 값만 찾는 필터링</mark>에 사용한다. <code>feedId</code>, <code>skyStatus</code>, <code>authorId</code> 같은 필드가 keyword로 적합하다. "CLEAR"로 필터링하면 정확히 "CLEAR"인 도큐먼트만 나온다. "CLE"나 "clear"로는 찾을 수 없다.</p>
+
+          <p><mark>text는 검색용, keyword는 필터링용</mark>이라고 기억하면 된다.</p>
+
+          <h3>date, integer, long 타입</h3>
+
+          <p>나머지 타입은 직관적이다.</p>
+
+          <ul>
+            <li><strong>date</strong> : 날짜와 시간을 저장한다. <code>createdAt</code> 필드에 사용하며, 범위 검색과 정렬에 쓰인다. "최근 일주일 피드"같은 조건이 가능해진다.</li>
+            <li><strong>integer</strong> : 32비트 정수. <code>likeCount</code>처럼 비교적 작은 숫자에 적합하다.</li>
+            <li><strong>long</strong> : 64비트 정수. 더 큰 범위의 숫자가 필요할 때 사용한다.</li>
+          </ul>
+
+          <p>숫자 타입은 범위 조건과 정렬에 최적화돼 있다. "좋아요 100개 이상 피드", "좋아요 많은 순 정렬" 같은 쿼리가 효율적으로 동작한다.</p>
+
+          <h2>nori 한국어 분석기</h2>
+
+          <p><a href="elasticsearch-1-fulltext.html">이전 문서</a>에서 역색인의 핵심이 "텍스트를 단어로 쪼개는 것"이라고 했다. 영어는 공백으로 단어가 구분되니까 쉽지만, 한국어는 그렇지 않다. "입었다"와 "입다"가 같은 단어라는 걸 기계가 알려면 <mark>형태소 분석</mark>이 필요하다.</p>
+
+          <p>nori는 ES에 기본 내장된 한국어 형태소 분석기다. 별도 설치 없이 플러그인만 활성화하면 바로 사용할 수 있다.</p>
+
+          <p>nori가 하는 일은 크게 두 가지다.</p>
+
+          <ul>
+            <li><strong>토큰화</strong> : 문장을 의미 있는 단위로 쪼갠다. "오늘 날씨 좋아서 반팔 입었다" → "오늘", "날씨", "좋아서", "반팔", "입었다"</li>
+            <li><strong>원형 변환</strong> : 활용형을 사전형으로 바꾼다. "입었다" → "입다", "좋아서" → "좋다"</li>
+          </ul>
+
+          <p>원형 변환이 왜 중요한가? 사용자가 "입다"로 검색해도, 본문에 "입었다", "입고", "입은"이라고 쓰인 피드가 전부 검색된다. 활용형이 달라도 <mark>원형이 같으면 같은 토큰으로 매칭</mark>되기 때문이다. 한국어 검색에서 이게 없으면 정확히 그 형태로 쓰인 글만 찾을 수 있어서 검색 품질이 크게 떨어진다.</p>
+
+          <p>인덱스에 nori 분석기를 설정하는 JSON은 이렇다.</p>
+
+<pre><code class="language-json">{
+  "settings": {
+    "analysis": {
+      "analyzer": {
+        "nori_analyzer": {
+          "type": "custom",
+          "tokenizer": "nori_tokenizer",
+          "filter": ["nori_readingform", "lowercase"]
+        }
+      }
+    }
+  }
+}</code></pre>
+          <p><code>nori_tokenizer</code>가 한국어 형태소 분석을 담당하고, <code>nori_readingform</code> 필터가 한자를 한글 독음으로 변환한다. <code>lowercase</code> 필터는 영문이 섞여 있을 때를 대비한 것이다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">decompound_mode 옵션</div>
+            <p>nori_tokenizer에는 <code>decompound_mode</code>라는 옵션이 있다. 복합어를 어떻게 처리할지 결정한다. 기본값은 <code>discard</code>로, "삼성전자"를 "삼성"과 "전자"로 분리하되 원본은 버린다. <code>mixed</code>로 설정하면 "삼성전자", "삼성", "전자" 세 개 모두 색인돼서 검색 범위가 넓어진다.</p>
+          </div>
+
+          <h2>이 프로젝트의 인덱스 설계</h2>
+
+          <p>지금까지 배운 개념을 바탕으로, "옷장을 부탁해"의 피드 검색을 위한 <code>feeds</code> 인덱스를 설계한다.</p>
+
+          <h3>feeds 인덱스 매핑</h3>
+
+<pre><code class="language-json">{
+  "settings": {
+    "analysis": {
+      "analyzer": {
+        "nori_analyzer": {
+          "type": "custom",
+          "tokenizer": "nori_tokenizer",
+          "filter": ["nori_readingform", "lowercase"]
+        }
+      }
+    }
+  },
+  "mappings": {
+    "properties": {
+      "feedId": {
+        "type": "keyword"
+      },
+      "content": {
+        "type": "text",
+        "analyzer": "nori_analyzer"
+      },
+      "authorId": {
+        "type": "keyword"
+      },
+      "skyStatus": {
+        "type": "keyword"
+      },
+      "precipitationType": {
+        "type": "keyword"
+      },
+      "likeCount": {
+        "type": "integer"
+      },
+      "createdAt": {
+        "type": "date"
+      }
+    }
+  }
+}</code></pre>
+          <p>각 필드의 타입 선택 이유를 시각적으로 정리하면 다음과 같다.</p>
+
+<div class="mermaid">
+erDiagram
+    FEEDS_INDEX {
+        keyword feedId "PK - 필터링"
+        text content "전문 검색 - nori 분석기"
+        keyword authorId "작성자 필터링"
+        keyword skyStatus "날씨 필터링"
+        keyword precipitationType "강수 필터링"
+        integer likeCount "정렬 - 좋아요순"
+        date createdAt "정렬 - 최신순"
+    }
+</div>
+          <p>필드별로 왜 그 타입을 선택했는지 뜯어보면 이렇다.</p>
+
+          <ul>
+            <li><strong>feedId</strong> — keyword. RDB의 PK에 대응하며, ES 도큐먼트와 DB 레코드를 연결하는 식별자다. 정확히 일치하는 값으로만 조회하므로 keyword가 맞다.</li>
+            <li><strong>content</strong> — text, nori 분석기. 사용자가 자유롭게 키워드를 입력해서 검색하는 필드다. 형태소 분석이 필요하므로 text 타입에 nori_analyzer를 지정했다.</li>
+            <li><strong>authorId</strong> — keyword. 특정 작성자의 피드를 필터링할 때 사용한다. 부분 검색이 필요 없으므로 keyword.</li>
+            <li><strong>skyStatus, precipitationType</strong> — keyword. 날씨 조건 필터링용이다. "CLEAR", "RAIN" 같은 열거형 값이라 정확히 일치만 확인하면 된다.</li>
+            <li><strong>likeCount</strong> — integer. 좋아요 수 기준 정렬에 사용한다.</li>
+            <li><strong>createdAt</strong> — date. 최신순 정렬과 날짜 범위 검색에 사용한다.</li>
+          </ul>
+
+          <h3>왜 Feed 엔티티의 모든 필드를 넣지 않는가</h3>
+
+          <p>RDB의 Feed 테이블에는 <code>imageKeys</code>, <code>temperature</code>, <code>humidity</code> 등 더 많은 컬럼이 있다. 하지만 ES 인덱스에는 <mark>검색과 필터링에 실제로 쓰이는 필드만</mark> 넣었다.</p>
+
+          <p>이유는 단순하다. ES는 검색 엔진이지 데이터베이스가 아니다. 검색 결과로 <code>feedId</code>를 받아온 뒤, 상세 데이터는 RDB에서 조회하면 된다. ES에 불필요한 필드를 넣으면 인덱스 크기만 커지고, 동기화해야 할 데이터도 늘어난다.</p>
+
+          <h3>왜 likeCount를 넣는가</h3>
+
+          <p>좋아요 수는 검색 조건이 아니라 <mark>정렬 조건</mark>이다. 그런데 왜 ES에 넣을까?</p>
+
+          <p>현재 프로젝트에서 "좋아요 많은 순" 정렬을 하려면 RDB에서 서브쿼리로 좋아요 수를 집계한 뒤 정렬해야 한다. 피드가 많아질수록 이 서브쿼리가 무거워진다. likeCount를 ES에 넣어두면 <mark>서브쿼리 없이 ES 자체의 정렬 기능으로 처리</mark>할 수 있다. 검색과 정렬을 한 번의 ES 쿼리로 끝내는 것이다.</p>
+
+          <p>물론 likeCount가 변할 때마다 ES에도 반영해야 하는 동기화 비용이 생긴다. 이 트레이드오프는 <a href="elasticsearch-3-query-sync.html">다음 문서</a>에서 다룬다.</p>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">text와 keyword를 잘못 선택하는 것</div>
+            <p>feedId에 text 타입을 지정하면 "abc-123"이 "abc", "123"으로 쪼개져서 색인된다. "abc"로 검색하면 전혀 다른 피드가 매칭되는 사고가 난다. 반대로 content에 keyword를 지정하면 "오늘 날씨 좋아서 반팔 입었다" 전체가 하나의 토큰이 돼서, 정확히 같은 문장을 입력하지 않으면 검색이 안 된다. 필드의 용도를 생각해서 타입을 결정해야 한다. <mark>검색이 필요하면 text, 필터링이 필요하면 keyword</mark>.</p>
+            <p>[!DANGER] RDB 스키마를 그대로 ES 매핑에 옮기는 것</p>
+            <p>"테이블 = 인덱스니까 컬럼도 다 옮기면 되겠지"라고 생각하면 안 된다. ES는 비정규화 구조라서 JOIN이 없고, 검색에 쓰이지 않는 필드는 넣을 이유가 없다. 모든 필드를 넣으면 인덱스 크기가 불필요하게 커지고, 데이터 변경 시 동기화 범위가 넓어져서 관리 비용이 치솟는다. "이 필드로 검색하거나 필터링하거나 정렬할 일이 있는가?"를 기준으로 판단해야 한다.</p>
+            <p>[!DANGER] 매핑을 나중에 변경하려고 미루는 것</p>
+            <p>ES의 매핑은 <mark>한 번 생성하면 기존 필드의 타입을 변경할 수 없다</mark>. text로 만든 필드를 keyword로 바꾸려면 인덱스를 새로 만들고 데이터를 다시 색인해야 한다. RDB의 <code>ALTER TABLE</code>처럼 간단하지 않다. 설계 단계에서 필드 타입을 신중하게 결정해야 하는 이유다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#옷장을부탁해</span>
+          <span>#Elasticsearch</span>
+          <span>#인덱스</span>
+          <span>#매핑</span>
+          <span>#nori</span>
+          <span>#필드타입</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="elasticsearch-1-fulltext.html">&larr; 이전 글</a>
+          <a href="elasticsearch-3-query-sync.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

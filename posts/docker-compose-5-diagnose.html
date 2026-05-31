@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>5. 01 현재 docker-compose.yml 진단하기 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">5. 01 현재 docker-compose.yml 진단하기</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Docker Compose 정리 (5/9)</div>
+            <p>이전 편: <a href="docker-compose-4-env-vars-order.html">4. 04 환경 변수와 시작 순서 설계</a></p>
+            <p>다음 편: <a href="docker-compose-6-refine.html">6. 02 Compose 파일 1차 정리하기</a></p>
+          </div>
+
+
+
+          <p>﻿# [Docker Compose 실습] 현재 docker-compose.yml 진단하기</p>
+
+          <div class="callout callout-info">
+            <div class="callout-title">Docker Compose 실습편</div>
+            <p>- <mark>현재 docker-compose.yml 진단하기</mark> ← 현재 문서</p>
+            <p>- <a href="docker-compose-6-refine.html">Compose 파일 1차 정리하기</a></p>
+            <p>- <a href="docker-compose-7-spring-boot.html">Spring Boot 컨테이너 설정 맞추기</a></p>
+            <p>- <a href="docker-compose-8-postgresql.html">PostgreSQL 볼륨과 초기화 다루기</a></p>
+            <p>- <a href="docker-compose-9-verify.html">실행 검증과 문제 해결 루틴</a></p>
+          </div>
+
+          <p>Compose 파일을 고치기 전에 먼저 진단해야 한다. 바로 수정부터 시작하면 "왜 이 줄을 지웠는지", "왜 이 값은 남겼는지"가 흐려진다. 이번 실습의 목표는 현재 <code>docker-compose.yml</code>에서 유지할 것과 정리할 것을 분리하는 것이다.</p>
+
+          <h2>현재 파일의 구조</h2>
+
+          <p>현재 Compose 파일은 두 서비스를 정의한다.</p>
+
+<pre><code class="language-yaml">services:
+  app:
+    build: .
+    ports:
+      - "8081:80"
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:15-alpine
+    ports:
+      - "5432:5432"
+    env_file:
+      - .env
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro</code></pre>
+          <p>방향은 맞다. 앱과 DB를 분리했고, DB 데이터는 볼륨에 남기고, 앱은 DB healthcheck를 기다린다. 문제는 환경 변수 범위와 오래된 Compose 관성, Dockerfile 실행 파일명 같은 세부 지점이다.</p>
+
+          <h2>진단 명령 실행</h2>
+
+          <p>프로젝트 루트에서 먼저 Compose가 파일을 어떻게 해석하는지 확인한다.</p>
+
+<pre><code class="language-bash">docker compose config</code></pre>
+          <p>이 명령으로 확인할 것은 값 자체가 아니라 구조다.</p>
+
+          <ul>
+            <li><code>version</code> 경고가 나오는지 확인한다.</li>
+            <li><code>app</code>과 <code>db</code>의 environment에 어떤 변수 묶음이 들어갔는지 본다.</li>
+            <li><code>networks.default.name</code>이 어떻게 만들어졌는지 본다.</li>
+            <li><code>volumes</code>의 실제 이름을 본다.</li>
+            <li><code>ports</code>가 호스트 포트와 컨테이너 포트로 어떻게 풀렸는지 본다.</li>
+          </ul>
+
+          <div class="callout callout-info">
+            <div class="callout-title">출력 붙여넣기 금지</div>
+            <p>이 프로젝트의 <code>.env</code>에는 DB 비밀번호, AWS key, JWT secret, Admin 계정 정보가 있다. <code>docker compose config</code> 출력은 이 값을 펼쳐 보여주므로 외부에 공유하면 안 된다.</p>
+          </div>
+
+          <h2>진단 결과</h2>
+
+          <table>
+          <thead>
+          <tr><th>항목</th><th>판단</th><th>이유</th></tr>
+          </thead>
+          <tbody>
+          <tr><td><code>app</code>, <code>db</code> 서비스 분리</td><td>유지</td><td>앱 서버와 DB 서버가 별도 프로세스이므로 분리하는 것이 맞다</td></tr>
+          <tr><td><code>depends_on</code> + <code>service_healthy</code></td><td>유지</td><td>DB가 연결 가능한 상태가 된 뒤 앱을 시작할 수 있다</td></tr>
+          <tr><td><code>postgres_data</code> 볼륨</td><td>유지</td><td>DB 데이터를 컨테이너 삭제와 분리한다</td></tr>
+          <tr><td><code>app_storage</code> 볼륨</td><td>조건부 유지</td><td>로컬 파일 저장을 쓸 가능성이 있으면 필요하다</td></tr>
+          <tr><td><code>version: '3.8'</code></td><td>제거</td><td>최신 Compose에서는 obsolete 경고가 난다</td></tr>
+          <tr><td><code>db.env_file: .env</code></td><td>정리</td><td>DB에 AWS/JWT/Admin 값까지 들어간다</td></tr>
+          <tr><td><code>app.env_file: .env</code></td><td>정리 권장</td><td>앱에 필요한 변수만 명시하는 편이 안전하다</td></tr>
+          <tr><td><code>container_name</code></td><td>제거 권장</td><td>Compose의 프로젝트 이름 기반 네이밍과 스케일링, 복수 실행을 방해할 수 있다</td></tr>
+          <tr><td><code>db.ports: "5432:5432"</code></td><td>선택</td><td>호스트 DB 클라이언트가 필요하면 유지, 앱 내부 통신만 필요하면 제거 가능</td></tr>
+          <tr><td><code>schema.sql</code> 마운트</td><td>유지하되 주의</td><td>DB 볼륨이 이미 초기화되어 있으면 다시 실행되지 않는다</td></tr>
+          <tr><td>Dockerfile JAR 이름</td><td>수정 필요</td><td><code>build.gradle</code> 버전과 <code>PROJECT_VERSION</code> 값이 다르다</td></tr>
+          </tbody>
+          </table>
+
+          <h2>유지할 좋은 설정</h2>
+
+          <p>현재 파일에서 가장 좋은 부분은 DB healthcheck다.</p>
+
+<pre><code class="language-yaml">depends_on:
+  db:
+    condition: service_healthy</code></pre>
+          <p>단순히 <code>depends_on: [db]</code>만 쓰면 DB 컨테이너가 시작된 뒤 앱 컨테이너가 시작된다. 하지만 PostgreSQL이 실제 연결을 받을 준비가 되었는지는 보장하지 않는다. 현재처럼 <code>service_healthy</code>를 쓰면 <code>pg_isready</code>가 성공한 뒤 앱이 올라간다.</p>
+
+          <p>이 설정은 지우지 않는다. 오히려 정리 후에도 유지해야 하는 핵심이다.</p>
+
+          <h2>가장 먼저 고칠 대상</h2>
+
+          <p>첫 번째 정리 대상은 <code>version</code>과 환경 변수 범위다.</p>
+
+<pre><code class="language-yaml">version: '3.8'</code></pre>
+          <p>이 줄은 최신 Compose에서 필요하지 않고, 현재 경고를 만든다. 제거한다.</p>
+
+          <p>그다음은 <code>env_file</code>이다.</p>
+
+<pre><code class="language-yaml">db:
+  env_file:
+    - .env</code></pre>
+          <p>DB 컨테이너에 필요한 것은 <code>POSTGRES_DB</code>, <code>POSTGRES_USER</code>, <code>POSTGRES_PASSWORD</code>뿐이다. <code>.env</code> 전체를 넣으면 필요 없는 민감정보까지 DB 컨테이너에 들어간다.</p>
+
+          <p>정리 방향은 다음과 같다.</p>
+
+<pre><code class="language-yaml">db:
+  environment:
+    POSTGRES_DB: ${POSTGRES_DB}
+    POSTGRES_USER: ${POSTGRES_USER}
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}</code></pre>
+          <p><code>app</code>도 같은 기준으로 정리한다. 앱에는 Spring, AWS, JWT, Admin, JVM 관련 변수만 넘긴다.</p>
+
+          <h2>점검 체크리스트</h2>
+
+          <ul class="task-list">
+            <li><input type="checkbox" disabled> <code>docker compose config</code>에서 <code>version</code> obsolete 경고를 확인했다.</li>
+            <li><input type="checkbox" disabled> <code>db</code> 컨테이너에 앱 전용 환경 변수가 들어가는 것을 확인했다.</li>
+            <li><input type="checkbox" disabled> 앱의 DB URL이 컨테이너 환경에서는 <code>db:5432</code>를 사용해야 한다는 점을 확인했다.</li>
+            <li><input type="checkbox" disabled> DB 볼륨이 있으면 <code>schema.sql</code>이 매번 다시 실행되지 않는다는 점을 확인했다.</li>
+            <li><input type="checkbox" disabled> Dockerfile의 JAR 파일명이 <code>build.gradle</code> 버전과 맞는지 점검 대상에 올렸다.</li>
+          </ul>
+
+          <p>이 체크리스트가 끝나면 다음 문서에서 Compose 파일 자체를 1차로 정리한다.</p>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Docker_Compose</span>
+          <span>#진단</span>
+          <span>#실습</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="docker-compose-4-env-vars-order.html">&larr; 이전 글</a>
+          <a href="docker-compose-6-refine.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

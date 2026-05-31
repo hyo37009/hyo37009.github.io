@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[성능 테스트] 1. nGrinder 이해하기와 환경 구성 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[성능 테스트] 1. nGrinder 이해하기와 환경 구성</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">nGrinder 부하 테스트 (1/5)</div>
+            <p>다음 편: <a href="ngrinder-2-script.html">[성능 테스트] 2. Groovy 스크립트와 테스트 설계</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">시리즈</div>
+            <p>- <strong>01 nGrinder 이해하기와 환경 구성</strong></p>
+            <p>- <a href="스크립트-기초와-첫-실행.html">스크립트 기초와 첫 실행</a></p>
+            <p>- <a href="인증-스크립트-작성.html">인증 스크립트 작성</a></p>
+            <p>- <a href="ngrinder-4-graph.html">결과 그래프 읽기</a></p>
+            <p>- <a href="ngrinder-5-bottleneck.html">병목 진단과 용량 계획</a></p>
+          </div>
+
+          <p>서버를 만들었다. 로컬에서는 잘 돌아간다. 그런데 "동시에 100명이 접속하면 어떻게 되지?"라는 질문에는 답할 수 없다. nGrinder는 이 질문에 답하는 도구다. 가상 유저 수백 명이 동시에 API를 두드리게 만들어서, 서버가 어디서 흔들리기 시작하는지 찾아낸다.</p>
+
+          <h2>부하 테스트라는 개념</h2>
+
+          <p>식당을 연다고 생각하자. 주방장이 파스타 1인분을 5분에 만든다. 이건 확인했다. 그런데 점심시간에 손님 50명이 한꺼번에 몰리면 어떻게 될까?</p>
+
+          <ul>
+            <li>주방장 혼자서는 주문이 밀린다 → <mark>서버 스레드 부족</mark></li>
+            <li>가스레인지가 4개뿐이라 동시에 4개밖에 못 만든다 → <mark>DB 커넥션 풀 한계</mark></li>
+            <li>재료가 떨어져서 주문을 거절한다 → <mark>메모리 부족으로 요청 거부</mark></li>
+            <li>홀 종업원이 주문을 전달하는 데도 시간이 걸린다 → <mark>HTTP 오버헤드(직렬화, 필터, 네트워크)</mark></li>
+          </ul>
+
+          <p>부하 테스트는 이 "점심시간 시뮬레이션"이다. 실제 손님 대신 <mark>가상 유저</mark>를 보내서, 주방(서버)이 몇 명까지 감당하는지, 어디서 먼저 터지는지를 찾아내는 것이다.</p>
+
+          <h3>부하 테스트가 답하는 질문</h3>
+
+          <table>
+          <thead>
+          <tr><th>질문</th><th>식당 버전</th><th>서버 버전</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>최대 처리량은?</td><td>한 시간에 파스타 몇 개 만들어?</td><td>초당 몇 건의 요청을 처리해? (<mark>TPS</mark>)</td></tr>
+          <tr><td>응답 시간은?</td><td>주문 후 음식 나오기까지 몇 분?</td><td>API 요청 후 응답까지 몇 ms? (<mark>MTT</mark>)</td></tr>
+          <tr><td>한계점은?</td><td>손님 몇 명부터 주문이 밀려?</td><td>VUser 몇 명부터 TPS가 안 올라가? (<mark>포화점</mark>)</td></tr>
+          <tr><td>고장점은?</td><td>손님 몇 명부터 주문 거절이 나와?</td><td>VUser 몇 명부터 에러가 발생해? (<mark>Error Rate</mark>)</td></tr>
+          </tbody>
+          </table>
+
+          <h2>JMH와 nGrinder의 차이</h2>
+
+          <p>이전에 <a href="결과-분석과-최적화-판단.html">JMH로</a> "배치 로딩이 N+1보다 13배 빠르다"는 것을 확인했다. 이건 파스타 1인분의 조리 시간을 잰 것이다. 주방장 혼자, 방해 없이, 최적의 조건에서.</p>
+
+          <p>nGrinder는 다르다. 실제 영업 시간처럼 주문이 동시에 밀려들 때의 상황을 만든다.</p>
+
+          <table>
+          <thead>
+          <tr><th></th><th>JMH</th><th>nGrinder</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>뭘 측정하나</td><td>Java 메서드 1개의 실행 시간</td><td>HTTP 엔드포인트의 동시 접속 성능</td></tr>
+          <tr><td>동시성</td><td>없다. 혼자 실행한다</td><td>가상 유저 수백~수천 명이 동시에</td></tr>
+          <tr><td>네트워크</td><td>미포함. JVM 내부에서 직접 호출</td><td>포함. HTTP 요청 → 응답 전체 경로</td></tr>
+          <tr><td>Spring Security, JSON 직렬화</td><td>미포함</td><td>포함. 실제 API 호출이니까</td></tr>
+          <tr><td>답하는 질문</td><td>"A 방식이 B보다 몇 배 빠른가"</td><td>"동시 N명일 때 서버가 버티는가"</td></tr>
+          </tbody>
+          </table>
+
+          <p>JMH에서 13배 차이가 났다고, nGrinder에서도 13배 차이가 나지는 않는다. 동시 접속이 늘어나면 쿼리 시간보다 <mark>커넥션 풀 대기, HTTP 직렬화, Spring 필터 체인</mark>이 더 큰 비중을 차지하기 때문이다.</p>
+
+          <p>JMH가 "어떤 레시피가 빠른가"를 결정하는 도구라면, nGrinder는 "그 레시피로 점심 장사를 할 수 있는가"를 검증하는 도구다.</p>
+
+<div class="mermaid">
+flowchart LR
+    subgraph JMH ["JMH — 레시피 비교"]
+        direction TB
+        J1["N+1 vs 배치<br/>→ 배치가 13배 빠르다"]
+    end
+
+    subgraph nGrinder ["nGrinder — 실전 영업"]
+        direction TB
+        N1["배치 방식으로 구현한 API<br/>→ 동시 100명일 때 TPS는?"]
+    end
+
+    JMH ==>|"최적 방식 확정"| nGrinder
+
+    style J1 fill:#E3F2FD,stroke:#2196F3,stroke-width:2px
+    style N1 fill:#FFF3E0,stroke:#FF9800,stroke-width:2px
+    style JMH fill:#f0f4ff,stroke:#2196F3
+    style nGrinder fill:#fff8f0,stroke:#FF9800
+</div>
+          <h2>nGrinder의 구조</h2>
+
+          <p>nGrinder는 세 가지 구성 요소로 이루어져 있다.</p>
+
+          <h3>Controller — 관제탑</h3>
+
+          <p>웹 브라우저에서 접속하는 관리 화면이다. 여기서 스크립트를 작성하고, 테스트를 시작하고, 결과를 본다.</p>
+
+          <p>하는 일:</p>
+
+          <ul>
+            <li>스크립트 편집기 제공 — Groovy 코드를 웹에서 작성한다</li>
+            <li>Agent에게 "테스트 시작해" 명령을 내린다</li>
+            <li>Agent가 보내오는 실시간 수치를 수집해서 그래프와 리포트를 만든다</li>
+          </ul>
+
+          <h3>Agent — 요청을 쏘는 일꾼</h3>
+
+          <p>실제로 HTTP 요청을 만들어서 서버에 보내는 역할이다. Controller가 "이 스크립트로 VUser 50명 돌려"라고 명령하면, Agent가 50개의 스레드를 띄워서 서버를 두드린다.</p>
+
+          <p>하는 일:</p>
+
+          <ul>
+            <li>Controller로부터 스크립트를 받아서 실행한다</li>
+            <li>VUser 수만큼 스레드를 만들어 HTTP 요청을 반복한다</li>
+            <li>응답 시간과 성공/실패를 기록해서 Controller에 보고한다</li>
+          </ul>
+
+          <h3>Target Server — 테스트 대상</h3>
+
+          <p>우리가 만든 Spring Boot 서버다. nGrinder와 전혀 관련 없는 독립 실행 서버다. Agent가 이 서버의 API를 호출할 뿐이다.</p>
+
+          <p>이 세 요소 사이의 흐름을 정리하면 이렇다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant U as 사용자 (브라우저)
+    participant C as Controller
+    participant A as Agent
+    participant T as Target Server
+
+    U->>C: 스크립트 작성 + "테스트 시작"
+    C->>A: 스크립트 전달 + 시작 명령
+
+    rect rgb(255, 243, 224)
+        Note over A, T: 부하 발생 구간
+        loop Duration 동안 반복
+            A->>T: HTTP 요청
+            T-->>A: HTTP 응답
+        end
+    end
+
+    A-->>C: 실시간 지표 (TPS, MTT, 에러)
+    C-->>U: 그래프 + 리포트
+</div>
+          <p>1번에서 사용자가 Controller 웹 UI에서 스크립트를 작성하고 "테스트 시작"을 누른다. 2번에서 Controller가 Agent에게 스크립트를 보내고 실행을 지시한다. 3~4번의 주황색 구간이 실제 부하가 발생하는 구간이다. Agent가 스레드(VUser)를 만들어서 Target Server에 HTTP 요청을 반복 전송한다. 5번에서 Agent가 매초 결과를 Controller에 보고하고, 6번에서 Controller가 실시간 그래프로 보여준다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">Agent와 Target Server를 같은 머신에 두면</div>
+            <p>Agent가 CPU와 네트워크를 잡아먹으므로 Target Server의 성능이 실제보다 나빠 보인다. 로컬 개발 환경에서는 어쩔 수 없지만, 결과를 해석할 때 이 점을 감안해야 한다. 프로덕션 부하 테스트에서는 Agent를 별도 머신에 둔다.</p>
+            <p>[!TIP] 왜 nGrinder인가</p>
+            <p>JMeter, k6, Gatling 등 다른 도구도 있다. nGrinder의 장점은 <mark>Groovy</mark>(JVM 언어)로 스크립트를 작성하므로 Java/Spring 개발자에게 익숙하다는 점이다. 웹 UI에서 스크립트 작성부터 실행, 결과 분석까지 한 곳에서 해결된다. 네이버 오픈소스로 한국어 자료도 풍부하다.</p>
+          </div>
+
+          <h2>Docker로 nGrinder 띄우기</h2>
+
+          <h3>사전 조건</h3>
+
+          <p>Docker Desktop이 실행 중이어야 한다. Windows에서는 Docker Desktop 설정 → Resources에서 메모리를 최소 4GB 이상으로 할당한다. Controller + Agent를 동시에 띄우면 기본 2GB로는 부족하다.</p>
+
+          <h3>docker-compose 파일 작성</h3>
+
+          <p>프로젝트 루트에 <code>docker-compose-ngrinder.yml</code> 파일을 만든다. 기존 <code>docker-compose.yml</code>(PostgreSQL, Redis 등)과 분리하는 이유는 <mark>생명주기가 다르기 때문</mark>이다. 인프라 서비스는 개발하는 동안 계속 켜두지만, nGrinder는 부하 테스트할 때만 띄운다.</p>
+
+<pre><code class="language-yaml"># docker-compose-ngrinder.yml
+services:
+  ngrinder-controller:
+    image: ngrinder/controller:3.5.9
+    container_name: ngrinder-controller
+    ports:
+      - "8880:80"
+      - "16001:16001"
+      - "12000-12009:12000-12009"
+    volumes:
+      - ngrinder-controller:/opt/ngrinder-controller
+
+  ngrinder-agent:
+    image: ngrinder/agent:3.5.9
+    container_name: ngrinder-agent
+    depends_on:
+      - ngrinder-controller
+    environment:
+      - CONTROLLER_ADDR=ngrinder-controller:80
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  ngrinder-controller:</code></pre>
+          <p>이 파일에서 각 설정이 무엇을 의미하는지 풀어본다.</p>
+
+          <h4>포트 설정</h4>
+
+          <ul>
+            <li><code>8880:80</code> — Controller의 웹 UI다. 브라우저에서 <code>http://localhost:8880</code>으로 접속한다. 컨테이너 내부에서는 80번 포트를 쓰지만, 호스트에서는 8880으로 연결했다</li>
+            <li><code>16001:16001</code> — Controller와 Agent가 서로 대화하는 포트다. Agent가 이 포트로 "나 여기 있어"라고 등록하고, 테스트 시작 명령을 받는다</li>
+            <li><code>12000-12009</code> — 테스트 실행 중 데이터를 주고받는 포트 범위다. 10개이므로 동시에 10개의 테스트를 실행할 수 있다. 로컬에서는 1개면 충분하지만 기본값을 그대로 둔다</li>
+          </ul>
+
+          <h4>볼륨 설정</h4>
+
+          <p><code>ngrinder-controller</code> 볼륨은 Controller의 데이터(스크립트, 테스트 결과, 설정)를 컨테이너 밖에 저장한다. 이 설정이 없으면 컨테이너를 삭제할 때 지금까지 작성한 스크립트와 테스트 결과가 전부 날아간다. 볼륨을 지정하면 컨테이너를 삭제하고 다시 만들어도 데이터가 유지된다.</p>
+
+          <h4>extra_hosts 설정</h4>
+
+          <p><code>host.docker.internal:host-gateway</code>는 Docker 컨테이너 안에서 호스트 머신의 localhost에 접근할 수 있게 해주는 설정이다.</p>
+
+          <p>Agent는 Docker 안에서 실행된다. 그런데 우리의 Spring Boot 서버는 Docker 밖, 호스트에서 <code>localhost:8080</code>으로 돌아간다. 컨테이너 입장에서 <code>localhost</code>는 자기 자신이지, 호스트 머신이 아니다. 이 설정을 넣으면 컨테이너 안에서 <code>host.docker.internal</code>이라는 주소로 호스트 머신에 접근할 수 있게 된다.</p>
+
+          <p>Windows Docker Desktop에서는 이 설정 없이도 동작하는 경우가 많지만, 명시적으로 넣어두면 환경 차이에 의한 문제를 예방한다.</p>
+
+          <h3>전체 구성도</h3>
+
+          <p>지금까지 설명한 환경의 전체 그림이다.</p>
+
+<div class="mermaid">
+flowchart TD
+    subgraph Docker ["Docker 환경"]
+        direction TB
+        subgraph Infra ["docker-compose.yml (기존)"]
+            PG[("PostgreSQL<br/>:5432")]
+            RD[("Redis<br/>:6379")]
+            ES[("Elasticsearch<br/>:9200")]
+        end
+
+        subgraph NGrinder ["docker-compose-ngrinder.yml (새로 추가)"]
+            CTRL["Controller<br/>:8880"]
+            AGT["Agent"]
+        end
+    end
+
+    subgraph Host ["호스트 머신"]
+        APP["Spring Boot<br/>:8080"]
+    end
+
+    AGT -->|"HTTP 요청"| APP
+    APP --> PG
+    APP --> RD
+    APP --> ES
+    AGT -->|"지표 보고"| CTRL
+
+    style PG fill:#E3F2FD,stroke:#2196F3,stroke-width:2px
+    style RD fill:#FFEBEE,stroke:#F44336,stroke-width:2px
+    style ES fill:#EDE7F6,stroke:#673AB7,stroke-width:2px
+    style APP fill:#E8F5E9,stroke:#4CAF50,stroke-width:2px
+    style CTRL fill:#FFF3E0,stroke:#FF9800,stroke-width:2px
+    style AGT fill:#FFF3E0,stroke:#FF9800,stroke-width:2px
+    style Infra fill:#f0f4ff,stroke:#2196F3
+    style NGrinder fill:#fff8f0,stroke:#FF9800
+    style Host fill:#f0fff0,stroke:#4CAF50
+</div>
+          <p>Agent가 호스트의 Spring Boot에 HTTP 요청을 보내고, Spring Boot는 Docker 안의 DB/캐시/검색엔진을 사용한다. Agent는 측정 결과를 Controller에 보고하고, 사용자는 Controller 웹 UI에서 그래프를 본다.</p>
+
+          <h3>실행 순서</h3>
+
+<pre><code class="language-bash"># 1. 인프라 서비스 시작 (이미 띄워져 있다면 생략)
+docker compose up -d
+
+# 2. Spring Boot 애플리케이션 시작
+./gradlew bootRun
+
+# 3. nGrinder 시작
+docker compose -f docker-compose-ngrinder.yml up -d</code></pre>
+          <p><code>-d</code>는 백그라운드 실행이다. <code>-f</code>로 파일을 지정해야 한다. 지정하지 않으면 기본 <code>docker-compose.yml</code>을 찾는다. 처음 실행하면 이미지를 다운로드하는 데 시간이 걸린다. 이후에는 빠르게 시작된다.</p>
+
+          <p>정상 실행 확인은 이렇게 한다.</p>
+
+<pre><code class="language-bash">docker compose -f docker-compose-ngrinder.yml ps</code></pre>
+          <p>두 컨테이너 모두 <code>running</code> 상태여야 한다. <code>Exit</code> 상태이면 <code>docker logs ngrinder-controller</code>로 로그를 확인한다.</p>
+
+          <h2>웹 UI 접속과 Agent 승인</h2>
+
+          <h3>첫 로그인</h3>
+
+          <p>브라우저에서 <code>http://localhost:8880</code>에 접속한다. Controller가 시작되는 데 30초~1분 정도 걸릴 수 있다. 접속이 안 되면 조금 기다렸다가 다시 시도한다.</p>
+
+          <ul>
+            <li>계정 : <code>admin</code></li>
+            <li>비밀번호 : <code>admin</code></li>
+          </ul>
+
+          <p>로그인하면 대시보드가 나온다. 상단 메뉴에 핵심 탭 3개가 있다.</p>
+
+          <ul>
+            <li><strong>Script</strong> — 스크립트를 작성하고 관리하는 곳</li>
+            <li><strong>Performance Test</strong> — 테스트를 생성하고 실행하는 곳</li>
+            <li><strong>Agent Management</strong> — Agent 상태를 확인하고 승인하는 곳</li>
+          </ul>
+
+          <h3>Agent 승인</h3>
+
+          <p>이 단계를 빠뜨리면 테스트가 실행되지 않는다.</p>
+
+          <p>Agent Management 페이지로 이동한다. docker-compose로 Agent를 함께 띄웠으므로 Agent가 자동으로 Controller에 연결되어 있다. 하지만 <mark>Unapproved 상태</mark>로 표시된다.</p>
+
+          <p>해당 Agent를 선택하고 <strong>Approve</strong> 버튼을 누른다. nGrinder가 보안상 Agent를 수동 승인하도록 설계되어 있기 때문이다. 승인 후 Status가 "Ready"로 바뀌면 테스트를 실행할 수 있다.</p>
+
+          <div class="callout callout-info">
+            <div class="callout-title">Agent 미승인 상태에서 테스트 실행 시</div>
+            <p>"No available agent" 에러가 발생한다. 테스트 설정 화면에서 Agent 수를 지정해도 실제 사용 가능한 Agent가 없으면 실행이 불가능하다. Agent Management에서 Status가 "Ready"인지 반드시 확인한다.</p>
+          </div>
+
+          <h2>핵심 용어 — 처음 보면 헷갈리는 것들</h2>
+
+          <p>nGrinder UI와 결과 리포트에 나오는 용어들이다. 나중에 결과를 읽을 때 계속 등장하므로 여기서 정리해둔다.</p>
+
+          <h3>VUser — 가상 유저</h3>
+
+          <p>Virtual User. 실제 사람 대신 서버에 요청을 보내는 가상의 사용자다. VUser 1명은 1개의 스레드가 "요청 보내기 → 응답 받기 → 다시 요청 보내기"를 끊임없이 반복하는 것이다.</p>
+
+          <p>식당에서 손님 50명이 동시에 앉아서 주문하는 상황을 만들려면 VUser를 50으로 설정한다.</p>
+
+          <p>VUser 수는 <code>Process × Thread</code>로 결정된다.</p>
+
+          <ul>
+            <li><strong>Process</strong> — Agent 안에서 실행되는 별도의 JVM 프로세스다. Process를 늘리면 독립적인 JVM이 추가되므로 메모리를 더 먹는다</li>
+            <li><strong>Thread</strong> — 한 Process 안의 스레드다. Thread를 늘리면 같은 JVM 안에서 스레드만 추가되므로 가볍다</li>
+          </ul>
+
+          <p>예를 들어 Process 2, Thread 25이면 VUser는 50이다. 처음에는 <mark>Process 1, Thread만 조절</mark>하는 것으로 시작하면 된다. Process를 늘리는 건 단일 JVM의 한계에 부딪혔을 때다.</p>
+
+          <h3>TPS — 초당 처리량</h3>
+
+          <p>Transactions Per Second. 서버가 1초에 몇 건의 요청을 <mark>성공적으로 처리</mark>했는가. 높을수록 좋다.</p>
+
+          <p>식당에서 "1시간에 파스타 120개를 만들 수 있다"와 같은 지표다.</p>
+
+          <p>TPS를 볼 때 가장 중요한 패턴 세 가지가 있다.</p>
+
+          <ul>
+            <li>VUser가 늘어나면 TPS도 올라간다 → 서버에 여유가 있다. 주문이 늘어도 주방이 따라가고 있다</li>
+            <li>VUser를 올렸는데 <mark>TPS가 더 이상 올라가지 않는다</mark> → 포화점에 도달했다. 주방이 풀가동 상태여서 손님이 더 와도 속도를 못 올린다</li>
+            <li>TPS가 떨어지기 시작한다 → 과부하. 주방이 한계를 넘어서 오히려 효율이 떨어진다</li>
+          </ul>
+
+          <h3>MTT — 평균 응답 시간</h3>
+
+          <p>Mean Test Time. 하나의 HTTP 요청을 보내고 응답을 받기까지의 평균 시간이다. 단위는 밀리초(ms). 낮을수록 좋다.</p>
+
+          <p>식당에서 "주문 후 음식이 나오기까지 평균 5분"과 같다.</p>
+
+          <p>MTT와 TPS는 밀접한 관계에 있다.</p>
+
+          <ul>
+            <li>서버에 여유가 있을 때 : VUser를 올려도 MTT가 유지된다. 주문이 늘어도 대기 시간이 없다</li>
+            <li>포화 상태에 도달하면 : TPS는 안 올라가는데 <mark>MTT만 계속 증가</mark>한다. 처리 속도는 한계인데 대기열에서 기다리는 시간이 쌓이는 것이다</li>
+          </ul>
+
+          <p>이 관계에서 나오는 공식이 <mark>리틀의 법칙</mark>이다.</p>
+
+<pre><code>VUser = TPS × MTT(초)</code></pre>
+          <p>VUser 50, MTT 100ms(0.1초)이면 TPS는 500이다. VUser를 100으로 올렸는데 TPS가 500에 머물러 있다면, MTT가 200ms로 늘어났다는 뜻이다. 대기 시간이 2배로 늘었다.</p>
+
+          <h3>Peak TPS — 최고 순간 처리량</h3>
+
+          <p>테스트 Duration 동안 달성한 가장 높은 TPS 값이다. 평균 TPS보다 높다. JVM 워밍업 직후, GC가 일어나기 전에 찍히는 경우가 많다. 시스템의 이론적 최대치에 가까운 값이다.</p>
+
+          <h3>Ramp-up — 점진적 부하 투입</h3>
+
+          <p>VUser를 한 번에 다 투입하지 않고 천천히 늘려가는 것이다.</p>
+
+          <p>식당에 손님 100명이 <mark>동시에</mark> 문을 열고 들어오면 카운터가 마비된다. 10명씩 간격을 두고 들어오면 주방이 적응할 시간이 있다. Ramp-up은 이 "천천히 늘리기"다.</p>
+
+          <p>VUser 100에서 Ramp-up을 활성화하고 초기 대기 시간을 1000ms로 설정하면, VUser가 1초 간격으로 1명씩 추가된다. Ramp-up 없이 시작하면 100명이 동시에 첫 요청을 보내서 서버에 갑작스런 충격을 준다.</p>
+
+          <p>VUser가 1명일 때는 Ramp-up이 의미 없다. VUser 10 이상부터 켜는 것이 일반적이다.</p>
+
+          <h3>Error Rate — 에러율</h3>
+
+          <p>전체 요청 중 실패한 비율이다. 0%가 정상이다.</p>
+
+          <ul>
+            <li><strong>0%</strong> — 모든 요청이 성공했다. 서버가 감당하고 있다</li>
+            <li><strong>0%를 벗어남</strong> — 일부 요청이 실패했다. 서버가 일부 요청을 처리하지 못한 것이다. 원인을 찾아야 한다</li>
+            <li><strong>100%</strong> — 모든 요청이 실패했다. 서버가 꺼져 있거나, 주소가 틀렸거나, 연결 자체가 불가능하다</li>
+          </ul>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">Target Server를 안 띄우고 테스트 실행</div>
+            <p>nGrinder Agent가 서버에 HTTP 요청을 보내는 구조이므로, Spring Boot 서버가 먼저 실행 중이어야 한다. 서버가 안 떠있으면 Error Rate 100%가 찍히면서 테스트가 무의미해진다.</p>
+            <p>[!WARNING] Agent 승인을 깜빡하고 "No available agent"</p>
+            <p>Controller에 Agent가 붙어 있어도 수동 승인을 해야 사용 가능하다. Agent Management → 해당 Agent 선택 → Approve. 이걸 빠뜨리고 테스트를 만들면 Agent를 찾을 수 없다는 에러가 뜬다.</p>
+            <p>[!WARNING] Docker Desktop 메모리 부족으로 OOM</p>
+            <p>Controller와 Agent를 동시에 띄우면 메모리를 꽤 먹는다. Docker Desktop 기본 메모리(2GB)로는 부족할 수 있다. Settings → Resources에서 4GB 이상으로 올린다. 컨테이너가 갑자기 죽으면 <code>docker logs ngrinder-controller</code>로 OOM 여부를 확인한다.</p>
+            <p>[!WARNING] VUser를 너무 높게 잡고 시작</p>
+            <p>처음부터 VUser 100을 넣으면 서버가 바로 뻗어서 유의미한 데이터를 얻기 어렵다. <mark>VUser 1로 기준선</mark>을 잡고, 10 → 30 → 50 → 100 순서로 올려가며 변화를 관찰하는 것이 올바른 순서다. 다음 편에서 이 과정을 다룬다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#성능테스트</span>
+          <span>#nGrinder</span>
+          <span>#부하테스트</span>
+          <span>#Docker</span>
+          <span>#아키텍처</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+          <a href="ngrinder-2-script.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

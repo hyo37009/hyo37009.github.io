@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[코딩테스트] 메모이제이션 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[코딩테스트] 메모이제이션</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+
+          <p>메모이제이션은 DP(동적 프로그래밍)의 구현 기법 중 하나다. 개념 자체는 단순한데, 처음 들으면 이름이 낯설어서 어렵게 느껴진다.</p>
+
+          <h2>핵심 아이디어</h2>
+
+          <p>같은 계산을 두 번 하지 않는다.</p>
+
+          <p>함수를 호출했을 때 그 결과를 어딘가에 저장해두고, 나중에 같은 입력으로 다시 호출되면 저장된 값을 그대로 반환한다. 연산을 건너뛰는 것이다.</p>
+
+<pre><code>f(5) 호출 → 계산 후 결과를 memo[5]에 저장
+f(5) 재호출 → memo[5]에 값이 있으므로 계산 없이 바로 반환</code></pre>
+          <p>이게 전부다. <mark>저장(memo) + 재사용</mark>이 메모이제이션의 본질이다.</p>
+
+          <h2>피보나치로 보는 차이</h2>
+
+          <p>메모이제이션이 왜 필요한지는 피보나치 수열로 가장 잘 설명된다.</p>
+
+          <p><code>f(n) = f(n-1) + f(n-2)</code>를 단순 재귀로 구현하면 이런 일이 벌어진다.</p>
+
+<div class="mermaid">
+graph TD
+    A["f(5)"] --> B["f(4)"]
+    A --> C["f(3)"]
+    B --> D["f(3)"]
+    B --> E["f(2)"]
+    C --> F["f(2)"]
+    C --> G["f(1)"]
+    D --> H["f(2)"]
+    D --> I["f(1)"]
+
+    style F fill:#ffcccc,stroke-width:2px
+    style H fill:#ffcccc,stroke-width:2px
+    style E fill:#ffddaa,stroke-width:2px
+</div>
+          <p><code>f(3)</code>이 2번, <code>f(2)</code>가 3번 계산된다. <code>n</code>이 커질수록 중복 계산이 기하급수적으로 늘어나 O(2ⁿ)이 된다.</p>
+
+          <p>메모이제이션을 적용하면 각 <code>f(n)</code>을 딱 한 번만 계산한다. 시간복잡도가 O(2ⁿ) → <mark>O(n)</mark>으로 줄어든다.</p>
+
+          <h2>구현</h2>
+
+          <p>Java 기준으로 두 가지 방식이 있다.</p>
+
+          <h4>배열로 메모</h4>
+
+<pre><code class="language-java">int[] memo = new int[n + 1];
+Arrays.fill(memo, -1);  // -1 = 아직 계산 안 됨
+
+int f(int n) {
+    if (n &lt;= 1) return n;
+    if (memo[n] != -1) return memo[n];  // 이미 계산했으면 반환
+    return memo[n] = f(n - 1) + f(n - 2);  // 계산 후 저장
+}</code></pre>
+          <ul>
+            <li><code>memo[n] != -1</code> 체크가 핵심이다. 저장된 값이 있으면 바로 반환한다.</li>
+            <li>초기값을 <code>-1</code>로 채우는 이유는 <code>0</code>이 유효한 결과일 수 있기 때문이다.</li>
+          </ul>
+
+          <h4>HashMap으로 메모</h4>
+
+          <p>입력이 정수 범위를 벗어나거나 희소할 때 사용한다.</p>
+
+<pre><code class="language-java">Map&lt;Integer, Integer&gt; memo = new HashMap&lt;&gt;();
+
+int f(int n) {
+    if (n &lt;= 1) return n;
+    if (memo.containsKey(n)) return memo.get(n);
+    int result = f(n - 1) + f(n - 2);
+    memo.put(n, result);
+    return result;
+}</code></pre>
+          <p>배열로 관리할 수 있다면 배열이 더 빠르다. HashMap은 해싱 비용이 있다.</p>
+
+          <h2>메모이제이션 vs 카운터 배열</h2>
+
+          <p>메모이제이션과 헷갈리기 쉬운 것이 <mark>카운터 배열</mark>이다 (예: 슬라이딩 윈도우의 <code>freq[]</code>).</p>
+
+          <table>
+          <thead>
+          <tr><th></th><th>메모이제이션</th><th>카운터 배열 (<code>freq[]</code>)</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>목적</td><td>재계산 방지</td><td>현재 상태 추적</td></tr>
+          <tr><td>값의 의미</td><td>"이 입력에 대한 답은 X"</td><td>"이 항목이 현재 X개 있음"</td></tr>
+          <tr><td>갱신 시점</td><td>한 번 계산하면 고정</td><td>매 이동마다 <code>++</code>/<code>--</code></td></tr>
+          <tr><td>사용 알고리즘</td><td>DP, 재귀 최적화</td><td>슬라이딩 윈도우, 빈도 집계</td></tr>
+          </tbody>
+          </table>
+
+          <p>둘 다 배열에 값을 저장한다는 점은 같지만, 용도가 다르다. 메모이제이션은 "이미 계산했냐"를 체크하기 위한 것이고, 카운터 배열은 "지금 몇 개냐"를 실시간으로 관리하기 위한 것이다.</p>
+
+          <h2>언제 메모이제이션을 쓰는가</h2>
+
+          <p>재귀 함수에서 <strong>같은 인자로 호출되는 경우가 반복될 때</strong> 적용한다. 판단 기준은 두 가지다.</p>
+
+          <ol>
+            <li>부분 문제가 겹치는가 (overlapping subproblems)</li>
+            <li>같은 입력에 대해 항상 같은 결과가 나오는가 (referential transparency)</li>
+          </ol>
+
+          <p>둘 다 해당하면 메모이제이션을 쓸 수 있다. 대표적인 문제 유형으로는 피보나치, 최장 공통 부분수열(LCS), 배낭 문제, 동전 거스름돈 등이 있다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">탑다운 vs 바텀업</div>
+            <p>DP 구현에는 두 방향이 있다.</p>
+            <p>- <strong>탑다운</strong> : 재귀 + 메모이제이션. <code>f(n)</code>을 호출하면서 필요한 것만 계산.</p>
+            <p>- <strong>바텀업</strong> : 반복문으로 작은 것부터 채워나감. 테이블을 직접 채우는 방식.</p>
+            <p>메모이제이션은 탑다운 방식의 최적화 기법이다. 바텀업은 메모이제이션 없이도 동작한다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#코딩테스트</span>
+          <span>#DP</span>
+          <span>#메모이제이션</span>
+          <span>#재귀</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

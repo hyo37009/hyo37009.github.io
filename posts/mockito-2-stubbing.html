@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[테스트] 2. Mockito Stubbing 심화 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[테스트] 2. Mockito Stubbing 심화</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Mockito 테스트 (2/2)</div>
+            <p>이전 편: <a href="mockito-1-basics.html">[테스트] 1. Mockito 테스트 기초</a></p>
+            <p>이 문서가 시리즈의 마지막 편입니다.</p>
+          </div>
+
+
+
+          <p><a href="mockito-1-basics.html">Mockito 테스트 기초</a>에서 Mock을 만들고 주입하는 법을 배웠다. 이제 Mock이 <strong>어떤 값을 돌려줄지</strong> 세밀하게 제어하는 방법을 다룬다. <code>when().thenReturn()</code>만으로 충분할 때도 있지만, 입력에 따라 반환값이 달라져야 하는 순간이 온다.</p>
+
+          <h2>thenReturn — 고정값 반환</h2>
+
+          <p>가장 기본적인 stubbing이다. 미리 만들어둔 객체를 항상 돌려준다.</p>
+
+<pre><code class="language-java">User user = Instancio.create(User.class);
+when(userRepository.findById(any(UUID.class)))
+        .thenReturn(Optional.of(user));</code></pre>
+          <p><code>findById</code>가 어떤 UUID를 받든, 항상 같은 <code>user</code>를 반환한다. 대부분의 테스트에서는 이걸로 충분하다.</p>
+
+          <h2>thenAnswer — 호출 시점에 결정</h2>
+
+          <p><code>thenAnswer</code>는 Mock 메서드가 호출되는 <mark>그 순간에 로직을 실행</mark>해서 반환값을 만든다.</p>
+
+<pre><code class="language-java">when(feedRepository.save(any(Feed.class)))
+        .thenAnswer(invocation -&gt; invocation.getArgument(0));</code></pre>
+          <p><code>save</code>에 넘어온 인자를 그대로 돌려주라는 뜻이다.</p>
+
+          <h3>왜 thenReturn으로 안 되는가</h3>
+
+          <p><code>feedRepository.save(feed)</code>에서 <code>feed</code>는 Service 내부에서 생성된다.</p>
+
+<pre><code class="language-java">// Service 내부
+Feed feed = Feed.create(author, weather, content);
+Feed saved = feedRepository.save(feed);</code></pre>
+          <p>테스트 코드에서는 이 <code>feed</code> 객체를 미리 알 수 없다. Service가 만들어서 넘기는 거니까.</p>
+
+<pre><code class="language-java">// ❌ 이건 Service 내부의 feed와 전혀 다른 별개의 객체
+Feed fakeFeed = Instancio.create(Feed.class);
+when(feedRepository.save(any())).thenReturn(fakeFeed);</code></pre>
+          <p><code>thenReturn(fakeFeed)</code>를 쓰면, Service가 만든 <code>feed</code>의 content와 <code>fakeFeed</code>의 content가 다르다. 이후 검증에서 content가 일치하지 않을 수 있다.</p>
+
+          <p><code>thenAnswer</code>로 "들어온 걸 그대로 돌려줘"라고 하면, <mark>실제 JPA의 <code>save</code> 동작과 가장 가깝게</mark> 흉내 낼 수 있다.</p>
+
+          <h3>언제 뭘 쓰는가</h3>
+
+          <ul>
+            <li><strong>반환값이 입력과 무관</strong> → <code>thenReturn</code></li>
+            <li><strong>반환값이 입력에 의존</strong> → <code>thenAnswer</code></li>
+          </ul>
+
+          <div class="callout callout-tip">
+            <p><code>repository.save()</code>를 stubbing할 때는 <code>thenAnswer</code>가 관례처럼 쓰인다. 실제 JPA도 save에 넘긴 엔티티를 (영속화해서) 돌려주기 때문이다.</p>
+          </div>
+
+          <h2>InvocationOnMock — 컨텍스트 객체</h2>
+
+          <p><code>thenAnswer</code>의 람다에 넘어오는 <code>invocation</code>은 <code>InvocationOnMock</code> 타입이다. <mark>Mock 메서드가 호출된 그 순간의 정보를 담고 있는 객체</mark>다.</p>
+
+          <p>이런 객체를 <strong>컨텍스트 객체</strong>라고 부른다.</p>
+
+          <h3>컨텍스트 객체란</h3>
+
+          <p>특정 시점의 상황 정보를 묶어서 전달하는 객체를 말한다. "지금 무슨 일이 일어났는지"를 알려주는 봉투 같은 것이다.</p>
+
+          <p>Java에서는 자주 등장하는 패턴이다.</p>
+
+          <ul>
+            <li><code>HttpServletRequest</code> — HTTP 요청이 들어온 순간의 정보 (URL, 헤더, 파라미터)</li>
+            <li><code>Authentication</code> — 인증이 완료된 시점의 사용자 정보</li>
+            <li><code>InvocationOnMock</code> — Mock 메서드가 호출된 시점의 호출 정보</li>
+          </ul>
+
+          <p>공통점이 보인다. 전부 "어떤 이벤트가 발생한 시점"에 만들어져서, 그 시점의 정보를 꺼내 쓸 수 있게 해준다.</p>
+
+          <h3>주요 메서드</h3>
+
+          <p><code>InvocationOnMock</code>에서 실제로 쓰는 건 거의 <code>getArgument()</code>뿐이다.</p>
+
+<pre><code class="language-java">.thenAnswer(invocation -&gt; {
+    Feed feed = invocation.getArgument(0);    // 첫 번째 인자
+    String name = invocation.getArgument(1);  // 두 번째 인자 (있다면)
+    return feed;
+});</code></pre>
+          <p>인덱스는 0부터 시작한다. <code>save(Feed feed)</code>처럼 인자가 하나면 <code>getArgument(0)</code>이다.</p>
+
+          <p>그 외에도 호출 정보를 제공하지만, 테스트에서 쓸 일은 거의 없다.</p>
+
+          <ul>
+            <li><code>getMethod()</code> — 호출된 메서드의 <code>Method</code> 객체</li>
+            <li><code>getArguments()</code> — 모든 인자를 <code>Object[]</code>로 반환</li>
+            <li><code>getMock()</code> — Mock 객체 자체</li>
+          </ul>
+
+          <h3>활용 예시</h3>
+
+          <p>save 시 ID를 세팅해서 반환하면 실제 DB 동작을 더 가깝게 흉내 낼 수 있다.</p>
+
+<pre><code class="language-java">when(feedRepository.save(any(Feed.class)))
+        .thenAnswer(invocation -&gt; {
+            Feed feed = invocation.getArgument(0);
+            ReflectionTestUtils.setField(feed, "id", UUID.randomUUID());
+            return feed;
+        });</code></pre>
+          <div class="callout callout-warning">
+            <p><code>ReflectionTestUtils</code>는 Spring Test가 제공하는 유틸이다. 리플렉션으로 private 필드에 값을 넣는 건 테스트에서만 써야 한다.</p>
+          </div>
+
+          <h2>Instancio로 테스트 데이터 생성</h2>
+
+          <p>테스트에 필요한 객체를 일일이 <code>new</code>로 만드는 건 번거롭다. Instancio는 <mark>클래스 구조를 분석해서 랜덤 값으로 채운 인스턴스를 자동 생성</mark>해준다.</p>
+
+<pre><code class="language-java">FeedCreateRequestDto request = Instancio.create(FeedCreateRequestDto.class);</code></pre>
+          <p>이 한 줄로 <code>userId</code>(랜덤 UUID), <code>weatherId</code>(랜덤 UUID), <code>clothesIds</code>(랜덤 UUID 0~6개의 List), <code>content</code>(랜덤 문자열)가 전부 채워진 객체가 만들어진다.</p>
+
+          <h3>컬렉션 크기 제어</h3>
+
+          <p>기본적으로 List는 0~6개 사이의 랜덤 크기로 생성된다. 고정하고 싶으면 <code>generate</code>를 쓴다.</p>
+
+<pre><code class="language-java">Instancio.of(FeedCreateRequestDto.class)
+        .generate(all(List.class), gen -&gt; gen.collection().size(3))
+        .create();</code></pre>
+          <h3>특정 필드만 지정</h3>
+
+          <p>특정 필드의 값을 직접 정하고 싶을 때는 <code>set</code>을 쓴다.</p>
+
+<pre><code class="language-java">Instancio.of(FeedCreateRequestDto.class)
+        .set(field(FeedCreateRequestDto::content), "오늘 날씨 좋다")
+        .create();</code></pre>
+          <div class="callout callout-tip">
+            <p>Instancio의 핵심 가치는 "테스트에서 중요하지 않은 값은 랜덤으로 채우고, 중요한 값만 명시적으로 지정한다"는 것이다. 테스트의 의도가 더 명확해진다.</p>
+          </div>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">thenReturn에 null이 될 수 있는 객체를 넣는다</div>
+            <p>Mock의 기본 반환값은 이미 <code>null</code>이다. <code>thenReturn(null)</code>은 stubbing을 안 한 것과 같다. 의도적으로 null을 테스트하고 싶다면, 차라리 stubbing을 생략하고 주석으로 의도를 남겨라.</p>
+            <p>[!DANGER] save() stubbing 없이 반환값을 사용한다</p>
+            <p><code>feedRepository.save()</code>의 반환값을 이후 로직에서 쓰는데 stubbing이 없으면 <code>null</code>이 반환된다. NPE가 터지면 "테스트가 맞게 짜인 건가?"를 의심하기 전에, <mark>save mock 설정부터 확인</mark>하라.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#테스트</span>
+          <span>#Mockito</span>
+          <span>#Stubbing</span>
+          <span>#thenAnswer</span>
+          <span>#InvocationOnMock</span>
+          <span>#Instancio</span>
+          <span>#옷장을부탁해</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="mockito-1-basics.html">&larr; 이전 글</a>
+          <a href="../pages/nbuntu.html">목록으로 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

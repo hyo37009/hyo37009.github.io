@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[캐시 가이드] 11. 면접 대비 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[캐시 가이드] 11. 면접 대비</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">스프링 캐시 심화 (11/11)</div>
+            <p>이전 편: <a href="spring-cache2-10-antipatterns.html">[캐시 가이드] 10. 안티패턴과 트러블슈팅</a></p>
+            <p>이 문서가 시리즈의 마지막 편입니다.</p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">캐시 가이드 시리즈</div>
+            <p><strong>01 캐시 기초</strong></p>
+            <p>- <a href="spring-cache2-1-concept.html">캐시의 개념과 동작 원리</a></p>
+            <p>- <a href="spring-cache2-2-layers.html">캐시 계층과 유형</a></p>
+            <p>- <a href="spring-cache2-3-patterns.html">캐시 전략과 패턴</a></p>
+            <p><strong>02 Spring Cache 핵심</strong></p>
+            <p>- <a href="spring-cache2-4-abstraction.html">Spring Cache 추상화</a></p>
+            <p>- <a href="spring-cache2-5-annotations.html">캐시 어노테이션 완전 정복</a></p>
+            <p>- <a href="spring-cache2-6-key-strategy.html">캐시 키 전략과 조건부 캐싱</a></p>
+            <p><strong>03 캐시 저장소</strong></p>
+            <p>- <a href="spring-cache2-7-caffeine.html">CacheManager와 Caffeine</a></p>
+            <p>- <a href="spring-cache2-8-redis.html">Redis 분산 캐시</a></p>
+            <p><strong>04 실전과 운영</strong></p>
+            <p>- <a href="spring-cache2-9-consistency.html">캐시 일관성과 갱신 전략</a></p>
+            <p>- <a href="spring-cache2-10-antipatterns.html">안티패턴과 트러블슈팅</a></p>
+            <p>- <mark>면접 대비</mark> ← 현재 편</p>
+          </div>
+
+          <p>이 편은 시리즈의 마지막이다. 지금까지 다룬 내용을 면접 질문 형태로 정리한다. 단순한 개념 질문부터 함정 질문까지 포함했으므로, 답변할 수 있는지 먼저 스스로 점검해보라.</p>
+
+          <h2>기본 개념</h2>
+
+          <div class="callout callout-question">
+            <div class="callout-title">캐시란 무엇이고, 왜 사용하는가?</div>
+            <p>자주 요청되는 데이터를 빠른 저장소에 임시 보관하여, 같은 요청에 대해 원본 저장소를 반복 조회하지 않도록 하는 기법이다. DB 조회나 외부 API 호출 같은 비용이 큰 연산의 결과를 메모리에 저장해두면 응답 속도가 빨라지고, 원본 저장소의 부하가 줄어든다.</p>
+            <p><strong>핵심 포인트</strong> : "반복되는 동일 요청"과 "비용이 큰 연산"이라는 두 조건이 캐시의 존재 이유다.</p>
+          </div>
+
+          <div class="callout callout-question">
+            <div class="callout-title">Cache Hit와 Cache Miss의 차이를 설명하라</div>
+            <p>Cache Hit는 요청한 데이터가 캐시에 존재하는 상태이고, Cache Miss는 존재하지 않는 상태다. Hit이면 원본 저장소를 거치지 않고 바로 반환하므로 빠르다. Miss면 원본 저장소에서 데이터를 가져와 캐시에 저장한 뒤 반환한다.</p>
+            <p>캐시 성능은 적중률로 판단한다. 적중률 = Hit 횟수 / 전체 요청 횟수. 80% 이상이면 효과적인 캐시다.</p>
+          </div>
+
+          <div class="callout callout-question">
+            <div class="callout-title">캐시에 적합한 데이터와 적합하지 않은 데이터를 구분하라</div>
+            <p><strong>적합한 데이터</strong> : 읽기 빈도가 높고 쓰기 빈도가 낮은 데이터, 계산 비용이 큰 데이터, 약간의 지연이 허용되는 데이터.</p>
+            <p><strong>적합하지 않은 데이터</strong> : 실시간 정확성이 필수인 데이터(재고, 결제), 쓰기가 읽기보다 많은 데이터, 사용자별로 고유하면서 캐시 효율이 낮은 데이터.</p>
+            <p><strong>함정 주의</strong> : "사용자별 고유 데이터는 캐시할 수 없다"는 틀린 답이다. 키를 잘 설계하고 TTL을 짧게 잡으면 가능하다. 다만 메모리 효율을 반드시 고려해야 한다.</p>
+          </div>
+
+          <h2>Spring Cache 동작 원리</h2>
+
+          <div class="callout callout-question">
+            <div class="callout-title">Spring Cache Abstraction이란 무엇인가?</div>
+            <p>Spring이 제공하는 캐시 추상화 계층이다. 특정 캐시 구현체에 종속되지 않도록 <code>CacheManager</code>와 <code>Cache</code>라는 인터페이스를 제공한다. 개발자는 <code>@Cacheable</code> 같은 어노테이션으로 캐시 로직을 선언적으로 적용하고, 실제 캐시 저장소는 설정으로 교체할 수 있다.</p>
+            <p>PSA의 대표적인 사례다. <code>@Transactional</code>이 트랜잭션 매니저를 추상화하듯, <code>@Cacheable</code>은 캐시 매니저를 추상화한다.</p>
+          </div>
+
+          <div class="callout callout-question">
+            <div class="callout-title">@Cacheable은 내부적으로 어떻게 동작하는가?</div>
+            <p>AOP 프록시 기반으로 동작한다. Spring이 <code>@Cacheable</code>이 붙은 빈의 프록시 객체를 생성하고, 메서드 호출을 가로챈다. 프록시는 CacheManager에서 캐시를 가져오고, 키로 조회하여 Hit이면 메서드를 실행하지 않고 캐시 값을 반환한다. Miss면 메서드를 실행하고 결과를 캐시에 저장한다.</p>
+            <p><strong>함정 주의</strong> : "Spring이 메서드에 직접 코드를 삽입한다"는 틀린 답이다. 바이트코드 조작이 아니라 <mark>프록시 패턴</mark>으로 동작한다.</p>
+          </div>
+
+<div class="mermaid">
+flowchart LR
+    A["호출자"] --> B["프록시"]
+    B --> C{"캐시 Hit?"}
+    C -->|Yes| D["캐시 반환\n메서드 스킵"]
+    C -->|No| E["메서드 실행"]
+    E --> F["결과 캐시 저장"]
+    F --> G["결과 반환"]
+</div>
+          <div class="callout callout-question">
+            <div class="callout-title">같은 클래스 내부에서 @Cacheable 메서드를 호출하면 캐시가 동작하는가?</div>
+            <p>동작하지 않는다. 내부 호출은 프록시를 거치지 않기 때문이다. <code>this.getWeather()</code>처럼 호출하면 실제 객체의 메서드가 직접 실행되어 캐시 로직이 적용되지 않는다.</p>
+            <p>해결 방법은 캐시 메서드를 별도 클래스로 분리하거나, 자기 자신을 <code>@Lazy</code>로 주입받아 프록시를 통해 호출하는 것이다. 클래스 분리가 가장 깔끔한 방법이다.</p>
+            <p><strong>함정 주의</strong> : "protected 메서드도 캐시가 동작한다"는 틀린 답이다. Spring AOP는 public 메서드에서만 동작한다.</p>
+          </div>
+
+          <h2>어노테이션과 설정</h2>
+
+          <div class="callout callout-question">
+            <div class="callout-title">@Cacheable, @CachePut, @CacheEvict의 차이를 설명하라</div>
+            <p>- <strong>@Cacheable</strong> : 캐시를 먼저 조회한다. Hit이면 메서드를 실행하지 않고 캐시 값을 반환한다. Miss면 메서드를 실행하고 결과를 캐시에 저장한다.</p>
+            <p>- <strong>@CachePut</strong> : 캐시를 조회하지 않고 항상 메서드를 실행한다. 실행 결과를 캐시에 저장한다. 캐시 갱신 용도다.</p>
+            <p>- <strong>@CacheEvict</strong> : 캐시에서 항목을 제거한다. 데이터 변경 시 오래된 캐시를 무효화하는 용도다.</p>
+            <p><strong>함정 주의</strong> : "@CachePut은 캐시에 데이터가 있으면 그것을 반환한다"는 틀린 답이다. @CachePut은 <mark>항상 메서드를 실행</mark>한다.</p>
+          </div>
+
+          <div class="callout callout-question">
+            <div class="callout-title">condition과 unless의 차이를 설명하라</div>
+            <p>- <strong>condition</strong> : 메서드 실행 <mark>전</mark>에 평가된다. <code>true</code>이면 캐시를 사용하고, <code>false</code>이면 캐시를 아예 무시한다. <code>#result</code>를 사용할 수 없다.</p>
+            <p>- <strong>unless</strong> : 메서드 실행 <mark>후</mark>에 평가된다. <code>true</code>이면 결과를 캐시에 저장하지 않는다. <code>#result</code>를 사용할 수 있다.</p>
+            <p>이름이 헷갈릴 수 있다. <code>condition</code>은 "조건이 참이면 캐시한다", <code>unless</code>는 "조건이 참이면 캐시하지 않는다"로 기억한다.</p>
+          </div>
+
+          <div class="callout callout-question">
+            <div class="callout-title">기본 키 생성 전략을 설명하라</div>
+            <p><code>SimpleKeyGenerator</code>가 기본이다. 파라미터가 없으면 <code>SimpleKey.EMPTY</code>, 하나면 그 값 자체, 여러 개면 <code>SimpleKey</code> 객체(모든 파라미터의 hashCode 조합)를 키로 사용한다.</p>
+            <p><strong>함정 주의</strong> : "파라미터가 없으면 키가 null이다"는 틀린 답이다. <code>SimpleKey.EMPTY</code>라는 빈 키 객체가 사용된다.</p>
+          </div>
+
+          <h2>캐시 저장소</h2>
+
+          <div class="callout callout-question">
+            <div class="callout-title">로컬 캐시와 분산 캐시의 차이와 적합한 상황을 설명하라</div>
+            <p><strong>로컬 캐시</strong> : 애플리케이션 프로세스 내부 메모리에 저장한다. 네트워크 호출이 없어 매우 빠르다. Caffeine이 대표적이다. 단일 서버 환경에 적합하다. 다중 서버에서는 각 서버의 캐시가 독립적이므로 일관성 문제가 발생한다.</p>
+            <p><strong>분산 캐시</strong> : 외부 서버에 저장한다. 여러 애플리케이션 인스턴스가 같은 캐시를 공유한다. Redis가 대표적이다. 다중 서버 환경에 적합하지만, 네트워크 지연이 추가된다.</p>
+          </div>
+
+          <div class="callout callout-question">
+            <div class="callout-title">Redis 캐시에서 JDK 직렬화 대신 JSON 직렬화를 사용하는 이유는?</div>
+            <p>JDK 직렬화는 세 가지 문제가 있다.</p>
+            <p>1. Redis CLI에서 값을 읽을 수 없다 (바이너리 데이터)</p>
+            <p>2. 클래스 구조가 바뀌면 역직렬화에 실패한다 (필드 추가/삭제 시)</p>
+            <p>3. 클래스 메타데이터까지 포함하므로 데이터 크기가 크다</p>
+            <p>JSON 직렬화는 가독성이 좋고, 클래스 구조 변경에 유연하며, 데이터 크기가 작다.</p>
+          </div>
+
+          <div class="callout callout-question">
+            <div class="callout-title">Redis가 다운되면 캐시를 사용하는 서비스에 어떤 영향이 있는가? 어떻게 대응하는가?</div>
+            <p>기본적으로 Redis 연결 실패 시 예외가 발생하고, <code>@Cacheable</code> 호출 자체가 실패한다. 캐시 장애가 서비스 장애로 이어진다.</p>
+            <p><code>CacheErrorHandler</code>를 등록하면 캐시 오류를 무시하고 원본 메서드를 직접 실행할 수 있다. Redis가 다운되어도 DB에서 직접 조회하므로 응답은 느려지지만 서비스는 멈추지 않는다.</p>
+            <p><strong>핵심 포인트</strong> : 캐시는 성능을 위한 보조 수단이지 필수 인프라가 아니다. 캐시 장애가 서비스 장애로 이어지는 구조는 잘못된 설계다.</p>
+          </div>
+
+<div class="mermaid">
+flowchart TD
+    A["Redis 다운"] --> B{"CacheErrorHandler?"}
+    B -->|미등록| C["예외 발생"]
+    C --> D["서비스 장애 ❌"]
+    B -->|등록됨| E["오류 무시"]
+    E --> F["DB 직접 조회"]
+    F --> G["느리지만 정상 동작 ✅"]
+</div>
+          <h2>캐시 일관성과 갱신</h2>
+
+          <div class="callout callout-question">
+            <div class="callout-title">Cache-Aside 패턴을 설명하라</div>
+            <p>읽기 : 캐시 조회 → Hit이면 반환, Miss면 DB 조회 → 캐시 저장 → 반환.</p>
+            <p>쓰기 : DB 업데이트 → 캐시 무효화.</p>
+            <p>애플리케이션이 캐시와 DB 사이의 중재자 역할을 한다. Spring Cache의 <code>@Cacheable</code>이 읽기 흐름을, <code>@CacheEvict</code>가 쓰기 흐름을 구현한다. 캐시 장애 시 DB에서 직접 조회할 수 있으므로 복원력이 높다.</p>
+          </div>
+
+<div class="mermaid">
+flowchart TB
+    subgraph "읽기"
+        R1["캐시 조회"] -->|Hit| R2["반환"]
+        R1 -->|Miss| R3["DB 조회"] --> R4["캐시 저장"] --> R2
+    end
+    subgraph "쓰기"
+        W1["DB 업데이트"] --> W2["캐시 무효화"]
+    end
+</div>
+          <div class="callout callout-question">
+            <div class="callout-title">데이터를 수정할 때 캐시를 먼저 삭제하는 것과 나중에 삭제하는 것의 차이는?</div>
+            <p><strong>캐시 먼저 삭제 → DB 업데이트</strong> : 캐시 삭제 직후, 아직 업데이트되지 않은 DB 데이터를 다른 스레드가 읽어 캐시에 다시 넣을 수 있다. 결과적으로 캐시에 옛날 데이터가 남는다.</p>
+            <p><strong>DB 먼저 업데이트 → 캐시 삭제</strong> : DB가 먼저 최신 상태가 되고, 이후 캐시를 삭제한다. 캐시 삭제 전에 다른 스레드가 캐시에서 옛날 데이터를 읽을 수 있지만, 삭제 후에는 반드시 최신 데이터가 캐시된다.</p>
+            <p><mark>DB 먼저 업데이트가 더 안전</mark>하다. Spring Cache의 <code>@CacheEvict</code>는 기본적으로 메서드 실행 후에 캐시를 제거하므로 이 순서를 지킨다.</p>
+          </div>
+
+          <div class="callout callout-question">
+            <div class="callout-title">Cache Stampede가 무엇이고, 어떻게 방지하는가?</div>
+            <p>캐시가 만료되는 순간에 동시에 많은 요청이 들어오면, 모든 요청이 캐시 미스를 경험하고 동시에 DB를 조회하는 현상이다. Thundering Herd 문제라고도 부른다.</p>
+            <p>방지 방법은 두 가지다.</p>
+            <p>1. <code>@Cacheable(sync = true)</code> : 같은 키에 대해 하나의 스레드만 메서드를 실행하고, 나머지는 결과를 기다린다.</p>
+            <p>2. 사전 갱신(Cache Warming) : 스케줄러로 TTL 만료 전에 미리 캐시를 갱신한다.</p>
+          </div>
+
+          <div class="callout callout-question">
+            <div class="callout-title">Write-Through와 Write-Behind의 차이를 설명하라</div>
+            <p><strong>Write-Through</strong> : DB와 캐시를 동시에 갱신한다. 쓰기 시 캐시와 DB 모두에 저장하므로 읽기 시 항상 최신 데이터가 보장된다. 쓰기 성능이 떨어진다.</p>
+            <p><strong>Write-Behind</strong> : 캐시에만 먼저 쓰고, DB에는 비동기로 나중에 반영한다. 쓰기 성능이 빠르지만, 캐시가 죽으면 아직 DB에 반영되지 않은 데이터가 유실될 수 있다.</p>
+            <p><strong>함정 주의</strong> : "Write-Through는 캐시에만 쓴다"는 틀린 답이다. <mark>캐시와 DB 모두에 동기적으로 쓰는 것</mark>이 Write-Through다.</p>
+          </div>
+
+          <h2>함정 질문</h2>
+
+          <div class="callout callout-question">
+            <div class="callout-title">@Cacheable은 항상 성능을 향상시키는가?</div>
+            <p>아니다. 캐시 적중률이 낮으면 오히려 성능이 저하된다. 모든 요청이 캐시 조회(Miss) → 원본 조회 → 캐시 저장이라는 추가 단계를 거치기 때문이다. 캐시 자체가 오버헤드가 되는 것이다.</p>
+            <p>또한 Redis 같은 분산 캐시는 네트워크 지연이 추가된다. 원본 조회가 이미 충분히 빠르다면 캐시를 추가하는 것이 오히려 느릴 수 있다.</p>
+          </div>
+
+          <div class="callout callout-question">
+            <div class="callout-title">TTL을 0으로 설정하면 어떻게 되는가?</div>
+            <p>캐시 구현체에 따라 다르다. Caffeine에서 <code>expireAfterWrite(0, SECONDS)</code>로 설정하면 저장 즉시 만료되어 캐시가 아무 효과가 없다. Redis에서 TTL을 0으로 설정하면 즉시 삭제된다.</p>
+            <p>TTL 0은 "캐시를 사용하지 않겠다"와 같은 의미지만, 캐시 조회/저장이라는 불필요한 연산은 여전히 수행된다. 캐시를 사용하지 않으려면 아예 <code>@Cacheable</code>을 제거하는 것이 올바르다.</p>
+          </div>
+
+          <div class="callout callout-question">
+            <div class="callout-title">@CacheEvict의 allEntries = true와 Cache의 clear()는 같은 동작인가?</div>
+            <p>결과적으로 같다. <code>allEntries = true</code>는 내부적으로 <code>Cache.clear()</code>를 호출한다. 해당 캐시 영역의 모든 항목을 제거한다.</p>
+            <p>단, Redis 환경에서는 주의가 필요하다. <code>clear()</code>가 해당 캐시 이름의 모든 키를 삭제하는데, 키가 수만 개라면 Redis가 <mark>KEYS 명령으로 전체를 스캔</mark>하면서 순간적으로 블로킹될 수 있다.</p>
+          </div>
+
+          <div class="callout callout-question">
+            <div class="callout-title">멀티 모듈 프로젝트에서 같은 캐시 이름을 사용하면 어떻게 되는가?</div>
+            <p>같은 CacheManager를 공유하는 모듈들이 같은 캐시 이름을 사용하면, 키가 같을 때 서로의 데이터를 읽거나 덮어쓴다. 모듈 A의 <code>@Cacheable("data")</code>와 모듈 B의 <code>@Cacheable("data")</code>가 같은 캐시 영역을 공유하게 된다.</p>
+            <p>해결 방법은 캐시 이름에 모듈 프리픽스를 붙이거나(<code>moduleA:data</code>), 모듈별로 별도의 CacheManager를 사용하는 것이다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#캐시가이드</span>
+          <span>#면접</span>
+          <span>#캐시면접</span>
+          <span>#CacheStampede</span>
+          <span>#CacheAside</span>
+          <span>#WriteThrough</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="spring-cache2-10-antipatterns.html">&larr; 이전 글</a>
+          <a href="../pages/nbuntu.html">목록으로 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[성능 테스트] 3. 결과 해석과 병목 진단 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[성능 테스트] 3. 결과 해석과 병목 진단</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">nGrinder 부하 테스트 (3/5)</div>
+            <p>이전 편: <a href="ngrinder-2-script.html">[성능 테스트] 2. Groovy 스크립트와 테스트 설계</a></p>
+            <p>다음 편: <a href="ngrinder-4-graph.html">[성능 테스트] 4. 결과 그래프 읽기</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">시리즈</div>
+            <p>- <a href="ngrinder-아키텍처와-환경-구성.html">nGrinder 아키텍처와 환경 구성</a></p>
+            <p>- <a href="ngrinder-2-script.html">Groovy 스크립트와 테스트 설계</a></p>
+            <p>- <strong>03 결과 해석과 병목 진단</strong></p>
+          </div>
+
+          <p>테스트를 실행하면 TPS 그래프가 그려진다. 숫자와 그래프를 보는 것만으로는 부족하다. <mark>그래프의 모양</mark>이 서버의 상태를 말해주고, 지표 간의 관계를 이해하면 병목이 어디인지 추론할 수 있다. 이 편에서는 nGrinder 결과를 읽는 법과, JMH 결과와 교차 분석하는 방법을 다룬다.</p>
+
+          <h2>핵심 지표 해석</h2>
+
+          <h3>TPS, MTT, Error Rate</h3>
+
+          <table>
+          <thead>
+          <tr><th>지표</th><th>의미</th><th>좋은 방향</th></tr>
+          </thead>
+          <tbody>
+          <tr><td><strong>TPS</strong></td><td>초당 처리 트랜잭션 수</td><td>높을수록</td></tr>
+          <tr><td><strong>MTT</strong></td><td>평균 응답 시간 (ms)</td><td>낮을수록</td></tr>
+          <tr><td><strong>Peak TPS</strong></td><td>테스트 중 최고 TPS</td><td>안정 TPS와 차이가 적을수록</td></tr>
+          <tr><td><strong>Error Rate</strong></td><td>실패 비율 (%)</td><td>0%가 목표</td></tr>
+          </tbody>
+          </table>
+
+          <h3>리틀의 법칙</h3>
+
+          <p>세 지표는 독립적이지 않다. 리틀의 법칙으로 연결된다.</p>
+
+<pre><code>VUser = TPS × MTT(초)</code></pre>
+          <p>VUser 50, MTT 100ms(0.1초)이면 TPS는 50 / 0.1 = <mark>500</mark>이다. VUser를 100으로 올렸는데 TPS가 500에서 안 올라가고 MTT만 200ms로 늘어났다면, 100 / 0.2 = 500으로 법칙이 맞다. 이것은 <mark>서버가 포화 상태</mark>에 도달했다는 뜻이다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">리틀의 법칙으로 필요 VUser 역산</div>
+            <p>목표 TPS가 1000이고 예상 MTT가 50ms라면, 필요한 VUser = 1000 × 0.05 = 50이다. 이렇게 역산하면 테스트 전에 적절한 VUser 수를 설정할 수 있다.</p>
+          </div>
+
+          <h2>TPS 그래프 패턴 읽기</h2>
+
+          <p>그래프의 모양이 서버의 상태를 말해준다. 주요 패턴 4가지를 알면 대부분의 상황을 진단할 수 있다.</p>
+
+          <h3>이상적 패턴</h3>
+
+          <p>Ramp-up 구간에서 TPS가 점진적으로 올라가다가, 안정 구간에서 수평선을 유지한다. MTT도 일정하다. 서버가 현재 VUser를 충분히 감당하고 있다.</p>
+
+          <h3>포화 패턴</h3>
+
+          <p>VUser를 늘려도 TPS가 더 이상 올라가지 않는다. 대신 MTT가 VUser에 비례해서 올라간다. 서버의 처리 능력이 한계에 도달한 것이다. 이 시점의 TPS가 <mark>서버의 최대 처리량</mark>이다.</p>
+
+          <p>병목 원인을 찾아야 한다.</p>
+
+          <ul>
+            <li>CPU 사용률 100% → 애플리케이션 로직 병목</li>
+            <li>DB 커넥션 풀 대기 → HikariCP <code>maximum-pool-size</code> 부족</li>
+            <li>Thread 풀 포화 → Tomcat <code>max-threads</code> 부족</li>
+          </ul>
+
+          <h3>붕괴 패턴</h3>
+
+          <p>특정 VUser 이후 TPS가 <mark>하락</mark>하면서 에러율이 급증한다. 포화를 넘어 시스템이 무너지는 단계다. 타임아웃, OOM, 커넥션 거부 등이 발생한다. 이 VUser 수는 "절대 넘으면 안 되는 한계선"이다.</p>
+
+          <h3>톱니 패턴</h3>
+
+          <p>TPS가 주기적으로 올랐다 내렸다를 반복한다. GC가 주기적으로 발생하면서 애플리케이션이 멈추는 것이 대표적 원인이다. GC 로그를 확인하거나 힙 사이즈를 조정한다.</p>
+
+<div class="mermaid">
+flowchart LR
+    subgraph Patterns ["TPS 그래프 패턴"]
+        direction TB
+        P1["이상적<br/>━━━━━━━"] 
+        P2["포화<br/>━━━━┅┅┅"]
+        P3["붕괴<br/>━━━╲╲╲"]
+        P4["톱니<br/>╱╲╱╲╱╲"]
+    end
+
+    style P1 fill:#E8F5E9,stroke:#4CAF50,stroke-width:2px
+    style P2 fill:#FFF3E0,stroke:#FF9800,stroke-width:2px
+    style P3 fill:#FFEBEE,stroke:#F44336,stroke-width:2px
+    style P4 fill:#EDE7F6,stroke:#673AB7,stroke-width:2px
+    style Patterns fill:#fafafa,stroke:#999
+</div>
+          <h2>병목 진단 체크리스트</h2>
+
+          <p>TPS가 기대보다 낮거나, 에러율이 0%가 아닐 때 원인을 좁히는 순서다.</p>
+
+          <h3>MTT가 높을 때 — 느린 응답</h3>
+
+          <ol>
+            <li><strong>DB 쿼리 확인</strong> — <code>EXPLAIN ANALYZE</code>로 Slow Query를 찾는다. Full Table Scan이나 Lock Wait이 원인일 수 있다.</li>
+            <li><strong>커넥션 풀 모니터링</strong> — HikariCP의 <code>active-connections</code>와 <code>pending-threads</code>를 확인한다. pending이 0이 아니면 커넥션 대기가 발생하고 있다.</li>
+            <li><strong>외부 호출 확인</strong> — S3 URL 생성, Redis 조회 등 외부 서비스 호출이 병목일 수 있다.</li>
+          </ol>
+
+          <h3>Error Rate가 높을 때 — 요청 실패</h3>
+
+          <ol>
+            <li><strong>401/403</strong> — 토큰 만료 또는 CSRF 토큰 누락. 스크립트의 인증 로직을 점검한다.</li>
+            <li><strong>500</strong> — 서버 에러 로그를 확인한다. 동시 접속에서만 발생하는 Race Condition일 수 있다.</li>
+            <li><strong>Connection Refused</strong> — Tomcat Thread Pool이 포화됐거나, DB 커넥션이 고갈된 것이다.</li>
+          </ol>
+
+          <h3>TPS가 안 오를 때 — 포화</h3>
+
+          <ol>
+            <li><strong>CPU 확인</strong> — <code>docker stats</code>로 Target Server 컨테이너의 CPU 사용률을 본다.</li>
+            <li><strong>Thread Dump</strong> — <code>jstack</code>이나 Actuator의 <code>/threaddump</code>로 Thread 상태를 확인한다. <code>WAITING</code>이나 <code>BLOCKED</code> 상태의 Thread가 많으면 락 경합이다.</li>
+            <li><strong>리틀의 법칙 검증</strong> — VUser = TPS × MTT가 맞는지 확인한다. 맞으면 순수한 처리 능력 한계, 안 맞으면 에러나 타임아웃이 TPS를 깎고 있는 것이다.</li>
+          </ol>
+
+          <h2>JMH 결과와의 크로스 레퍼런스</h2>
+
+          <p>JMH와 nGrinder는 같은 API를 다른 각도에서 측정한다. 두 결과를 교차 분석하면 <mark>코드 수준과 인프라 수준의 병목을 분리</mark>할 수 있다.</p>
+
+          <h3>결과 비교 프레임워크</h3>
+
+          <table>
+          <thead>
+          <tr><th>관점</th><th>JMH</th><th>nGrinder</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>배치 조회 평균</td><td>18ms</td><td>MTT 35ms</td></tr>
+          <tr><td>차이 원인</td><td>—</td><td>HTTP 직렬화 + Security 필터 + 네트워크 = 17ms</td></tr>
+          </tbody>
+          </table>
+
+          <p>nGrinder의 MTT에서 JMH의 Score를 빼면, <mark>HTTP 계층의 오버헤드</mark>가 드러난다. 이 오버헤드가 전체 MTT의 절반 이상이면, 쿼리 최적화보다 직렬화나 캐싱 전략이 더 효과적일 수 있다.</p>
+
+          <h3>두 결과가 불일치할 때</h3>
+
+          <p>JMH에서 배치가 N+1보다 13배 빨랐는데, nGrinder에서는 3배밖에 차이가 안 날 수 있다. 이것은 HTTP 오버헤드가 상수로 붙기 때문이다.</p>
+
+<pre><code>JMH:   N+1 = 245ms, 배치 = 18ms → 13.6배
+nGrinder: N+1 = 262ms, 배치 = 35ms → 7.5배
+         (HTTP 오버헤드 약 17ms가 양쪽에 동일하게 추가)</code></pre>
+          <p>비율이 줄어든 것은 병목이 사라진 것이 아니라, <mark>기저 비용이 추가</mark>된 것이다. 절대 차이(245 - 18 = 227ms vs 262 - 35 = 227ms)는 동일하다.</p>
+
+          <h3>보완적 의사결정</h3>
+
+          <table>
+          <thead>
+          <tr><th>질문</th><th>답하는 도구</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>"어떤 쿼리 전략이 더 빠른가"</td><td>JMH</td></tr>
+          <tr><td>"현재 API가 동시 몇 명까지 버티나"</td><td>nGrinder</td></tr>
+          <tr><td>"쿼리를 바꾸면 TPS가 얼마나 오를까"</td><td>JMH 비율 × 현재 nGrinder TPS로 추정</td></tr>
+          <tr><td>"인프라 스케일링이 필요한가"</td><td>nGrinder 포화점 기반</td></tr>
+          </tbody>
+          </table>
+
+          <p>올바른 순서: JMH로 최적 구현을 결정 → nGrinder로 그 구현의 용량을 검증 → 포화점이 부족하면 인프라 스케일링을 계획한다.</p>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">Peak TPS를 서버 성능이라고 보고</div>
+            <p>Peak TPS는 순간 최고값이다. 안정 구간의 평균 TPS가 실제 서버 성능이다. Peak가 안정 TPS의 2배 이상이면 측정이 불안정한 것이므로 Duration을 늘려야 한다.</p>
+            <p>[!WARNING] VUser 1명 결과로 성능 판단</p>
+            <p>VUser 1명의 MTT는 "경합 없는 최적 조건"이다. 프로덕션에서는 동시 접속이 항상 존재하므로, 예상 동시 접속 수에 가까운 VUser로 테스트해야 의미 있는 수치가 나온다.</p>
+            <p>[!WARNING] 로컬 테스트 결과를 프로덕션에 대입</p>
+            <p>Agent와 Target이 같은 머신이면 CPU/네트워크를 공유한다. TPS가 실제보다 낮게 나올 수 있다. 로컬 결과는 <mark>상대 비교</mark>와 <mark>병목 탐색</mark>에만 사용하고, 절대값은 프로덕션 환경에서 재측정한다.</p>
+            <p>[!WARNING] 에러율이 0%인데 안심</p>
+            <p>에러율 0%는 "HTTP 응답이 성공"이라는 뜻이지, "비즈니스 로직이 정확하다"는 뜻이 아니다. 응답 본문을 검증하지 않으면, 빈 목록이나 잘못된 데이터가 반환되어도 성공으로 집계된다. <code>@Test</code>에서 응답 내용까지 assert한다.</p>
+          </div>
+
+          <h2>면접 Q&A</h2>
+
+          <div class="callout callout-question">
+            <div class="callout-title">JMH와 nGrinder의 차이가 뭔가요? 둘 다 써야 하는 이유가 있나요?</div>
+            <p>JMH는 JVM 안에서 메서드를 직접 호출해 쿼리 전략의 상대적 성능을 비교한다. nGrinder는 HTTP 요청을 대량으로 보내서 동시 접속 상황에서의 처리량과 응답 시간을 측정한다. JMH로 "배치가 N+1보다 13배 빠르다"를 확인하고, nGrinder로 "그 배치 API가 동시 100명에서 TPS 500, MTT 50ms"를 확인한다. 전자는 코드 수준 최적화, 후자는 인프라 수준 용량 계획에 사용한다.</p>
+            <p>[!QUESTION] nGrinder에서 TPS가 더 이상 안 올라갈 때 어떻게 진단했나요?</p>
+            <p>리틀의 법칙(VUser = TPS × MTT)으로 포화 여부를 먼저 확인한다. 포화가 확인되면 CPU, DB 커넥션 풀, Tomcat Thread Pool을 순서대로 점검한다. docker stats로 CPU를 보고, HikariCP 메트릭으로 pending 커넥션을 확인하고, Thread Dump로 블로킹 상태의 Thread를 찾는다. 이 프로젝트에서는 HikariCP의 maximum-pool-size가 10이라 VUser 50 이상에서 커넥션 대기가 발생했고, 30으로 올리니 TPS가 비례해서 증가했다.</p>
+            <p>[!QUESTION] 부하 테스트 결과의 절대값을 프로덕션 성능으로 볼 수 있나요? (함정 질문)</p>
+            <p>아니다. 로컬 Docker 환경에서는 Agent와 Target이 리소스를 공유하고, 네트워크 지연도 프로덕션과 다르다. 절대값보다 포화 패턴과 상대 비교에 의미를 둔다. "VUser 50에서 포화되었다"는 것은 "프로덕션에서 50명이 한계"라는 뜻이 아니라, "이 환경에서의 포화점이 50"이라는 뜻이다. 프로덕션 성능은 스테이징 환경이나 APM(Pinpoint, Datadog)으로 실제 트래픽에서 측정한다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#성능테스트</span>
+          <span>#nGrinder</span>
+          <span>#TPS</span>
+          <span>#병목진단</span>
+          <span>#부하테스트</span>
+          <span>#면접</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="ngrinder-2-script.html">&larr; 이전 글</a>
+          <a href="ngrinder-4-graph.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

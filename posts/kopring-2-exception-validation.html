@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[코프링] 2. 예외 처리 & Validation 전략 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[코프링] 2. 예외 처리 & Validation 전략</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">코프링 실전 (2/5)</div>
+            <p>이전 편: <a href="kopring-1-jpa-entity.html">[코프링] 1. JPA + Kotlin 엔티티 설계</a></p>
+            <p>다음 편: <a href="kopring-3-querydsl.html">[코프링] 3. QueryDSL + Kotlin</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">코프링 실전 시리즈 (2/5)</div>
+            <p>이전 편: <a href="kopring-1-jpa-entity.html">1 JPA + Kotlin 엔티티 설계</a></p>
+            <p>다음 편: <a href="kopring-3-querydsl.html">3 QueryDSL + Kotlin</a></p>
+          </div>
+
+          <p>Spring 애플리케이션에서 예외 처리와 입력 검증은 피할 수 없는 횡단 관심사다. Java에서는 <code>@ControllerAdvice</code>, <code>@Valid</code>, <code>BindingResult</code> 등의 패턴이 확립되어 있지만, Kotlin으로 오면 sealed class, 확장 함수, data class 같은 언어 기능을 활용해서 더 깔끔하게 구현할 수 있다.</p>
+
+          <p>이 문서에서는 코프링 프로젝트에서 예외 처리와 Validation을 어떻게 구성하는지, 실전 패턴을 다룬다.</p>
+
+          <h2>예외 설계 — sealed class 활용</h2>
+
+          <p>Java에서는 비즈니스 예외를 <code>RuntimeException</code>을 상속한 개별 클래스로 만드는 것이 일반적이다. Kotlin에서는 <mark>sealed class</mark>로 예외 계층을 설계하면 <code>when</code> 표현식에서 모든 경우를 컴파일 타임에 검증할 수 있다.</p>
+
+<pre><code class="language-kotlin">sealed class BusinessException(
+    val errorCode: ErrorCode,
+    override val message: String
+) : RuntimeException(message)
+
+class EntityNotFoundException(
+    entityName: String,
+    id: Any
+) : BusinessException(
+    errorCode = ErrorCode.NOT_FOUND,
+    message = "$entityName(id=$id)을 찾을 수 없습니다"
+)
+
+class DuplicateException(
+    field: String,
+    value: Any
+) : BusinessException(
+    errorCode = ErrorCode.DUPLICATE,
+    message = "$field '$value'이(가) 이미 존재합니다"
+)
+
+class InvalidStateException(
+    message: String
+) : BusinessException(
+    errorCode = ErrorCode.INVALID_STATE,
+    message = message
+)</code></pre>
+          <ul>
+            <li><code>sealed class BusinessException</code> — 모든 비즈니스 예외의 상위 클래스. <code>sealed</code>이므로 하위 클래스가 같은 패키지 안에서만 정의된다.</li>
+            <li>각 하위 클래스가 <strong>의미 있는 생성자 파라미터</strong>를 가진다. 메시지를 직접 조합할 필요 없이 엔티티 이름과 ID만 넘기면 된다.</li>
+          </ul>
+
+          <p>에러 코드도 enum으로 정의한다.</p>
+
+<pre><code class="language-kotlin">enum class ErrorCode(val status: HttpStatus) {
+    NOT_FOUND(HttpStatus.NOT_FOUND),
+    DUPLICATE(HttpStatus.CONFLICT),
+    INVALID_STATE(HttpStatus.BAD_REQUEST),
+    VALIDATION_ERROR(HttpStatus.BAD_REQUEST),
+    INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR)
+}</code></pre>
+          <p>왜 <code>sealed class</code>인가? 새로운 비즈니스 예외를 추가할 때 <code>@ControllerAdvice</code>의 <code>when</code> 분기에서 컴파일러가 "이 케이스 빠졌다"고 알려주기 때문이다. 예외 처리 누락을 코드 작성 시점에 잡을 수 있다.</p>
+
+          <hr>
+
+          <h2>에러 응답 표준화</h2>
+
+          <p>API의 에러 응답은 일관된 형식을 가져야 한다. 클라이언트가 에러 타입에 따라 다른 처리를 할 수 있도록 구조화된 응답을 반환한다.</p>
+
+<pre><code class="language-kotlin">data class ErrorResponse(
+    val code: String,
+    val message: String,
+    val errors: List&lt;FieldError&gt; = emptyList()
+) {
+    data class FieldError(
+        val field: String,
+        val value: String,
+        val reason: String
+    )
+}</code></pre>
+          <ul>
+            <li><code>code</code> — 에러 코드 문자열. 클라이언트가 프로그래밍적으로 에러를 구분하는 데 사용.</li>
+            <li><code>message</code> — 사람이 읽을 수 있는 에러 메시지.</li>
+            <li><code>errors</code> — Validation 에러 시 어떤 필드가 왜 실패했는지 상세 정보.</li>
+          </ul>
+
+          <p><code>data class</code>를 사용한다. 응답 객체는 불변이고, <code>equals</code>/<code>hashCode</code>/<code>toString</code>이 유용하기 때문이다. (<a href="kopring-1-jpa-entity.html">엔티티에서 data class를 쓰지 않는 이유</a>와는 다른 맥락이다.)</p>
+
+          <hr>
+
+          <h2>@ControllerAdvice — 전역 예외 처리</h2>
+
+          <p><code>@ControllerAdvice</code>는 Spring MVC의 전역 예외 처리기다. 모든 컨트롤러에서 발생하는 예외를 한 곳에서 처리한다.</p>
+
+<pre><code class="language-kotlin">@RestControllerAdvice
+class GlobalExceptionHandler {
+
+    @ExceptionHandler(BusinessException::class)
+    fun handleBusinessException(e: BusinessException): ResponseEntity&lt;ErrorResponse&gt; {
+        val response = ErrorResponse(
+            code = e.errorCode.name,
+            message = e.message
+        )
+        return ResponseEntity.status(e.errorCode.status).body(response)
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException::class)
+    fun handleValidationException(e: MethodArgumentNotValidException): ResponseEntity&lt;ErrorResponse&gt; {
+        val fieldErrors = e.bindingResult.fieldErrors.map { error -&gt;
+            ErrorResponse.FieldError(
+                field = error.field,
+                value = error.rejectedValue?.toString() ?: "",
+                reason = error.defaultMessage ?: "유효하지 않은 값입니다"
+            )
+        }
+        val response = ErrorResponse(
+            code = ErrorCode.VALIDATION_ERROR.name,
+            message = "입력값 검증에 실패했습니다",
+            errors = fieldErrors
+        )
+        return ResponseEntity.badRequest().body(response)
+    }
+
+    @ExceptionHandler(Exception::class)
+    fun handleUnexpectedException(e: Exception): ResponseEntity&lt;ErrorResponse&gt; {
+        log.error("예상치 못한 에러", e)
+        val response = ErrorResponse(
+            code = ErrorCode.INTERNAL_ERROR.name,
+            message = "서버 내부 오류가 발생했습니다"
+        )
+        return ResponseEntity.internalServerError().body(response)
+    }
+
+    companion object {
+        private val log = LoggerFactory.getLogger(GlobalExceptionHandler::class.java)
+    }
+}</code></pre>
+          <p>세 가지 핸들러의 역할을 정리하면 이렇다.</p>
+
+          <ul>
+            <li><code>handleBusinessException</code> — <code>sealed class</code>로 정의한 비즈니스 예외를 처리한다. 에러 코드에 따라 HTTP 상태가 달라진다.</li>
+            <li><code>handleValidationException</code> — <code>@Valid</code> 검증 실패 시 Spring이 던지는 <code>MethodArgumentNotValidException</code>을 처리한다. 어떤 필드가 왜 실패했는지 상세 정보를 반환한다.</li>
+            <li><code>handleUnexpectedException</code> — 위 두 가지에 해당하지 않는 모든 예외를 포괄한다. 내부 에러 메시지를 클라이언트에 노출하지 않고, 로그에만 기록한다.</li>
+          </ul>
+
+          <p>이 구조에서 중요한 것은 <mark>예외 핸들러의 순서</mark>다. Spring은 가장 구체적인 예외 타입에 매칭되는 핸들러를 우선 실행한다. <code>BusinessException</code>이 <code>Exception</code>보다 먼저 매칭되므로, 비즈니스 예외가 <code>handleUnexpectedException</code>으로 빠지는 일은 없다.</p>
+
+          <hr>
+
+          <h2>Validation — Bean Validation 활용</h2>
+
+          <p>Spring Boot에서 입력 검증은 Bean Validation(<code>jakarta.validation</code>)을 사용한다. Kotlin에서는 어노테이션 사용 시 주의할 점이 있다.</p>
+
+          <h3>Request DTO 설계</h3>
+
+<pre><code class="language-kotlin">data class CreatePostRequest(
+    @field:NotBlank(message = "제목은 비어있을 수 없습니다")
+    @field:Size(max = 200, message = "제목은 200자를 초과할 수 없습니다")
+    val title: String,
+
+    @field:NotBlank(message = "내용은 비어있을 수 없습니다")
+    val content: String,
+
+    val tags: List&lt;@Valid TagRequest&gt; = emptyList()
+)
+
+data class TagRequest(
+    @field:NotBlank(message = "태그명은 비어있을 수 없습니다")
+    @field:Size(max = 30, message = "태그명은 30자를 초과할 수 없습니다")
+    val name: String
+)</code></pre>
+          <p>여기서 가장 중요한 것은 <code>@field:</code> 접두사다.</p>
+
+          <p>Kotlin에서 생성자 파라미터에 어노테이션을 붙이면, 기본적으로 <strong>생성자 파라미터</strong>에 적용된다. 하지만 Bean Validation은 <strong>필드</strong>에 붙은 어노테이션을 찾는다. <code>@field:NotBlank</code>로 명시해야 Validation이 동작한다. <code>@field:</code> 없이 <code>@NotBlank</code>만 쓰면 <mark>검증이 무시</mark>된다.</p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">Kotlin + Bean Validation의 함정</div>
+            <p><code>@field:</code>를 빼먹으면 Validation이 동작하지 않지만 컴파일 에러도 나지 않는다. 테스트에서 잡아야 하므로, DTO를 만들면 반드시 Validation 테스트를 작성하자.</p>
+          </div>
+
+          <hr>
+
+          <h3>컨트롤러에서 Validation 적용</h3>
+
+<pre><code class="language-kotlin">@RestController
+@RequestMapping("/api/posts")
+class PostController(
+    private val postService: PostService
+) {
+    @PostMapping
+    fun createPost(@RequestBody @Valid request: CreatePostRequest): ResponseEntity&lt;PostResponse&gt; {
+        val post = postService.create(request)
+        return ResponseEntity.status(HttpStatus.CREATED).body(PostResponse.from(post))
+    }
+}</code></pre>
+          <p><code>@Valid</code>를 <code>@RequestBody</code> 옆에 붙이면 Spring이 요청 바인딩 후 자동으로 Validation을 수행한다. 실패하면 <code>MethodArgumentNotValidException</code>이 던져지고, 앞에서 정의한 <code>GlobalExceptionHandler</code>에서 처리된다.</p>
+
+          <hr>
+
+          <h2>커스텀 Validation</h2>
+
+          <p>Bean Validation의 기본 어노테이션(<code>@NotBlank</code>, <code>@Size</code>, <code>@Email</code> 등)으로 충분하지 않을 때, 커스텀 어노테이션을 만들 수 있다.</p>
+
+<pre><code class="language-kotlin">@Target(AnnotationTarget.FIELD)
+@Retention(AnnotationRetention.RUNTIME)
+@Constraint(validatedBy = [NoHtmlValidator::class])
+annotation class NoHtml(
+    val message: String = "HTML 태그를 포함할 수 없습니다",
+    val groups: Array&lt;KClass&lt;*&gt;&gt; = [],
+    val payload: Array&lt;KClass&lt;out Payload&gt;&gt; = []
+)
+
+class NoHtmlValidator : ConstraintValidator&lt;NoHtml, String&gt; {
+    private val htmlPattern = "&lt;[^&gt;]+&gt;".toRegex()
+
+    override fun isValid(value: String?, context: ConstraintValidatorContext): Boolean {
+        if (value == null) return true  // null은 @NotBlank에서 검증
+        return !htmlPattern.containsMatchIn(value)
+    }
+}</code></pre>
+          <ul>
+            <li><code>@Target(AnnotationTarget.FIELD)</code> — Kotlin에서는 <code>AnnotationTarget</code>으로 어노테이션 적용 대상을 지정한다.</li>
+            <li><code>isValid</code>에서 <code>null</code>을 허용하는 이유 — null 체크는 <code>@NotBlank</code>나 <code>@NotNull</code>의 책임이다. 각 어노테이션이 하나의 검증 규칙만 담당하는 것이 원칙이다.</li>
+          </ul>
+
+          <p>사용할 때는 이렇게 된다.</p>
+
+<pre><code class="language-kotlin">data class CreatePostRequest(
+    @field:NotBlank
+    @field:NoHtml
+    val title: String,
+    // ...
+)</code></pre>
+          <hr>
+
+          <h2>서비스 레이어의 예외 처리</h2>
+
+          <p>서비스 레이어에서는 비즈니스 규칙을 검증하고, 실패 시 앞에서 정의한 <code>BusinessException</code>을 던진다.</p>
+
+<pre><code class="language-kotlin">@Service
+@Transactional(readOnly = true)
+class PostService(
+    private val postRepository: PostRepository
+) {
+    @Transactional
+    fun create(request: CreatePostRequest): Post {
+        if (postRepository.existsByTitle(request.title)) {
+            throw DuplicateException("제목", request.title)
+        }
+        val post = Post(
+            title = request.title,
+            content = request.content
+        )
+        return postRepository.save(post)
+    }
+
+    fun findById(id: Long): Post {
+        return postRepository.findByIdOrNull(id)
+            ?: throw EntityNotFoundException("Post", id)
+    }
+
+    @Transactional
+    fun publish(id: Long): Post {
+        val post = findById(id)
+        if (post.isPublished) {
+            throw InvalidStateException("이미 발행된 글입니다")
+        }
+        post.publish()
+        return post
+    }
+}</code></pre>
+          <ul>
+            <li><code>findByIdOrNull</code> — Spring Data JPA의 Kotlin 확장 함수. <code>findById</code>가 <code>Optional</code>을 반환하는 것과 달리, <code>null</code>을 반환한다. Kotlin의 null 처리와 잘 맞는다.</li>
+            <li><code>?: throw</code> — Elvis 연산자와 throw의 조합. "없으면 예외"라는 패턴을 한 줄로 표현한다.</li>
+            <li>비즈니스 규칙 위반 시 적절한 <code>BusinessException</code> 하위 클래스를 던진다.</li>
+          </ul>
+
+          <hr>
+
+          <h2>심화 분석</h2>
+
+          <h4>Validation과 비즈니스 검증의 분리</h4>
+
+          <p>입력 검증(Validation)과 비즈니스 검증은 다르다. 이 둘을 혼동하면 검증 로직이 여기저기 흩어진다.</p>
+
+          <p><strong>입력 검증</strong>은 "데이터가 형식적으로 올바른가"다. 제목이 비어있지 않은가, 이메일 형식인가, 길이가 200자 이내인가. 이런 검증은 <mark>컨트롤러 진입 전에</mark> Bean Validation으로 처리한다.</p>
+
+          <p><strong>비즈니스 검증</strong>은 "도메인 규칙을 충족하는가"다. 제목이 중복되지 않는가, 이미 발행된 글이 아닌가. 이런 검증은 <mark>서비스 레이어에서</mark> 예외를 던지는 방식으로 처리한다.</p>
+
+          <p>이렇게 분리하면 각 계층의 책임이 명확해진다.</p>
+
+          <h4>require와 check</h4>
+
+          <p>Kotlin 표준 라이브러리의 <code>require</code>와 <code>check</code>도 검증에 유용하다.</p>
+
+<pre><code class="language-kotlin">fun updateTitle(title: String) {
+    require(title.isNotBlank()) { "제목은 비어있을 수 없습니다" }
+    require(title.length &lt;= 200) { "제목은 200자를 초과할 수 없습니다" }
+    this.title = title
+}</code></pre>
+          <ul>
+            <li><code>require</code> — 인자 검증. 실패 시 <code>IllegalArgumentException</code>을 던진다.</li>
+            <li><code>check</code> — 상태 검증. 실패 시 <code>IllegalStateException</code>을 던진다.</li>
+          </ul>
+
+          <p>다만 API 응답에서는 <code>BusinessException</code>으로 에러 코드와 메시지를 제어하는 것이 일반적이므로, <code>require</code>/<code>check</code>는 내부 로직의 방어적 검증에 쓰고, API 응답에 영향을 주는 검증에는 명시적인 비즈니스 예외를 던지는 것이 좋다.</p>
+
+          <h4>에러 응답 예시</h4>
+
+          <p>실제 API에서 반환되는 에러 응답이 어떤 모습인지 보자.</p>
+
+          <p>비즈니스 예외의 경우:</p>
+
+<pre><code class="language-json">{
+    "code": "NOT_FOUND",
+    "message": "Post(id=42)을 찾을 수 없습니다",
+    "errors": []
+}</code></pre>
+          <p>Validation 에러의 경우:</p>
+
+<pre><code class="language-json">{
+    "code": "VALIDATION_ERROR",
+    "message": "입력값 검증에 실패했습니다",
+    "errors": [
+        {
+            "field": "title",
+            "value": "",
+            "reason": "제목은 비어있을 수 없습니다"
+        },
+        {
+            "field": "content",
+            "value": "",
+            "reason": "내용은 비어있을 수 없습니다"
+        }
+    ]
+}</code></pre>
+          <p>클라이언트는 <code>code</code> 필드로 에러 유형을 판단하고, Validation 에러의 경우 <code>errors</code> 배열에서 어떤 필드가 문제인지 확인할 수 있다.</p>
+
+          <hr>
+
+          <h2>자주 하는 실수</h2>
+
+          <h4>@field: 빼먹기</h4>
+
+<pre><code class="language-kotlin">// 나쁜 예 — Validation이 동작하지 않음!
+data class CreatePostRequest(
+    @NotBlank
+    val title: String
+)
+
+// 좋은 예
+data class CreatePostRequest(
+    @field:NotBlank
+    val title: String
+)</code></pre>
+          <p>Kotlin 생성자 프로퍼티에서 <code>@field:</code>를 빼면 어노테이션이 생성자 파라미터에 적용된다. Bean Validation은 필드의 어노테이션을 읽으므로, 검증이 무시된다. 에러도 나지 않아서 발견하기 어렵다.</p>
+
+          <h4>예외를 삼키기</h4>
+
+<pre><code class="language-kotlin">// 나쁜 예 — 예외를 잡아서 null 반환
+fun findById(id: Long): Post? {
+    return try {
+        postRepository.findById(id).orElse(null)
+    } catch (e: Exception) {
+        null  // 무슨 에러가 났는지 알 수 없음
+    }
+}</code></pre>
+          <p>예외를 잡아서 null로 바꾸면 "왜 실패했는지" 정보가 사라진다. DB 연결 에러와 데이터 없음을 구분할 수 없게 된다. 명시적으로 예외를 던지거나, 적절한 로깅과 함께 처리해야 한다.</p>
+
+          <h4>모든 예외에 같은 HTTP 상태 반환</h4>
+
+<pre><code class="language-kotlin">// 나쁜 예 — 모든 비즈니스 예외가 400
+@ExceptionHandler(BusinessException::class)
+fun handle(e: BusinessException): ResponseEntity&lt;ErrorResponse&gt; {
+    return ResponseEntity.badRequest().body(/* ... */)
+}</code></pre>
+          <p>"찾을 수 없음"은 404, "중복"은 409, "잘못된 입력"은 400이어야 한다. <code>ErrorCode</code>에 HTTP 상태를 매핑해두고, 예외 타입에 맞는 상태 코드를 반환하는 것이 올바른 API 설계다.</p>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Kotlin</span>
+          <span>#Spring</span>
+          <span>#예외처리</span>
+          <span>#Validation</span>
+          <span>#코프링</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="kopring-1-jpa-entity.html">&larr; 이전 글</a>
+          <a href="kopring-3-querydsl.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

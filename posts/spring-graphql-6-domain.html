@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Spring GraphQL] 6. 도메인 모델과 서비스 계층 구현 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Spring GraphQL] 6. 도메인 모델과 서비스 계층 구현</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Spring GraphQL (6/8)</div>
+            <p>이전 편: <a href="spring-graphql-5-setup.html">[Spring GraphQL] 5. 프로젝트 세팅과 스키마 작성</a></p>
+            <p>다음 편: <a href="spring-graphql-7-resolver.html">[Spring GraphQL] 7. Resolver 작성과 GraphiQL 실습</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">Spring GraphQL 실습 시리즈</div>
+            <p>1. <a href="spring-graphql-5-setup.html">프로젝트 세팅과 스키마 작성</a></p>
+            <p>2. <a href="spring-graphql-6-domain.html">도메인 모델과 서비스 계층 구현</a> ← 현재 문서</p>
+            <p>3. <a href="spring-graphql-7-resolver.html">Resolver 작성과 GraphiQL 실습</a></p>
+            <p>4. <a href="spring-graphql-8-advanced.html">N+1 해결, Subscription, 예외 처리</a></p>
+          </div>
+
+          <p><a href="spring-graphql-5-setup.html">1편</a>에서 스키마를 작성했다. 이번 편에서는 스키마에 대응하는 JPA 엔티티, Repository, Input 클래스, Service를 구현한다. GraphQL이든 REST든 도메인 계층은 동일하다. 차이는 컨트롤러(Resolver) 뿐이다.</p>
+
+          <h2>단계별로 만들기</h2>
+
+          <h3>단계 1 — JPA 엔티티 작성</h3>
+
+          <p>스키마의 <code>type Book</code>과 <code>type Author</code>에 대응하는 JPA 엔티티를 만든다.</p>
+
+          <p>먼저 <code>Author</code> 엔티티다. 한 명의 저자가 여러 권의 책을 가지는 일대다 관계의 "일" 쪽이다.</p>
+
+<pre><code class="language-java">package com.codeit.graphql.entity;
+
+import jakarta.persistence.*;
+import lombok.*;
+
+import java.util.ArrayList;
+import java.util.List;
+
+@Entity
+@Table(name = "authors")
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+public class Author {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false)
+    private String name;
+
+    @Column(nullable = false, unique = true)
+    private String email;
+
+    @OneToMany(mappedBy = "author", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    private List&lt;Book&gt; books = new ArrayList&lt;&gt;();
+
+    public void addBook(Book book) {
+        books.add(book);
+        book.setAuthor(this);
+    }
+
+    public void removeBook(Book book) {
+        books.remove(book);
+        book.setAuthor(null);
+    }
+}</code></pre>
+          <p><code>@OneToMany(mappedBy = "author")</code>는 Book 엔티티의 <code>author</code> 필드가 관계의 주인임을 선언한다. <code>cascade = CascadeType.ALL</code>은 Author를 저장/삭제할 때 연관된 Book도 함께 처리한다는 뜻이다.</p>
+
+          <p><code>addBook()</code>과 <code>removeBook()</code>은 양방향 관계의 <mark>양쪽을 동시에 맞추는</mark> 편의 메서드다. <code>books.add(book)</code>만 하고 <code>book.setAuthor(this)</code>를 빼먹으면 DB에 반영되지 않는다.</p>
+
+          <p>다음은 <code>Book</code> 엔티티다.</p>
+
+<pre><code class="language-java">package com.codeit.graphql.entity;
+
+import jakarta.persistence.*;
+import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
+
+import java.time.LocalDateTime;
+
+@Entity
+@Table(name = "books")
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+public class Book {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false)
+    private String title;
+
+    @Column(nullable = false, unique = true)
+    private String isbn;
+
+    @Column(nullable = false)
+    private Integer publishedYear;
+
+    @Column(nullable = false)
+    private Double price;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "author_id", nullable = false)
+    private Author author;
+
+    @CreationTimestamp
+    @Column(nullable = false, updatable = false)
+    private LocalDateTime createdAt;
+}</code></pre>
+          <p><code>@ManyToOne(fetch = FetchType.LAZY)</code>가 중요하다. 기본값은 <code>EAGER</code>인데, 그러면 Book을 조회할 때마다 Author도 함께 로딩된다. LAZY로 설정하면 <mark>실제로 접근할 때만</mark> Author를 조회한다. N+1 문제와 연결되는 설정이다.</p>
+
+          <p><code>@CreationTimestamp</code>는 엔티티가 처음 저장될 때 현재 시각을 자동으로 넣어준다.</p>
+
+          <h3>단계 2 — Repository 작성</h3>
+
+          <p>Spring Data JPA의 <code>JpaRepository</code>를 상속한다. 기본 CRUD 외에 검색용 커스텀 메서드도 추가한다.</p>
+
+<pre><code class="language-java">package com.codeit.graphql.repository;
+
+import com.codeit.graphql.entity.Book;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+
+import java.util.List;
+import java.util.Optional;
+
+public interface BookRepository extends JpaRepository&lt;Book, Long&gt; {
+
+    List&lt;Book&gt; findByTitleContainingIgnoreCase(String title);
+
+    List&lt;Book&gt; findByAuthorId(Long authorId);
+
+    Optional&lt;Book&gt; findByIsbn(String isbn);
+
+    @Query("SELECT b FROM Book b LEFT JOIN FETCH b.author")
+    List&lt;Book&gt; findAllWithAuthor();
+}</code></pre>
+          <p><code>findByTitleContainingIgnoreCase</code>는 제목에 특정 문자열이 포함된 책을 대소문자 무시하고 검색한다. Spring Data JPA가 메서드 이름을 파싱해서 쿼리를 만들어준다.</p>
+
+          <p><code>findAllWithAuthor()</code>는 JPQL로 <code>JOIN FETCH</code>를 사용한다. Book을 가져올 때 Author를 함께 로딩해서 <mark>추가 쿼리 없이</mark> 한 번에 가져온다.</p>
+
+<pre><code class="language-java">package com.codeit.graphql.repository;
+
+import com.codeit.graphql.entity.Author;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+
+import java.util.List;
+import java.util.Optional;
+
+public interface AuthorRepository extends JpaRepository&lt;Author, Long&gt; {
+
+    Optional&lt;Author&gt; findByEmail(String email);
+
+    @Query("SELECT a FROM Author a LEFT JOIN FETCH a.books")
+    List&lt;Author&gt; findAllWithBooks();
+}</code></pre>
+          <h3>단계 3 — Input 클래스 작성</h3>
+
+          <p>스키마의 <code>input</code> 타입에 대응하는 Java 클래스를 만든다. 단순한 POJO면 된다.</p>
+
+<pre><code class="language-java">package com.codeit.graphql.input;
+
+import lombok.Getter;
+import lombok.Setter;
+import lombok.ToString;
+
+@Getter @Setter @ToString
+public class CreateBookInput {
+    private String title;
+    private String isbn;
+    private Integer publishedYear;
+    private Double price;
+    private Long authorId;
+}</code></pre>
+
+<pre><code class="language-java">package com.codeit.graphql.input;
+
+import lombok.Getter;
+import lombok.Setter;
+import lombok.ToString;
+
+@Getter @Setter @ToString
+public class UpdateBookInput {
+    private String title;
+    private String isbn;
+    private Integer publishedYear;
+    private Double price;
+}</code></pre>
+
+<pre><code class="language-java">package com.codeit.graphql.input;
+
+import lombok.Getter;
+import lombok.Setter;
+import lombok.ToString;
+
+@Getter @Setter @ToString
+public class CreateAuthorInput {
+    private String name;
+    private String email;
+}</code></pre>
+
+<pre><code class="language-java">package com.codeit.graphql.input;
+
+import lombok.Getter;
+import lombok.Setter;
+import lombok.ToString;
+
+@Getter @Setter @ToString
+public class UpdateAuthorInput {
+    private String name;
+    private String email;
+}</code></pre>
+          <p>스키마 필드명과 Java 필드명이 정확히 일치해야 자동 바인딩이 동작한다.</p>
+
+          <h3>단계 4 — Service 구현</h3>
+
+          <p>비즈니스 로직을 담당하는 Service 클래스를 만든다. Resolver가 직접 Repository를 호출하지 않고, 반드시 Service를 거치도록 한다.</p>
+
+          <p><code>BookService</code>부터 만든다.</p>
+
+<pre><code class="language-java">package com.codeit.graphql.service;
+
+import com.codeit.graphql.entity.Author;
+import com.codeit.graphql.entity.Book;
+import com.codeit.graphql.input.CreateBookInput;
+import com.codeit.graphql.input.UpdateBookInput;
+import com.codeit.graphql.repository.AuthorRepository;
+import com.codeit.graphql.repository.BookRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+
+@Service
+@RequiredArgsConstructor
+@Slf4j
+@Transactional(readOnly = true)
+public class BookService {
+
+    private final BookRepository bookRepository;
+    private final AuthorRepository authorRepository;
+
+    public List&lt;Book&gt; getAllBooks() {
+        return bookRepository.findAll();
+    }
+
+    public List&lt;Book&gt; getAllBooksWithAuthor() {
+        return bookRepository.findAllWithAuthor();
+    }
+
+    public Book getBookById(Long id) {
+        return bookRepository.findById(id)
+                .orElseThrow(() -&gt; new RuntimeException("도서를 찾을 수 없습니다: ID=" + id));
+    }
+
+    public List&lt;Book&gt; searchBooks(String title) {
+        return bookRepository.findByTitleContainingIgnoreCase(title);
+    }
+
+    public List&lt;Book&gt; getBooksByAuthor(Long authorId) {
+        return bookRepository.findByAuthorId(authorId);
+    }
+
+    @Transactional
+    public Book createBook(CreateBookInput input) {
+        Author author = authorRepository.findById(input.getAuthorId())
+                .orElseThrow(() -&gt; new RuntimeException("작가를 찾을 수 없습니다: ID=" + input.getAuthorId()));
+
+        Book book = Book.builder()
+                .title(input.getTitle())
+                .isbn(input.getIsbn())
+                .publishedYear(input.getPublishedYear())
+                .price(input.getPrice())
+                .author(author)
+                .build();
+
+        Book savedBook = bookRepository.save(book);
+        log.info("도서 생성 완료: {}", savedBook.getTitle());
+        return savedBook;
+    }
+
+    @Transactional
+    public Book updateBook(Long id, UpdateBookInput input) {
+        Book book = getBookById(id);
+
+        if (input.getTitle() != null) book.setTitle(input.getTitle());
+        if (input.getIsbn() != null) book.setIsbn(input.getIsbn());
+        if (input.getPublishedYear() != null) book.setPublishedYear(input.getPublishedYear());
+        if (input.getPrice() != null) book.setPrice(input.getPrice());
+
+        return bookRepository.save(book);
+    }
+
+    @Transactional
+    public boolean deleteBook(Long id) {
+        Book book = getBookById(id);
+        bookRepository.delete(book);
+        return true;
+    }
+}</code></pre>
+          <p>클래스에 <code>@Transactional(readOnly = true)</code>를 걸고, 쓰기 메서드에만 <code>@Transactional</code>을 별도로 붙이는 패턴이다. 읽기 전용 트랜잭션은 JPA의 더티 체킹을 건너뛰어 성능이 약간 좋아진다.</p>
+
+          <p><code>updateBook()</code>의 null 체크 패턴에 주목하자. UpdateBookInput의 필드가 전부 선택이므로, <mark>null이 아닌 필드만 업데이트</mark>한다. 클라이언트가 title만 보내면 title만 바뀌고 나머지는 그대로 유지된다.</p>
+
+          <p><code>AuthorService</code>도 같은 패턴으로 만든다.</p>
+
+<pre><code class="language-java">package com.codeit.graphql.service;
+
+import com.codeit.graphql.entity.Author;
+import com.codeit.graphql.input.CreateAuthorInput;
+import com.codeit.graphql.input.UpdateAuthorInput;
+import com.codeit.graphql.repository.AuthorRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+
+@Service
+@RequiredArgsConstructor
+@Slf4j
+@Transactional(readOnly = true)
+public class AuthorService {
+
+    private final AuthorRepository authorRepository;
+
+    public List&lt;Author&gt; getAllAuthors() {
+        return authorRepository.findAll();
+    }
+
+    public List&lt;Author&gt; getAllAuthorsWithBooks() {
+        return authorRepository.findAllWithBooks();
+    }
+
+    public Author getAuthorById(Long id) {
+        return authorRepository.findById(id)
+                .orElseThrow(() -&gt; new RuntimeException("작가를 찾을 수 없습니다: ID=" + id));
+    }
+
+    public List&lt;Author&gt; findAllById(List&lt;Long&gt; ids) {
+        return authorRepository.findAllById(ids);
+    }
+
+    @Transactional
+    public Author createAuthor(CreateAuthorInput input) {
+        authorRepository.findByEmail(input.getEmail())
+                .ifPresent(a -&gt; {
+                    throw new RuntimeException("이미 등록된 이메일: " + input.getEmail());
+                });
+
+        Author author = Author.builder()
+                .name(input.getName())
+                .email(input.getEmail())
+                .build();
+
+        Author savedAuthor = authorRepository.save(author);
+        log.info("작가 생성 완료: {}", savedAuthor.getName());
+        return savedAuthor;
+    }
+
+    @Transactional
+    public Author updateAuthor(Long id, UpdateAuthorInput input) {
+        Author author = getAuthorById(id);
+
+        if (input.getName() != null) author.setName(input.getName());
+        if (input.getEmail() != null) {
+            authorRepository.findByEmail(input.getEmail())
+                    .filter(a -&gt; !a.getId().equals(id))
+                    .ifPresent(a -&gt; {
+                        throw new RuntimeException("이미 등록된 이메일: " + input.getEmail());
+                    });
+            author.setEmail(input.getEmail());
+        }
+
+        return authorRepository.save(author);
+    }
+
+    @Transactional
+    public boolean deleteAuthor(Long id) {
+        Author author = getAuthorById(id);
+
+        if (!author.getBooks().isEmpty()) {
+            throw new RuntimeException("도서가 존재하는 작가는 삭제할 수 없습니다");
+        }
+
+        authorRepository.delete(author);
+        return true;
+    }
+}</code></pre>
+          <p><code>createAuthor()</code>에서 이메일 중복 검사를, <code>deleteAuthor()</code>에서 연관 도서 존재 여부를 검증한다. 비즈니스 규칙이 Service 안에 응집되어 있다.</p>
+
+          <h2>코드 뜯어보기</h2>
+
+          <h3>Book 엔티티 — FetchType.LAZY</h3>
+
+<pre><code class="language-java">@ManyToOne(fetch = FetchType.LAZY)
+@JoinColumn(name = "author_id", nullable = false)
+private Author author;</code></pre>
+          <p><code>FetchType.LAZY</code>는 Book을 조회할 때 Author를 <mark>즉시 로딩하지 않는다</mark>는 설정이다. <code>book.getAuthor()</code>를 호출하는 순간에 별도 쿼리가 실행된다. 이렇게 해야 Book만 필요한 상황에서 불필요한 Author 조회를 피할 수 있다.</p>
+
+          <p>하지만 Book 목록을 가져온 뒤 각 Book의 Author에 접근하면 N+1 문제가 발생한다. 이 문제는 <a href="spring-graphql-8-advanced.html">4편</a>에서 <code>@BatchMapping</code>으로 해결한다.</p>
+
+          <h3>Author 엔티티 — @Builder.Default</h3>
+
+<pre><code class="language-java">@Builder.Default
+private List&lt;Book&gt; books = new ArrayList&lt;&gt;();</code></pre>
+          <p>Lombok의 <code>@Builder</code>를 사용할 때 컬렉션 필드에 <code>@Builder.Default</code>를 붙이지 않으면, Builder로 객체를 만들 때 books가 null이 된다. <code>new ArrayList&lt;&gt;()</code>로 초기화한 값이 <mark>Builder에 의해 무시</mark>되기 때문이다. <code>@Builder.Default</code>를 붙여야 기본값이 유지된다.</p>
+
+          <h3>BookService — updateBook의 null 체크</h3>
+
+<pre><code class="language-java">if (input.getTitle() != null) book.setTitle(input.getTitle());
+if (input.getIsbn() != null) book.setIsbn(input.getIsbn());</code></pre>
+          <p>GraphQL의 Update Input은 선택 필드로 구성된다. 클라이언트가 보내지 않은 필드는 null로 들어온다. null인 필드는 건너뛰고, <mark>값이 있는 필드만 업데이트</mark>하는 것이 핵심이다.</p>
+
+          <h2>전체 구조 다이어그램</h2>
+
+          <p>지금까지 만든 코드의 계층 구조를 정리하면 이렇다.</p>
+
+<div class="mermaid">
+flowchart TD
+    subgraph Input ["Input 클래스"]
+        direction LR
+        CBI["CreateBookInput"]
+        UBI["UpdateBookInput"]
+        CAI["CreateAuthorInput"]
+        UAI["UpdateAuthorInput"]
+    end
+
+    subgraph Service ["Service 계층"]
+        direction LR
+        BS["BookService"]
+        AS["AuthorService"]
+    end
+
+    subgraph Repository ["Repository 계층"]
+        direction LR
+        BR["BookRepository"]
+        AR["AuthorRepository"]
+    end
+
+    subgraph Entity ["Entity"]
+        direction LR
+        B["Book"]
+        A["Author"]
+    end
+
+    Input -->|"파라미터로 전달"| Service
+    Service -->|"조회/저장"| Repository
+    Repository -->|"매핑"| Entity
+    B <-->|"@ManyToOne / @OneToMany"| A
+
+    style Input fill:#FFF3E0,stroke:#FF9800,stroke-width:2px
+    style Service fill:#E8F8E8,stroke:#4CAF50,stroke-width:2px
+    style Repository fill:#E8F4F8,stroke:#2196F3,stroke-width:2px
+    style Entity fill:#F3E5F5,stroke:#9C27B0,stroke-width:2px
+</div>
+          <p>Input → Service → Repository → Entity 순서로 데이터가 흐른다. 다음 편에서 이 위에 Resolver 계층을 얹으면 GraphQL API가 동작한다.</p>
+
+          <h2>이번 편 최종 전체 코드</h2>
+
+          <h4>Author.java</h4>
+
+<pre><code class="language-java">package com.codeit.graphql.entity;
+
+import jakarta.persistence.*;
+import lombok.*;
+
+import java.util.ArrayList;
+import java.util.List;
+
+@Entity
+@Table(name = "authors")
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+public class Author {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false)
+    private String name;
+
+    @Column(nullable = false, unique = true)
+    private String email;
+
+    @OneToMany(mappedBy = "author", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    private List&lt;Book&gt; books = new ArrayList&lt;&gt;();
+
+    public void addBook(Book book) {
+        books.add(book);
+        book.setAuthor(this);
+    }
+
+    public void removeBook(Book book) {
+        books.remove(book);
+        book.setAuthor(null);
+    }
+}</code></pre>
+          <h4>Book.java</h4>
+
+<pre><code class="language-java">package com.codeit.graphql.entity;
+
+import jakarta.persistence.*;
+import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
+
+import java.time.LocalDateTime;
+
+@Entity
+@Table(name = "books")
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+public class Book {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false)
+    private String title;
+
+    @Column(nullable = false, unique = true)
+    private String isbn;
+
+    @Column(nullable = false)
+    private Integer publishedYear;
+
+    @Column(nullable = false)
+    private Double price;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "author_id", nullable = false)
+    private Author author;
+
+    @CreationTimestamp
+    @Column(nullable = false, updatable = false)
+    private LocalDateTime createdAt;
+}</code></pre>
+          <h4>BookRepository.java</h4>
+
+<pre><code class="language-java">package com.codeit.graphql.repository;
+
+import com.codeit.graphql.entity.Book;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+
+import java.util.List;
+import java.util.Optional;
+
+public interface BookRepository extends JpaRepository&lt;Book, Long&gt; {
+    List&lt;Book&gt; findByTitleContainingIgnoreCase(String title);
+    List&lt;Book&gt; findByAuthorId(Long authorId);
+    Optional&lt;Book&gt; findByIsbn(String isbn);
+
+    @Query("SELECT b FROM Book b LEFT JOIN FETCH b.author")
+    List&lt;Book&gt; findAllWithAuthor();
+}</code></pre>
+          <h4>AuthorRepository.java</h4>
+
+<pre><code class="language-java">package com.codeit.graphql.repository;
+
+import com.codeit.graphql.entity.Author;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+
+import java.util.List;
+import java.util.Optional;
+
+public interface AuthorRepository extends JpaRepository&lt;Author, Long&gt; {
+    Optional&lt;Author&gt; findByEmail(String email);
+
+    @Query("SELECT a FROM Author a LEFT JOIN FETCH a.books")
+    List&lt;Author&gt; findAllWithBooks();
+}</code></pre>
+          <h4>Input 클래스 4개</h4>
+
+<pre><code class="language-java">// CreateBookInput.java
+@Getter @Setter @ToString
+public class CreateBookInput {
+    private String title;
+    private String isbn;
+    private Integer publishedYear;
+    private Double price;
+    private Long authorId;
+}
+
+// UpdateBookInput.java
+@Getter @Setter @ToString
+public class UpdateBookInput {
+    private String title;
+    private String isbn;
+    private Integer publishedYear;
+    private Double price;
+}
+
+// CreateAuthorInput.java
+@Getter @Setter @ToString
+public class CreateAuthorInput {
+    private String name;
+    private String email;
+}
+
+// UpdateAuthorInput.java
+@Getter @Setter @ToString
+public class UpdateAuthorInput {
+    private String name;
+    private String email;
+}</code></pre>
+          <h4>BookService.java / AuthorService.java</h4>
+
+          <p>위 단계 4의 전체 코드를 참조한다.</p>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">@Builder.Default 누락</div>
+            <p><code>@Builder</code>와 함께 컬렉션 필드를 초기화할 때 <code>@Builder.Default</code>를 빼먹으면, Builder로 생성한 객체의 컬렉션이 null이 된다. <code>NullPointerException</code>이 발생해도 원인을 찾기 어렵다.</p>
+            <p>[!DANGER] 양방향 관계에서 한쪽만 설정하는 것</p>
+            <p><code>author.getBooks().add(book)</code>만 하고 <code>book.setAuthor(author)</code>를 하지 않으면, DB에는 관계가 저장되지 않는다. JPA에서 <mark>관계의 주인(FK를 가진 쪽)</mark>의 값만 DB에 반영되기 때문이다. 편의 메서드(<code>addBook</code>)를 사용해서 양쪽을 동시에 맞추는 습관을 들여야 한다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Spring</span>
+          <span>#GraphQL</span>
+          <span>#JPA</span>
+          <span>#Entity</span>
+          <span>#Repository</span>
+          <span>#Service</span>
+          <span>#도메인모델</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="spring-graphql-5-setup.html">&larr; 이전 글</a>
+          <a href="spring-graphql-7-resolver.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

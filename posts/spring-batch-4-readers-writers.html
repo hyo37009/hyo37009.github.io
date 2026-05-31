@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Spring Batch] 4. 다양한 Reader와 Writer - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Spring Batch] 4. 다양한 Reader와 Writer</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Spring Batch (4/8)</div>
+            <p>이전 편: <a href="spring-batch-3-chunk.html">[Spring Batch] 3. Chunk 기반 처리</a></p>
+            <p>다음 편: <a href="spring-batch-5-flow.html">[Spring Batch] 5. 실행 제어와 흐름</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">Spring Batch 가이드 시리즈</div>
+            <p><strong>01 배치 기초</strong></p>
+            <p>- <a href="spring-batch-1-what-is-batch.html">배치 처리란 무엇인가</a></p>
+            <p>- <a href="spring-batch-2-job-step.html">Job과 Step 구조</a></p>
+            <p><strong>02 Chunk 처리</strong></p>
+            <p>- <a href="spring-batch-3-chunk.html">Chunk 기반 처리</a></p>
+            <p>- <mark>다양한 Reader와 Writer</mark> ← 현재 편</p>
+            <p><strong>03 실행 제어</strong></p>
+            <p>- <a href="spring-batch-5-flow.html">실행 제어와 흐름</a></p>
+            <p>- <a href="spring-batch-6-retry-skip.html">재시도와 건너뛰기</a></p>
+            <p><strong>04 운영과 면접</strong></p>
+            <p>- <a href="spring-batch-7-scheduling.html">스케줄링과 운영</a></p>
+            <p>- <a href="spring-batch-8-interview.html">면접 대비</a></p>
+          </div>
+
+          <p><a href="spring-batch-3-chunk.html">이전 편</a>에서 Reader → Processor → Writer의 흐름을 살펴봤다. Spring Batch는 DB, 파일, 메시지 큐 등 다양한 데이터 소스에 대한 Reader와 Writer 구현체를 기본 제공한다. 직접 구현할 필요 없이 빌더 패턴으로 간편하게 설정할 수 있다.</p>
+
+          <h2>Reader 구현체 한눈에 보기</h2>
+
+<div class="mermaid">
+mindmap
+  root((ItemReader))
+    DB 기반
+      JpaPagingItemReader
+      JdbcPagingItemReader
+      JpaCursorItemReader
+      JdbcCursorItemReader
+    파일 기반
+      FlatFileItemReader
+      JsonItemReader
+      StaxEventItemReader(XML)
+    메시지 기반
+      KafkaItemReader
+      AmqpItemReader
+</div>
+          <p>가장 자주 쓰는 것은 DB 기반 Reader다. 그중에서도 <mark>페이징 방식</mark>이 가장 일반적이다.</p>
+
+          <h2>JpaPagingItemReader</h2>
+
+          <p>JPA를 사용해서 <mark>페이지 단위로 데이터를 조회</mark>하는 Reader다. Spring Data JPA를 사용하는 프로젝트에서 가장 많이 쓴다.</p>
+
+<pre><code class="language-java">@Bean
+@StepScope
+public JpaPagingItemReader&lt;Order&gt; orderReader(
+        @Value("#{jobParameters['targetDate']}") String targetDate) {
+    return new JpaPagingItemReaderBuilder&lt;Order&gt;()
+            .name("orderReader")
+            .entityManagerFactory(entityManagerFactory)
+            .queryString("SELECT o FROM Order o WHERE o.orderDate = :date ORDER BY o.id")
+            .parameterValues(Map.of("date", targetDate))
+            .pageSize(1000)
+            .build();
+}</code></pre>
+          <p>내부적으로 <code>LIMIT</code>/<code>OFFSET</code> 기반의 페이징 쿼리를 실행한다. <code>pageSize(1000)</code>이면 <code>OFFSET 0 LIMIT 1000</code>, <code>OFFSET 1000 LIMIT 1000</code>, ... 순서로 조회한다.</p>
+
+          <p>각 페이지 조회 시 새로운 트랜잭션으로 EntityManager를 열고 닫는다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant Reader as JpaPagingItemReader
+    participant EM as EntityManager
+    participant DB as DB
+
+    loop 페이지 단위 반복
+        Reader->>EM: EntityManager 열기
+        EM->>DB: SELECT ... ORDER BY id LIMIT 1000 OFFSET N
+        DB-->>EM: 결과 반환
+        EM-->>Reader: List 반환
+        Reader->>EM: EntityManager 닫기
+        Note right of Reader: 영속성 컨텍스트 초기화<br/>메모리 누수 방지
+    end
+</div>
+          <div class="callout callout-warning">
+            <div class="callout-title">ORDER BY를 반드시 넣어라</div>
+            <p>페이징 쿼리에 <code>ORDER BY</code>가 없으면 DB가 매 페이지마다 다른 순서로 데이터를 반환할 수 있다. <mark>데이터 누락이나 중복 조회</mark>가 발생한다. <code>ORDER BY id</code> 같은 결정적 정렬을 반드시 추가하라.</p>
+          </div>
+
+          <h4>페이징 방식의 한계</h4>
+
+          <p>OFFSET 기반 페이징은 데이터가 많아질수록 느려진다. <code>OFFSET 900000</code>이면 DB가 90만 건을 스캔한 후 버려야 한다.</p>
+
+          <p>또 하나의 문제는 <mark>읽는 도중에 데이터가 변경되면</mark> 누락이나 중복이 발생할 수 있다는 점이다. 배치가 데이터를 수정하면서 읽는 경우, 수정된 데이터가 다음 페이지로 밀려나거나 사라질 수 있다.</p>
+
+          <h2>JdbcPagingItemReader</h2>
+
+          <p>JDBC를 직접 사용해서 페이징하는 Reader다. JPA의 오버헤드 없이 <mark>순수 SQL</mark>로 데이터를 조회한다.</p>
+
+<pre><code class="language-java">@Bean
+@StepScope
+public JdbcPagingItemReader&lt;Order&gt; jdbcOrderReader(
+        DataSource dataSource,
+        @Value("#{jobParameters['targetDate']}") String targetDate) {
+
+    Map&lt;String, Order&gt; sortKeys = new LinkedHashMap&lt;&gt;();
+    sortKeys.put("id", Order.ASCENDING);
+
+    return new JdbcPagingItemReaderBuilder&lt;Order&gt;()
+            .name("jdbcOrderReader")
+            .dataSource(dataSource)
+            .selectClause("SELECT id, user_id, amount, order_date")
+            .fromClause("FROM orders")
+            .whereClause("WHERE order_date = :targetDate")
+            .sortKeys(sortKeys)
+            .parameterValues(Map.of("targetDate", targetDate))
+            .pageSize(1000)
+            .rowMapper((rs, rowNum) -&gt; new Order(
+                    rs.getLong("id"),
+                    rs.getLong("user_id"),
+                    rs.getBigDecimal("amount"),
+                    rs.getString("order_date")
+            ))
+            .build();
+}</code></pre>
+          <p>JPA와 달리 select, from, where, sort를 분리해서 지정한다. Spring Batch가 내부적으로 이들을 조합해서 DB별 최적화된 페이징 쿼리를 생성한다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">JPA vs JDBC 선택 기준</div>
+            <p>- 프로젝트에서 JPA를 사용하고, 엔티티 매핑이 필요하다 → <strong>JpaPagingItemReader</strong></p>
+            <p>- 순수 성능이 중요하고, 복잡한 SQL이 필요하다 → <strong>JdbcPagingItemReader</strong></p>
+            <p>- 데이터 건수가 수백만 이상이다 → <strong>JdbcPagingItemReader</strong> (JPA의 영속성 컨텍스트 오버헤드를 피할 수 있다)</p>
+          </div>
+
+          <h2>Cursor 기반 Reader</h2>
+
+          <p>페이징과 달리 <mark>DB 커서를 열어두고 한 건씩 스트리밍</mark>하는 방식이다. OFFSET 기반 페이징의 성능 문제를 회피할 수 있다.</p>
+
+<pre><code class="language-java">@Bean
+@StepScope
+public JpaCursorItemReader&lt;Order&gt; cursorReader() {
+    return new JpaCursorItemReaderBuilder&lt;Order&gt;()
+            .name("cursorReader")
+            .entityManagerFactory(entityManagerFactory)
+            .queryString("SELECT o FROM Order o WHERE o.status = 'PENDING'")
+            .build();
+}</code></pre>
+
+<div class="mermaid">
+flowchart LR
+    subgraph Paging["페이징 방식"]
+        direction TB
+        P1["OFFSET 0 → 1,000건"] --> P2["OFFSET 1000 → 1,000건"]
+        P2 --> P3["OFFSET 2000 → 1,000건"]
+        P3 --> P4["... (매번 쿼리 실행)"]
+    end
+
+    Paging ~~~ Cursor
+
+    subgraph Cursor["커서 방식"]
+        direction TB
+        C1["커서 열기 (1회)"] --> C2["한 건씩 fetch"]
+        C2 --> C3["한 건씩 fetch"]
+        C3 --> C4["... (쿼리 1회)"]
+    end
+
+    style Paging fill:#FFF3E0,stroke:#FF9800
+    style Cursor fill:#E8F8E8,stroke:#4CAF50
+</div>
+          <h4>페이징 vs 커서 비교</h4>
+
+          <table>
+          <thead>
+          <tr><th>구분</th><th>페이징</th><th>커서</th></tr>
+          </thead>
+          <tbody>
+          <tr><td><strong>DB 쿼리 횟수</strong></td><td>페이지 수만큼 (N회)</td><td>1회</td></tr>
+          <tr><td><strong>OFFSET 성능</strong></td><td>뒤로 갈수록 느림</td><td>영향 없음</td></tr>
+          <tr><td><strong>DB 커넥션</strong></td><td>페이지마다 열고 닫음</td><td>전체 처리 동안 유지</td></tr>
+          <tr><td><strong>멀티스레드</strong></td><td>안전</td><td>불가 (커서 공유 불가)</td></tr>
+          <tr><td><strong>메모리</strong></td><td>페이지 크기만큼</td><td>fetch size만큼</td></tr>
+          </tbody>
+          </table>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">커서 방식의 주의점</div>
+            <p>커서는 <mark>처리가 끝날 때까지 DB 커넥션을 점유</mark>한다. 처리 시간이 길면 커넥션 풀이 고갈될 수 있다. 커넥션 풀 크기와 처리 시간을 고려해서 사용해야 한다.</p>
+          </div>
+
+          <h2>FlatFileItemReader</h2>
+
+          <p>CSV, TSV 같은 <mark>구분자 기반 텍스트 파일</mark>을 읽는 Reader다. 외부 시스템에서 파일로 데이터를 주고받는 경우에 사용한다.</p>
+
+<pre><code class="language-java">@Bean
+public FlatFileItemReader&lt;Order&gt; fileReader() {
+    return new FlatFileItemReaderBuilder&lt;Order&gt;()
+            .name("fileReader")
+            .resource(new ClassPathResource("orders.csv"))
+            .delimited()
+            .delimiter(",")
+            .names("id", "userId", "amount", "orderDate")
+            .targetType(Order.class)
+            .linesToSkip(1)  // 헤더 행 건너뛰기
+            .build();
+}</code></pre>
+          <p><code>linesToSkip(1)</code>으로 CSV 헤더를 건너뛰고, <code>names()</code>에 지정한 필드명으로 자동 매핑한다.</p>
+
+          <p>고정 너비 파일도 읽을 수 있다.</p>
+
+<pre><code class="language-java">.fixedLength()
+.columns(new Range(1, 10), new Range(11, 20), new Range(21, 30))
+.names("id", "name", "amount")</code></pre>
+          <h2>Writer 구현체</h2>
+
+          <h3>JdbcBatchItemWriter</h3>
+
+          <p><mark>JDBC Batch Insert</mark>로 대량 데이터를 효율적으로 저장하는 Writer다. JPA의 <code>saveAll()</code>보다 빠르다.</p>
+
+<pre><code class="language-java">@Bean
+public JdbcBatchItemWriter&lt;Settlement&gt; jdbcWriter(DataSource dataSource) {
+    return new JdbcBatchItemWriterBuilder&lt;Settlement&gt;()
+            .dataSource(dataSource)
+            .sql("INSERT INTO settlement (seller_id, amount, target_date) " +
+                 "VALUES (:sellerId, :amount, :targetDate)")
+            .beanMapped()
+            .build();
+}</code></pre>
+          <p><code>beanMapped()</code>는 Settlement 객체의 필드명과 SQL의 <code>:파라미터명</code>을 자동으로 매핑한다.</p>
+
+          <p>JDBC Batch는 여러 INSERT를 하나의 네트워크 요청으로 묶어서 보낸다. 1,000건을 저장할 때 네트워크 왕복이 1,000번이 아니라 <mark>1번</mark>이다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant W as JdbcBatchItemWriter
+    participant DB as DB
+
+    rect rgb(255, 230, 230)
+        Note over W,DB: 건 by 건 (비효율)
+        W->>DB: INSERT #1
+        W->>DB: INSERT #2
+        W->>DB: INSERT #3
+        Note right of DB: ... (1,000번 왕복)
+    end
+
+    rect rgb(232, 248, 232)
+        Note over W,DB: Batch Insert (효율)
+        W->>DB: INSERT #1~#1000 (한 번에)
+        Note right of DB: 1번 왕복
+    end
+</div>
+          <h3>JpaItemWriter</h3>
+
+          <p>JPA의 <code>persist()</code> 또는 <code>merge()</code>로 저장하는 Writer다.</p>
+
+<pre><code class="language-java">@Bean
+public JpaItemWriter&lt;Settlement&gt; jpaWriter() {
+    JpaItemWriter&lt;Settlement&gt; writer = new JpaItemWriter&lt;&gt;();
+    writer.setEntityManagerFactory(entityManagerFactory);
+    return writer;
+}</code></pre>
+          <p>JPA를 사용하므로 영속성 컨텍스트의 이점(변경 감지, 관계 매핑 등)을 활용할 수 있다. 하지만 대량 INSERT 성능은 JDBC Batch보다 떨어진다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">성능이 중요하면 JdbcBatchItemWriter</div>
+            <p>JPA는 영속성 컨텍스트 관리, 변경 감지 등의 오버헤드가 있다. 단순 INSERT가 주 목적이라면 <mark>JdbcBatchItemWriter가 2~5배 빠르다</mark>. 관계 매핑이나 엔티티 라이프사이클이 필요한 경우에만 JpaItemWriter를 사용하라.</p>
+          </div>
+
+          <h3>FlatFileItemWriter</h3>
+
+          <p>결과를 <mark>파일로 출력</mark>하는 Writer다. 배치 처리 결과를 CSV로 내보내거나, 외부 시스템에 전달할 파일을 생성할 때 사용한다.</p>
+
+<pre><code class="language-java">@Bean
+public FlatFileItemWriter&lt;Settlement&gt; fileWriter() {
+    return new FlatFileItemWriterBuilder&lt;Settlement&gt;()
+            .name("fileWriter")
+            .resource(new FileSystemResource("output/settlement.csv"))
+            .delimited()
+            .delimiter(",")
+            .names("sellerId", "amount", "targetDate")
+            .headerCallback(writer -&gt; writer.write("seller_id,amount,target_date"))
+            .build();
+}</code></pre>
+          <h2>커스텀 Reader/Writer</h2>
+
+          <p>기본 제공 구현체로 커버되지 않는 경우, 직접 구현할 수 있다.</p>
+
+          <h4>커스텀 Reader</h4>
+
+<pre><code class="language-java">public class ApiItemReader implements ItemReader&lt;ExternalData&gt; {
+
+    private final ExternalApiClient apiClient;
+    private Iterator&lt;ExternalData&gt; iterator;
+
+    @Override
+    public ExternalData read() {
+        if (iterator == null) {
+            List&lt;ExternalData&gt; data = apiClient.fetchAll();
+            iterator = data.iterator();
+        }
+        return iterator.hasNext() ? iterator.next() : null;
+    }
+}</code></pre>
+          <p>외부 API에서 데이터를 가져오는 커스텀 Reader다. <code>null</code>을 반환하면 읽기가 종료된다.</p>
+
+          <h4>CompositeItemWriter</h4>
+
+          <p>여러 Writer를 순서대로 실행하고 싶을 때 사용한다.</p>
+
+<pre><code class="language-java">@Bean
+public CompositeItemWriter&lt;Settlement&gt; compositeWriter() {
+    return new CompositeItemWriterBuilder&lt;Settlement&gt;()
+            .delegates(List.of(
+                    jdbcWriter(),
+                    fileWriter()
+            ))
+            .build();
+}</code></pre>
+          <p>DB에 저장하면서 동시에 파일로도 출력하는 패턴이다.</p>
+
+<div class="mermaid">
+flowchart LR
+    P["Processor"] --> CW["CompositeItemWriter"]
+    CW --> W1["JdbcBatchItemWriter<br/>DB 저장"]
+    CW --> W2["FlatFileItemWriter<br/>파일 출력"]
+
+    style CW fill:#E8F4F8,stroke:#2196F3
+    style W1 fill:#E8F8E8,stroke:#4CAF50
+    style W2 fill:#E8F8E8,stroke:#4CAF50
+</div>
+          <h2>Reader/Writer 선택 가이드</h2>
+
+<div class="mermaid">
+flowchart TD
+    A{"데이터 소스?"} -->|DB| B{"ORM 필요?"}
+    A -->|파일| C["FlatFileItemReader"]
+    A -->|외부 API| D["커스텀 Reader"]
+
+    B -->|JPA| E{"데이터 규모?"}
+    B -->|순수 SQL| F["JdbcPagingItemReader"]
+
+    E -->|수만 건| G["JpaPagingItemReader"]
+    E -->|수백만 건| H["JdbcPagingItemReader<br/>(성능 우선)"]
+
+    I{"저장 대상?"} -->|DB (성능)| J["JdbcBatchItemWriter"]
+    I -->|DB (JPA)| K["JpaItemWriter"]
+    I -->|파일| L["FlatFileItemWriter"]
+    I -->|복합| M["CompositeItemWriter"]
+</div>
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">JpaPagingItemReader에서 ORDER BY를 빼먹기</div>
+            <p>페이징 쿼리에 정렬이 없으면 <mark>DB가 매 페이지 쿼리마다 다른 순서로 반환</mark>할 수 있다. 이미 처리한 데이터가 다시 나타나거나, 아예 누락되는 문제가 발생한다. JPQL에 반드시 <code>ORDER BY</code>를 명시하라.</p>
+            <p>[!DANGER] Reader에서 읽는 동안 같은 테이블을 수정하기</p>
+            <p>Reader가 orders 테이블을 읽으면서 Writer가 같은 orders 테이블의 status를 변경하면, <mark>OFFSET 기반 페이징에서 데이터가 밀려나</mark> 누락이 발생한다. 읽기 테이블과 쓰기 테이블을 분리하거나, 커서 기반 Reader를 사용하라.</p>
+            <p>[!DANGER] Reader 이름을 지정하지 않기</p>
+            <p><code>name()</code>을 빼먹으면 <mark>재시작 시 어디까지 읽었는지 추적이 불가능</mark>하다. Spring Batch는 Reader 이름과 현재 위치를 ExecutionContext에 저장해서 재시작을 지원한다. 반드시 고유한 이름을 지정하라.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#SpringBatch</span>
+          <span>#ItemReader</span>
+          <span>#ItemWriter</span>
+          <span>#JpaPaging</span>
+          <span>#JdbcBatch</span>
+          <span>#FlatFile</span>
+          <span>#커서</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="spring-batch-3-chunk.html">&larr; 이전 글</a>
+          <a href="spring-batch-5-flow.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

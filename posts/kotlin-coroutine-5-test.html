@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Kotlin] 5. 코루틴 테스트 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Kotlin] 5. 코루틴 테스트</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Kotlin 코루틴 (5/5)</div>
+            <p>이전 편: <a href="kotlin-coroutine-4-flow.html">[Kotlin] 4. Flow</a></p>
+            <p>이 문서가 시리즈의 마지막 편입니다.</p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">Kotlin 코루틴 시리즈 (5/5)</div>
+            <p>이전 편: <a href="kotlin-coroutine-4-flow.html">4 Flow</a></p>
+          </div>
+
+          <p>코루틴 코드를 테스트하려면 특별한 도구가 필요하다. <code>delay(1000)</code>이 포함된 함수를 테스트할 때 실제로 1초를 기다릴 수는 없다. 비동기 코드인데 테스트는 결정적(deterministic)이어야 한다. 시간을 제어하고, Dispatcher를 교체하고, Flow의 방출을 검증할 수 있어야 한다.</p>
+
+          <p><code>kotlinx-coroutines-test</code> 라이브러리가 이 문제를 해결한다. 이 문서에서는 코루틴 테스트의 핵심 도구와 패턴을 다룬다.</p>
+
+          <h2>runTest — 코루틴 테스트의 시작점</h2>
+
+          <p>일반 테스트 함수는 <code>suspend</code> 함수를 호출할 수 없다. <code>runBlocking</code>을 쓸 수도 있지만, <code>delay</code>를 실제로 기다리는 문제가 있다. <code>runTest</code>는 이 두 문제를 모두 해결한다.</p>
+
+<pre><code class="language-kotlin">@Test
+fun `사용자를 가져온다`() = runTest {
+    val repository = FakeUserRepository()
+    val user = repository.findById(1L)  // suspend 함수 호출 가능
+
+    assertEquals("홍길동", user.name)
+}</code></pre>
+          <p><code>runTest</code>가 하는 일은 크게 두 가지다.</p>
+
+          <ol>
+            <li><strong>코루틴 스코프를 제공</strong>한다 — 블록 안에서 <code>suspend</code> 함수를 호출하고, <code>launch</code>나 <code>async</code>를 쓸 수 있다.</li>
+            <li><strong>가상 시간을 사용</strong>한다 — <code>delay(10_000)</code>이 있어도 실제로 10초를 기다리지 않는다. 시간을 건너뛴다.</li>
+          </ol>
+
+<pre><code class="language-kotlin">@Test
+fun `delay가 있어도 즉시 완료된다`() = runTest {
+    delay(10_000)  // 실제로 10초를 기다리지 않음
+    // 테스트는 거의 즉시 완료
+}</code></pre>
+          <p>비유하자면 <code>runTest</code>는 <strong>빨리 감기 리모컨</strong>이 있는 녹화 재생기다. <code>delay</code>가 나오면 시간을 빨리 감기해서 다음 코드로 넘어간다.</p>
+
+          <hr>
+
+          <h2>TestDispatcher — 시간 제어</h2>
+
+          <p><code>runTest</code>가 시간을 건너뛸 수 있는 이유는 내부적으로 <code>TestDispatcher</code>를 사용하기 때문이다. TestDispatcher에는 두 종류가 있다.</p>
+
+          <h3>StandardTestDispatcher — 명시적 실행</h3>
+
+<pre><code class="language-kotlin">@Test
+fun `StandardTestDispatcher 동작`() = runTest {
+    var result = ""
+
+    launch {
+        result += "A"
+        delay(100)
+        result += "B"
+    }
+
+    // 아직 launch의 코루틴이 실행되지 않았다
+    assertEquals("", result)
+
+    advanceUntilIdle()  // 모든 코루틴이 완료될 때까지 진행
+
+    assertEquals("AB", result)
+}</code></pre>
+          <ul>
+            <li><code>StandardTestDispatcher</code>는 코루틴을 <strong>즉시 실행하지 않는다.</strong></li>
+            <li><code>advanceUntilIdle()</code>, <code>advanceTimeBy()</code> 등을 호출해야 코루틴이 진행된다.</li>
+            <li><code>runTest</code>의 기본 Dispatcher다.</li>
+          </ul>
+
+          <p>시간을 세밀하게 제어해야 할 때 적합하다. "100ms 후에 상태가 어떤지", "500ms 후에 타임아웃이 발생하는지" 같은 시나리오를 테스트할 수 있다.</p>
+
+          <hr>
+
+          <h3>UnconfinedTestDispatcher — 즉시 실행</h3>
+
+<pre><code class="language-kotlin">@Test
+fun `UnconfinedTestDispatcher 동작`() = runTest(UnconfinedTestDispatcher()) {
+    var result = ""
+
+    launch {
+        result += "A"
+        delay(100)
+        result += "B"
+    }
+
+    // launch의 코루틴이 첫 중단점까지 즉시 실행됨
+    assertEquals("A", result)
+
+    advanceUntilIdle()
+
+    assertEquals("AB", result)
+}</code></pre>
+          <ul>
+            <li><code>UnconfinedTestDispatcher</code>는 코루틴을 <strong>첫 중단점까지 즉시 실행</strong>한다.</li>
+            <li><code>launch</code> 직후에 첫 <code>delay</code> 전까지의 코드가 이미 실행되어 있다.</li>
+            <li>단순한 테스트에서 <code>advanceUntilIdle()</code>을 매번 호출하는 번거로움을 줄여준다.</li>
+          </ul>
+
+          <p>어떤 것을 쓸지는 테스트의 목적에 따라 결정한다.</p>
+
+          <ul>
+            <li><strong>시간 기반 로직을 검증</strong> — <code>StandardTestDispatcher</code> (기본값)</li>
+            <li><strong>단순히 코루틴 결과를 검증</strong> — <code>UnconfinedTestDispatcher</code></li>
+          </ul>
+
+          <hr>
+
+          <h2>시간 제어 함수</h2>
+
+          <p><code>runTest</code> 블록 안에서 사용할 수 있는 시간 제어 함수들이 있다.</p>
+
+<pre><code class="language-kotlin">@Test
+fun `시간 제어 예시`() = runTest {
+    var state = "초기"
+
+    launch {
+        delay(1000)
+        state = "1초 후"
+        delay(2000)
+        state = "3초 후"
+    }
+
+    // 시간을 500ms 진행
+    advanceTimeBy(500)
+    assertEquals("초기", state)
+
+    // 시간을 500ms 더 진행 (총 1000ms)
+    advanceTimeBy(500)
+    runCurrent()  // 현재 시점에 예약된 코루틴 실행
+    assertEquals("1초 후", state)
+
+    // 모든 코루틴이 완료될 때까지 진행
+    advanceUntilIdle()
+    assertEquals("3초 후", state)
+}</code></pre>
+          <ul>
+            <li><code>advanceTimeBy(millis)</code> — 가상 시간을 지정한 만큼 앞으로 진행한다.</li>
+            <li><code>runCurrent()</code> — 현재 시점에 실행 대기 중인 코루틴을 실행한다.</li>
+            <li><code>advanceUntilIdle()</code> — 더 이상 실행할 코루틴이 없을 때까지 시간을 진행한다.</li>
+            <li><code>currentTime</code> — 현재 가상 시간을 밀리초로 반환한다.</li>
+          </ul>
+
+<pre><code class="language-kotlin">@Test
+fun `currentTime으로 경과 시간 확인`() = runTest {
+    delay(1000)
+    assertEquals(1000, currentTime)
+
+    delay(2000)
+    assertEquals(3000, currentTime)
+}</code></pre>
+          <p>실제 벽시계 시간은 거의 0ms이지만, 가상 시간은 정확하게 3000ms가 경과한 것으로 기록된다.</p>
+
+          <hr>
+
+          <h2>Dispatcher 교체</h2>
+
+          <p>실무 코드에서는 <code>Dispatchers.IO</code>나 <code>Dispatchers.Default</code>를 직접 사용한다. 하지만 테스트에서는 이런 실제 Dispatcher 대신 <code>TestDispatcher</code>를 써야 시간 제어가 가능하다.</p>
+
+          <h4>생성자 주입 패턴</h4>
+
+          <p>가장 권장되는 방법은 Dispatcher를 생성자로 주입하는 것이다.</p>
+
+<pre><code class="language-kotlin">class UserRepository(
+    private val dispatcher: CoroutineDispatcher = Dispatchers.IO
+) {
+    suspend fun fetchUser(): User = withContext(dispatcher) {
+        // 네트워크 요청
+        api.getUser()
+    }
+}</code></pre>
+          <p>테스트에서는 TestDispatcher를 주입한다.</p>
+
+<pre><code class="language-kotlin">@Test
+fun `사용자 조회 테스트`() = runTest {
+    val repository = UserRepository(dispatcher = StandardTestDispatcher(testScheduler))
+    val user = repository.fetchUser()
+    assertEquals("홍길동", user.name)
+}</code></pre>
+          <ul>
+            <li><code>StandardTestDispatcher(testScheduler)</code> — <code>runTest</code>의 시간 스케줄러를 공유하는 TestDispatcher를 만든다.</li>
+            <li>이렇게 하면 <code>withContext(dispatcher)</code> 안의 <code>delay</code>도 가상 시간으로 처리된다.</li>
+          </ul>
+
+          <p>이 패턴의 핵심은 <mark>프로덕션 코드에서 Dispatcher를 하드코딩하지 않는 것</mark>이다. 주입 가능하게 만들면 테스트가 쉬워진다.</p>
+
+          <hr>
+
+          <h4>Dispatchers.setMain</h4>
+
+          <p>Android 개발에서는 <code>Dispatchers.Main</code>이 자주 쓰이는데, 테스트 환경에는 Main Dispatcher가 없다. <code>Dispatchers.setMain()</code>으로 테스트용 Dispatcher를 설정할 수 있다.</p>
+
+<pre><code class="language-kotlin">class MyViewModelTest {
+    @Before
+    fun setup() {
+        Dispatchers.setMain(UnconfinedTestDispatcher())
+    }
+
+    @After
+    fun tearDown() {
+        Dispatchers.resetMain()
+    }
+
+    @Test
+    fun `ViewModel 테스트`() = runTest {
+        val viewModel = MyViewModel()
+        viewModel.loadData()
+        // ...
+    }
+}</code></pre>
+          <p>서버 개발에서는 <code>Dispatchers.Main</code>을 거의 쓰지 않으므로 이 패턴이 필요한 경우는 드물다. 하지만 알아두면 좋다.</p>
+
+          <hr>
+
+          <h2>Flow 테스트</h2>
+
+          <p>Flow는 시간에 걸쳐 여러 값을 방출하기 때문에, 단일 값을 반환하는 함수보다 테스트가 복잡하다.</p>
+
+          <h4>기본 방법 — toList()</h4>
+
+          <p>가장 간단한 방법은 Flow를 리스트로 변환하는 것이다.</p>
+
+<pre><code class="language-kotlin">@Test
+fun `숫자 Flow 테스트`() = runTest {
+    val result = flowOf(1, 2, 3)
+        .map { it * 2 }
+        .toList()
+
+    assertEquals(listOf(2, 4, 6), result)
+}</code></pre>
+          <p>유한한 Flow라면 이 방법으로 충분하다. 하지만 <code>StateFlow</code>나 무한 Flow는 <code>toList()</code>가 영원히 끝나지 않는다.</p>
+
+          <hr>
+
+          <h4>StateFlow 테스트</h4>
+
+          <p>StateFlow는 완료되지 않는 Flow이므로, 특정 시점의 값을 확인하는 방식으로 테스트한다.</p>
+
+<pre><code class="language-kotlin">@Test
+fun `StateFlow 상태 변경 테스트`() = runTest {
+    val viewModel = MyViewModel()
+
+    assertEquals(UiState.Loading, viewModel.uiState.value)  // 초기 상태
+
+    viewModel.loadData()
+    advanceUntilIdle()
+
+    assertEquals(UiState.Success(data), viewModel.uiState.value)  // 변경된 상태
+}</code></pre>
+          <p><code>.value</code>로 현재 값을 직접 확인할 수 있다는 점이 StateFlow 테스트의 장점이다.</p>
+
+          <hr>
+
+          <h4>Turbine — Flow 테스트 전용 라이브러리</h4>
+
+          <p>Flow의 방출 순서, 타이밍, 완료/에러를 정밀하게 테스트하려면 <strong>Turbine</strong> 라이브러리가 편하다.</p>
+
+<pre><code class="language-kotlin">// build.gradle.kts
+testImplementation("app.cash.turbine:turbine:1.0.0")</code></pre>
+          <p>Turbine의 핵심은 <code>test { }</code> 확장 함수다. Flow에 <code>.test { }</code>를 호출하면, 방출되는 값을 순서대로 하나씩 꺼내서 검증할 수 있는 블록이 열린다.</p>
+
+<pre><code class="language-kotlin">@Test
+fun `Flow 방출 순서 테스트`() = runTest {
+    flowOf(1, 2, 3).test {
+        assertEquals(1, awaitItem())
+        assertEquals(2, awaitItem())
+        assertEquals(3, awaitItem())
+        awaitComplete()  // Flow가 정상 완료됐는지 확인
+    }
+}</code></pre>
+          <ul>
+            <li><code>awaitItem()</code> — 다음 값이 방출될 때까지 기다리고 반환한다.</li>
+            <li><code>awaitComplete()</code> — Flow가 정상 완료됐는지 확인한다.</li>
+            <li><code>awaitError()</code> — Flow가 에러로 종료됐는지 확인한다.</li>
+          </ul>
+
+          <p><code>toList()</code>와의 차이는 <strong>방출 순서와 중간 상태를 검증할 수 있다</strong>는 점이다. <code>toList()</code>는 Flow가 끝난 뒤 최종 결과만 볼 수 있지만, Turbine은 각 방출 시점마다 검증을 끼워넣을 수 있다. 에러 케이스도 깔끔하게 테스트할 수 있다.</p>
+
+<pre><code class="language-kotlin">@Test
+fun `에러 발생 테스트`() = runTest {
+    flow {
+        emit(1)
+        throw RuntimeException("실패!")
+    }.test {
+        assertEquals(1, awaitItem())
+        val error = awaitError()
+        assertEquals("실패!", error.message)
+    }
+}</code></pre>
+          <p>Turbine 없이도 테스트는 가능하지만, Flow의 방출 순서와 완료/에러 상태를 검증하는 코드가 훨씬 간결해진다.</p>
+
+          <hr>
+
+          <h2>심화 분석</h2>
+
+          <h4>runTest의 내부 동작</h4>
+
+          <p><code>runTest</code>는 내부적으로 <code>TestCoroutineScheduler</code>를 사용한다. 이 스케줄러는 실제 시간 대신 <strong>가상 시간 큐</strong>를 관리한다.</p>
+
+          <p><code>delay(1000)</code>이 호출되면, 실제로 1초를 기다리는 대신 "1000ms 후에 이 코루틴을 재개해라"는 항목을 큐에 추가한다. <code>advanceTimeBy(1000)</code>이 호출되면 가상 시간을 1000ms로 설정하고, 해당 시점에 예약된 코루틴들을 실행한다.</p>
+
+          <p>이 방식 덕분에 <code>delay(86_400_000)</code>(24시간)이 있는 코드도 밀리초 만에 테스트할 수 있다.</p>
+
+          <h4>backgroundScope</h4>
+
+          <p><code>runTest</code> 안에서 시작한 코루틴은 테스트가 끝나기 전에 완료되어야 한다. 완료되지 않으면 테스트가 실패한다. 하지만 의도적으로 백그라운드에서 계속 실행되어야 하는 코루틴이 있을 수 있다.</p>
+
+<pre><code class="language-kotlin">@Test
+fun `백그라운드 코루틴`() = runTest {
+    // 이 코루틴은 테스트가 끝나면 자동으로 취소됨
+    backgroundScope.launch {
+        while (true) {
+            delay(1000)
+            // 주기적 작업
+        }
+    }
+
+    // 테스트 로직
+    advanceTimeBy(5000)
+    // backgroundScope의 코루틴이 완료되지 않아도 테스트는 통과
+}</code></pre>
+          <p><code>backgroundScope</code>에서 시작한 코루틴은 테스트 종료 시 자동으로 취소된다. 완료를 요구하지 않는다.</p>
+
+          <h4>테스트 구조화 팁</h4>
+
+          <p>코루틴 테스트를 깔끔하게 유지하는 몇 가지 패턴이 있다.</p>
+
+          <p>첫째, <strong>Fake 구현체를 사용</strong>한다. Mock보다 Fake가 코루틴 테스트에 적합하다. Fake 안에서 <code>delay</code>를 쓰면 실제 네트워크 지연을 시뮬레이션할 수 있다.</p>
+
+<pre><code class="language-kotlin">class FakeUserRepository : UserRepository {
+    override suspend fun findById(id: Long): User {
+        delay(100)  // 네트워크 지연 시뮬레이션 — 테스트에서는 즉시 처리
+        return User(id, "테스트 사용자")
+    }
+}</code></pre>
+          <p>둘째, <strong>Dispatcher를 항상 주입 가능하게</strong> 만든다. 테스트에서 <code>TestDispatcher</code>를 넣을 수 있어야 시간 제어가 된다.</p>
+
+          <p>셋째, <strong>하나의 테스트에서 하나만 검증</strong>한다. 코루틴의 시간 제어, Flow 방출, 예외 처리를 한 테스트에 몰아넣으면 디버깅이 어려워진다.</p>
+
+          <hr>
+
+          <h2>자주 하는 실수</h2>
+
+          <h4>runBlocking으로 코루틴 테스트</h4>
+
+<pre><code class="language-kotlin">// 나쁜 예 — delay가 실제로 1초 기다림
+@Test
+fun `느린 테스트`() = runBlocking {
+    delay(1000)  // 실제로 1초 대기
+    // ...
+}
+
+// 좋은 예 — delay가 가상 시간으로 처리
+@Test
+fun `빠른 테스트`() = runTest {
+    delay(1000)  // 즉시 처리
+    // ...
+}</code></pre>
+          <p><code>runBlocking</code>은 실제 시간이 흐른다. 테스트가 느려지고, 시간 기반 로직을 제어할 수 없다. 코루틴 테스트는 항상 <code>runTest</code>를 사용해야 한다.</p>
+
+          <h4>advanceUntilIdle 빠뜨리기</h4>
+
+<pre><code class="language-kotlin">@Test
+fun `실패하는 테스트`() = runTest {
+    var result = ""
+    launch { result = "완료" }
+    assertEquals("완료", result)  // 실패! launch가 아직 실행 안 됨
+}
+
+@Test
+fun `성공하는 테스트`() = runTest {
+    var result = ""
+    launch { result = "완료" }
+    advanceUntilIdle()  // launch의 코루틴 실행
+    assertEquals("완료", result)  // 성공
+}</code></pre>
+          <p><code>StandardTestDispatcher</code>(기본값)에서는 <code>launch</code>로 시작한 코루틴이 즉시 실행되지 않는다. <code>advanceUntilIdle()</code> 또는 <code>advanceTimeBy()</code>로 명시적으로 진행시켜야 한다.</p>
+
+          <h4>Dispatcher를 하드코딩</h4>
+
+<pre><code class="language-kotlin">// 나쁜 예 — 테스트에서 Dispatcher를 교체할 수 없음
+class UserService {
+    suspend fun fetchUser() = withContext(Dispatchers.IO) {
+        api.getUser()
+    }
+}
+
+// 좋은 예 — Dispatcher 주입
+class UserService(
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
+) {
+    suspend fun fetchUser() = withContext(ioDispatcher) {
+        api.getUser()
+    }
+}</code></pre>
+          <p>Dispatcher를 하드코딩하면 테스트에서 <code>TestDispatcher</code>로 교체할 수 없다. 생성자 주입이나 DI 프레임워크로 Dispatcher를 주입 가능하게 만드는 것이 좋다.</p>
+
+          <hr>
+
+          <div class="callout callout-question">
+            <div class="callout-title">면접 Q&A</div>
+            <p><strong>Q. 코루틴이란 무엇이고, 스레드와 어떻게 다른가?</strong></p>
+            <p>코루틴은 중단(suspend)과 재개(resume)가 가능한 경량 실행 단위다. 스레드는 OS 레벨 자원으로 하나의 작업이 스레드를 점유하지만, 코루틴은 중단 시 스레드를 반환하고 다른 코루틴이 사용할 수 있게 한다. 수만 개의 코루틴을 만들어도 메모리 부담이 적다.</p>
+            <p><strong>Q. suspend 함수는 내부적으로 어떻게 동작하는가?</strong></p>
+            <p>컴파일러가 CPS(Continuation Passing Style) 변환을 수행한다. suspend 함수는 <code>Continuation</code> 파라미터가 추가된 상태 머신으로 변환되고, 중단점마다 <code>label</code>로 분기해서 이어서 실행된다. 중단 시 <code>COROUTINE_SUSPENDED</code>를 반환하고 스레드를 놓아주며, 결과가 준비되면 <code>Continuation.resumeWith()</code>로 재개된다.</p>
+            <p><strong>Q. 구조화된 동시성이란?</strong></p>
+            <p>모든 코루틴이 스코프에 속하고, 부모가 자식의 생명주기를 관리하는 원칙이다. 부모는 모든 자식이 완료될 때까지 끝나지 않고, 부모가 취소되면 자식도 취소되고, 자식이 실패하면 부모도 실패한다. 이 원칙으로 코루틴 누수, 예외 유실, 추적 불가 문제를 방지한다.</p>
+            <p><strong>Q. coroutineScope과 supervisorScope의 차이는?</strong></p>
+            <p><code>coroutineScope</code>은 자식 하나가 실패하면 다른 자식도 모두 취소된다. "전부 성공하거나 전부 실패"하는 트랜잭션 동작이다. <code>supervisorScope</code>은 자식의 실패가 다른 자식에게 전파되지 않는다. 대시보드처럼 독립적인 데이터를 병렬로 불러올 때 적합하다.</p>
+            <p><strong>Q. Flow와 suspend 함수의 차이는?</strong></p>
+            <p>suspend 함수는 하나의 비동기 값을 반환하고, Flow는 시간에 걸쳐 여러 값을 비동기로 방출한다. Flow는 Cold Stream으로 collect할 때까지 실행되지 않으며, 중간 연산자(map, filter 등)로 선언적 데이터 파이프라인을 구성할 수 있다.</p>
+            <p><strong>Q. StateFlow와 SharedFlow의 차이는?</strong></p>
+            <p>StateFlow는 항상 현재 값을 가지고 있는 Hot Stream으로, 중복 값을 무시하며 UI 상태 관리에 적합하다. SharedFlow는 초기값이 없고 중복 값도 방출하며, 일회성 이벤트(토스트, 네비게이션) 처리에 적합하다.</p>
+            <p><strong>Q. CancellationException은 왜 특별한가?</strong></p>
+            <p>코루틴의 정상적인 취소를 나타내는 예외로, 부모에게 실패로 전파되지 않는다. 다른 예외와 달리 "이 코루틴은 의도적으로 취소됐다"는 신호이므로, catch할 때 반드시 다시 던져야 코루틴 취소 메커니즘이 제대로 동작한다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Kotlin</span>
+          <span>#코루틴</span>
+          <span>#테스트</span>
+          <span>#runTest</span>
+          <span>#Flow테스트</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="kotlin-coroutine-4-flow.html">&larr; 이전 글</a>
+          <a href="../pages/nbuntu.html">목록으로 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

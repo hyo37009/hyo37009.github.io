@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Instancio] 1. 테스트 객체, 직접 만들지 마라 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Instancio] 1. 테스트 객체, 직접 만들지 마라</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Instancio (1/5)</div>
+            <p>다음 편: <a href="instancio-2-selector.html">[Instancio] 2. 셀렉터와 커스터마이징</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">Instancio 시리즈</div>
+            <p>1. <strong>테스트 객체, 직접 만들지 마라</strong> <em>(현재 편)</em></p>
+            <p>2. <a href="instancio-2-selector.html">셀렉터와 커스터마이징</a></p>
+            <p>3. <a href="instancio-3-collection-model.html">컬렉션과 Model</a></p>
+            <p>4. <a href="instancio-4-advanced.html">고급 기능</a></p>
+            <p>5. <a href="instancio-5-practical.html">실전 활용과 면접 대비</a></p>
+          </div>
+
+          <p>테스트를 작성하다 보면 객체를 세팅하는 코드가 테스트 로직보다 길어지는 순간이 온다. <code>new Person()</code>에 setter를 열 줄 넘게 호출하고 있다면, 그건 테스트가 아니라 데이터 입력 작업이다. Instancio는 이 보일러플레이트를 한 줄로 줄여준다.</p>
+
+          <h2>Instancio가 해결하는 문제</h2>
+
+          <p>테스트 코드에서 흔히 볼 수 있는 패턴이다.</p>
+
+<pre><code class="language-java">@Test
+void shouldCalculateDiscount() {
+    Person person = new Person();
+    person.setName("홍길동");
+    person.setAge(30);
+    person.setEmail("hong@test.com");
+
+    Address address = new Address();
+    address.setCity("서울");
+    address.setStreet("강남대로");
+    address.setZipCode("06000");
+    person.setAddress(address);
+
+    Phone phone = new Phone();
+    phone.setCountryCode("+82");
+    phone.setNumber("010-1234-5678");
+    person.setPhones(List.of(phone));
+
+    // 실제 테스트 로직은 여기서부터
+    double discount = discountService.calculate(person);
+    assertThat(discount).isGreaterThan(0);
+}</code></pre>
+          <p>이 테스트에서 정말 중요한 값은 무엇인가? <code>discountService.calculate()</code>가 제대로 동작하는지 확인하는 것이지, 이름이 "홍길동"인지 "김철수"인지는 상관없다. <mark>대부분의 단위 테스트는 값 자체가 아니라 값의 존재만 필요로 한다.</mark></p>
+
+          <p>그런데 직접 세팅하면 세 가지 문제가 생긴다.</p>
+
+          <ul>
+            <li><strong>보일러플레이트 폭발</strong> : 필드가 추가될 때마다 모든 테스트의 세팅 코드를 수정해야 한다</li>
+            <li><strong>테스트 범위 축소</strong> : 항상 같은 고정값으로만 테스트하면, 특정 입력에서만 발생하는 버그를 놓친다</li>
+            <li><strong>의도 파악 어려움</strong> : 세팅 코드가 길어지면 "이 테스트가 뭘 검증하는 건지" 한눈에 안 보인다</li>
+          </ul>
+
+          <h2>Instancio란</h2>
+
+          <p>Instancio는 <mark>테스트용 객체를 자동으로 생성</mark>해주는 Java 라이브러리다. 한 줄이면 모든 필드가 랜덤 값으로 채워진 객체가 만들어진다.</p>
+
+<pre><code class="language-java">Person person = Instancio.create(Person.class);</code></pre>
+          <p>이게 전부다. <code>name</code>, <code>age</code>, <code>email</code>, 중첩된 <code>Address</code>, <code>Phone</code>까지 전부 랜덤 값으로 채워진 완전한 객체가 생성된다.</p>
+
+          <p>핵심 설계 철학은 다음과 같다.</p>
+
+          <ul>
+            <li><strong>Zero Configuration</strong> : 프로덕션 코드를 건드릴 필요 없다. 어노테이션도, 인터페이스 구현도 불필요하다</li>
+            <li><strong>랜덤 기반 테스트</strong> : 매번 다른 값으로 테스트하기 때문에, 고정값으로는 잡지 못하는 엣지 케이스를 발견할 수 있다</li>
+            <li><strong>Seed 재현성</strong> : 랜덤이지만 실패한 테스트를 정확히 재현할 수 있다. 이건 뒤에서 자세히 다룬다</li>
+          </ul>
+
+          <h2>의존성 설정</h2>
+
+          <h3>Gradle</h3>
+
+<pre><code class="language-groovy">testImplementation 'org.instancio:instancio-junit:5.5.1'</code></pre>
+          <h3>Maven</h3>
+
+<pre><code class="language-xml">&lt;dependency&gt;
+    &lt;groupId&gt;org.instancio&lt;/groupId&gt;
+    &lt;artifactId&gt;instancio-junit&lt;/artifactId&gt;
+    &lt;version&gt;5.5.1&lt;/version&gt;
+    &lt;scope&gt;test&lt;/scope&gt;
+&lt;/dependency&gt;</code></pre>
+          <p><code>instancio-junit</code> 모듈은 <code>instancio-core</code>를 포함하고 있어서, 별도로 core를 추가할 필요 없다. Java 17 이상이 필요하다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">모듈 선택 기준</div>
+            <p>- <strong>JUnit 5</strong> 사용 → <code>instancio-junit</code> (대부분 이걸 쓴다)</p>
+            <p>- <strong>JUnit 4 / TestNG / 프레임워크 없이</strong> 사용 → <code>instancio-core</code></p>
+          </div>
+
+          <h2>JUnit 5 통합</h2>
+
+          <p><code>InstancioExtension</code>을 등록하면 Instancio의 JUnit 5 기능을 활용할 수 있다.</p>
+
+<pre><code class="language-java">@ExtendWith(InstancioExtension.class)
+class PersonServiceTest {
+
+    @Test
+    void shouldCreatePerson() {
+        Person person = Instancio.create(Person.class);
+        assertThat(person.getName()).isNotNull();
+        assertThat(person.getAge()).isNotNull();
+    }
+}</code></pre>
+          <p>이 Extension이 해주는 일은 크게 두 가지다.</p>
+
+          <ul>
+            <li><strong>Seed 관리</strong> : 각 테스트마다 고유한 seed를 할당하고, 실패 시 seed를 로그에 출력한다</li>
+            <li><strong>어노테이션 처리</strong> : <code>@WithSettings</code>, <code>@Given</code>, <code>@InstancioSource</code> 같은 어노테이션을 인식한다</li>
+          </ul>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">Extension 없이도 동작은 한다</div>
+            <p><code>Instancio.create()</code>는 Extension 없이도 호출할 수 있다. 하지만 seed 기반 재현성, 어노테이션 지원 등 핵심 기능을 쓰려면 Extension 등록이 필수다.</p>
+          </div>
+
+          <h2>기본 객체 생성</h2>
+
+          <h3>create() — 기본값으로 바로 생성</h3>
+
+          <p>가장 단순한 형태다. 클래스를 넘기면 모든 필드가 랜덤으로 채워진 인스턴스를 돌려준다.</p>
+
+<pre><code class="language-java">Person person = Instancio.create(Person.class);</code></pre>
+          <p>String 필드에는 랜덤 문자열, int 필드에는 랜덤 정수, 중첩 객체도 재귀적으로 생성한다. <mark>null이 아닌 완전히 채워진 객체</mark>가 만들어진다는 점이 핵심이다.</p>
+
+          <h3>of() — 커스터마이징 적용</h3>
+
+          <p>특정 필드만 원하는 값으로 지정하고 싶다면 <code>of()</code>로 Builder API를 사용한다.</p>
+
+<pre><code class="language-java">Person person = Instancio.of(Person.class)
+    .set(field(Person::getName), "홍길동")
+    .create();</code></pre>
+          <p><code>of()</code>는 Builder를 반환하고, 마지막에 <code>create()</code>를 호출해야 실제 객체가 생성된다. <code>set()</code>, <code>generate()</code>, <code>ignore()</code> 같은 커스터마이징 메서드는 <a href="instancio-2-selector.html">다음 편</a>에서 자세히 다룬다.</p>
+
+          <h3>제네릭 타입 생성</h3>
+
+          <p>제네릭 타입은 <code>TypeToken</code>을 사용한다. Java의 타입 소거 때문에 <code>Pair&lt;String, Long&gt;.class</code> 같은 표현이 불가능하기 때문이다.</p>
+
+<pre><code class="language-java">Pair&lt;String, Long&gt; pair = Instancio.create(new TypeToken&lt;Pair&lt;String, Long&gt;&gt;() {});</code></pre>
+          <p><code>TypeToken</code>은 익명 클래스로 생성해야 한다. 뒤의 <code>{}</code>를 빠뜨리면 컴파일 에러가 난다.</p>
+
+          <h2>Seed와 재현성</h2>
+
+          <p>"랜덤이면 테스트가 매번 다른 결과를 내는 거 아닌가?" 당연한 의문이다. Instancio는 이걸 <mark>Seed 기반 재현성</mark>으로 해결한다.</p>
+
+          <p>모든 랜덤 값은 seed라는 숫자 하나로부터 파생된다. 같은 seed를 쓰면 항상 같은 객체가 만들어진다. 테스트가 실패하면 Instancio는 해당 seed를 로그에 출력한다.</p>
+
+<pre><code>Instancio test seed: 12345 (set 'instancio.seed' system property to reproduce)</code></pre>
+          <p>이 seed를 지정하면 실패 상황을 정확히 재현할 수 있다.</p>
+
+<pre><code class="language-java">@Test
+@Seed(12345)
+void reproducibleTest() {
+    Person person = Instancio.create(Person.class);
+    // seed 12345로 생성된 동일한 객체
+}</code></pre>
+          <p>API에서 직접 지정하는 방법도 있다.</p>
+
+<pre><code class="language-java">Person person = Instancio.of(Person.class)
+    .withSeed(12345)
+    .create();</code></pre>
+          <div class="callout callout-warning">
+            <div class="callout-title">Seed 고정은 디버깅용이다</div>
+            <p><code>@Seed</code>를 걸어두면 매번 같은 값으로 테스트하게 되어 랜덤 테스트의 장점이 사라진다. 실패를 재현하고 원인을 파악한 뒤에는 반드시 제거하자.</p>
+          </div>
+
+          <h2>verbose()로 디버깅하기</h2>
+
+          <p>생성된 객체가 예상과 다를 때, <code>verbose()</code>를 붙이면 Instancio가 내부에서 어떤 일을 했는지 상세하게 출력한다.</p>
+
+<pre><code class="language-java">Person person = Instancio.of(Person.class)
+    .set(field(Person::getName), "홍길동")
+    .verbose()
+    .create();</code></pre>
+          <p>출력에는 다음 정보가 포함된다.</p>
+
+          <ul>
+            <li>셀렉터가 어떤 노드에 매칭되었는지</li>
+            <li>각 필드에 어떤 값이 할당되었는지</li>
+            <li>사용된 seed 값</li>
+          </ul>
+
+          <p>"내가 지정한 셀렉터가 왜 안 먹히지?" 싶을 때 가장 먼저 시도할 방법이다.</p>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">Extension 없이 @Seed를 사용</div>
+            <p><code>@ExtendWith(InstancioExtension.class)</code> 없이 <code>@Seed</code> 어노테이션을 붙이면 아무 효과가 없다. 에러도 나지 않아서 "seed를 고정했는데 왜 값이 바뀌지?"라는 혼란에 빠지게 된다. Instancio 어노테이션을 사용하려면 반드시 Extension을 등록하자.</p>
+            <p>[!DANGER] TypeToken의 중괄호 누락</p>
+            <p><code>Instancio.create(new TypeToken&lt;List&lt;String&gt;&gt;())</code> — 이렇게 쓰면 컴파일 에러가 난다. <code>TypeToken</code>은 추상 클래스이기 때문에 반드시 <code>new TypeToken&lt;List&lt;String&gt;&gt;() {}</code>처럼 <mark>익명 클래스의 <code>{}</code></mark>를 붙여야 한다.</p>
+            <p>[!DANGER] Seed를 프로덕션 테스트에 고정해두기</p>
+            <p>디버깅이 끝나면 <code>@Seed</code>를 제거해야 한다. 고정된 seed는 "랜덤 값으로 다양한 케이스를 커버한다"는 Instancio의 핵심 가치를 무력화시킨다. CI에서 매번 같은 값으로만 돌아가는 테스트는 수동 세팅과 다를 바 없다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#Instancio</span>
+          <span>#테스트</span>
+          <span>#Java</span>
+          <span>#JUnit5</span>
+          <span>#테스트객체생성</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="../pages/nbuntu.html">&larr; 목록으로</a>
+          <a href="instancio-2-selector.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

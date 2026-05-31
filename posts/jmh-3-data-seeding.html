@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[성능 테스트] 3. 대량 데이터 시딩과 벤치마크 설계 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[성능 테스트] 3. 대량 데이터 시딩과 벤치마크 설계</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">JMH 벤치마크 (3/4)</div>
+            <p>이전 편: <a href="jmh-2-testcontainers.html">[성능 테스트] 2. TestContainers로 실제 인프라 테스트</a></p>
+            <p>다음 편: <a href="jmh-4-result-analysis.html">[성능 테스트] 4. 결과 분석과 병목 진단</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">시리즈</div>
+            <p>- <a href="jmh-1-microbenchmark.html">JMH 마이크로벤치마크</a></p>
+            <p>- <a href="jmh-2-testcontainers.html">TestContainers로 실제 인프라 테스트</a></p>
+            <p>- <strong>03 대량 데이터 시딩과 벤치마크 설계</strong></p>
+            <p>- <a href="jmh-4-result-analysis.html">결과 분석과 병목 진단</a></p>
+          </div>
+
+          <p>100만 건으로 벤치마크를 돌리겠다고 결정한 순간, 데이터를 어떻게 넣을지가 첫 번째 관문이 된다. JPA <code>saveAll()</code>로 100만 건을 넣으면 수십 분이 걸린다. 데이터의 분포가 현실과 동떨어지면 벤치마크 결과도 의미가 없다. 이 편에서는 <mark>빠르게, 현실적인 분포로</mark> 대량 데이터를 시딩하는 전략과, 벤치마크 시나리오를 설계하는 방법을 다룬다.</p>
+
+          <h2>JPA saveAll()이 느린 이유</h2>
+
+          <p>100만 건을 JPA로 넣으면 왜 느린지 구조를 보면 명확하다.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant App as Application
+    participant PC as 영속성 컨텍스트
+    participant DB as Database
+
+    loop 100만 번 반복
+        App->>PC: persist(entity)
+        Note right of PC: 1차 캐시에 저장<br/>더티 체킹 대상 등록
+    end
+
+    App->>PC: flush()
+
+    loop 100만 번 반복
+        PC->>DB: INSERT INTO ... VALUES (?)
+        DB-->>PC: OK
+    end
+
+    Note over PC,DB: 네트워크 왕복 100만 번
+</div>
+          <p>문제는 두 가지다.</p>
+
+          <ul>
+            <li>영속성 컨텍스트가 100만 개의 엔티티를 메모리에 들고 있다. 더티 체킹 비용이 엔티티 수에 비례해서 늘어난다.</li>
+            <li><code>flush()</code> 시점에 INSERT가 <mark>한 건씩</mark> 나간다. <code>hibernate.jdbc.batch_size</code>를 설정해도 Hibernate가 배치로 묶을 수 있는 조건(ID 생성 전략 등)이 맞아야 한다.</li>
+          </ul>
+
+          <p><code>@GeneratedValue(strategy = GenerationType.IDENTITY)</code>를 사용하면 Hibernate 배치 INSERT가 <mark>동작하지 않는다</mark>. IDENTITY 전략은 INSERT 후 DB가 생성한 ID를 바로 알아야 하므로, 각 INSERT를 개별 실행해야 하기 때문이다.</p>
+
+          <h2>JDBC 배치 INSERT</h2>
+
+          <p>JPA를 우회하고 JDBC로 직접 INSERT하면 이 제약에서 벗어난다.</p>
+
+          <h3>기본 구조</h3>
+
+<pre><code class="language-java">@Component
+@RequiredArgsConstructor
+public class DataSeeder {
+
+    private final JdbcTemplate jdbc;
+    private static final int BATCH_SIZE = 5_000;
+
+    public void seedFeeds(int totalCount, List&lt;UUID&gt; userIds) {
+        String sql = "INSERT INTO feeds (id, author_id, content, " +
+                     "weather_snapshot, created_at) " +
+                     "VALUES (?, ?, ?, ?::jsonb, ?)";
+
+        for (int offset = 0; offset &lt; totalCount; offset += BATCH_SIZE) {
+            int batchEnd = Math.min(offset + BATCH_SIZE, totalCount);
+            int batchStart = offset;
+
+            jdbc.batchUpdate(sql, new BatchPreparedStatementSetter() {
+                @Override
+                public void setValues(PreparedStatement ps, int i)
+                        throws SQLException {
+                    int index = batchStart + i;
+                    ps.setObject(1, UUID.randomUUID());
+                    ps.setObject(2, userIds.get(index % userIds.size()));
+                    ps.setString(3, "피드 내용 " + index);
+                    ps.setString(4, randomWeatherJson());
+                    ps.setTimestamp(5, Timestamp.from(
+                            Instant.now().minusSeconds(totalCount - index)));
+                }
+
+                @Override
+                public int getBatchSize() {
+                    return batchEnd - batchStart;
+                }
+            });
+        }
+    }
+}</code></pre>
+          <p><code>for</code> 루프로 5,000건씩 끊어서 <code>batchUpdate()</code>를 호출한다. 한 번의 <code>batchUpdate()</code> 호출에서 JDBC 드라이버가 5,000건의 INSERT를 <mark>하나의 네트워크 패킷</mark>으로 묶어 보낸다. 100만 건이면 200번의 왕복으로 끝난다.</p>
+
+          <h3>왜 한 번에 100만 건을 넣지 않는가</h3>
+
+          <p><code>getBatchSize()</code>가 100만을 반환하면 <code>setValues()</code>가 100만 번 호출되면서 PreparedStatement 파라미터가 모두 메모리에 쌓인다. 100만 × 5개 컬럼 × 평균 100바이트 = 약 500MB다. OOM이 발생하거나, GC 압박으로 시딩 자체가 극도로 느려진다.</p>
+
+          <p>5,000~10,000건 단위가 메모리와 네트워크 효율의 균형점이다.</p>
+
+          <h2>데이터 분포 설계</h2>
+
+          <h3>균등 분포 vs 편향 분포</h3>
+
+          <p>실제 서비스에서 좋아요 수는 균등하지 않다. 소수의 인기 피드가 좋아요 대부분을 차지하고, 대다수 피드는 좋아요가 거의 없다. 이런 편향이 쿼리 성능에 영향을 미친다.</p>
+
+<div class="mermaid">
+flowchart LR
+    subgraph Uniform ["균등 분포"]
+        direction TB
+        U1["피드 1: 좋아요 5개"]
+        U2["피드 2: 좋아요 5개"]
+        U3["피드 N: 좋아요 5개"]
+    end
+
+    Uniform ~~~ Skewed
+
+    subgraph Skewed ["편향 분포 (현실)"]
+        direction TB
+        S1["피드 1: 좋아요 500개"]
+        S2["피드 2: 좋아요 50개"]
+        S3["피드 N: 좋아요 0개"]
+    end
+
+    style U1 fill:#E3F2FD,stroke:#2196F3,stroke-width:2px
+    style U2 fill:#E3F2FD,stroke:#2196F3,stroke-width:2px
+    style U3 fill:#E3F2FD,stroke:#2196F3,stroke-width:2px
+    style S1 fill:#FFEBEE,stroke:#F44336,stroke-width:2px
+    style S2 fill:#FFF3E0,stroke:#FF9800,stroke-width:2px
+    style S3 fill:#E8F5E9,stroke:#4CAF50,stroke-width:2px
+    style Uniform fill:#f0f4ff,stroke:#2196F3
+    style Skewed fill:#fff8f0,stroke:#FF9800
+</div>
+          <p>벤치마크 목적에 따라 분포를 선택한다.</p>
+
+          <ul>
+            <li><strong>균등 분포</strong> — 쿼리 방식 간 순수한 구조적 차이를 비교할 때. 변수를 최소화한다.</li>
+            <li><strong>편향 분포</strong> — 실제 운영 환경과 비슷한 조건에서의 성능을 예측할 때. 인덱스 선택도, 캐시 효율 등이 영향을 받는다.</li>
+          </ul>
+
+          <p>처음에는 균등 분포로 시작해서 구조적 차이를 먼저 확인하고, 이후 편향 분포로 실제 환경에 가까운 테스트를 추가하는 것이 좋다.</p>
+
+          <h3>랜덤 데이터 생성</h3>
+
+          <p>테스트 데이터는 단순할수록 좋다. Faker나 Instancio 같은 라이브러리도 있지만, 벤치마크용 대량 시딩에서는 직접 만드는 편이 빠르고 제어가 쉽다.</p>
+
+<pre><code class="language-java">private static final String[] SKY_STATUSES =
+        {"CLEAR", "MOSTLY_CLOUDY", "CLOUDY", "OVERCAST"};
+
+private static final String[] PRECIP_TYPES =
+        {"NONE", "RAIN", "SNOW", "SLEET"};
+
+private String randomWeatherJson() {
+    ThreadLocalRandom r = ThreadLocalRandom.current();
+    return String.format("""
+        {"skyStatus":"%s","precipitationType":"%s",
+         "temperature":{"current":%d,"min":%d,"max":%d}}""",
+        SKY_STATUSES[r.nextInt(SKY_STATUSES.length)],
+        PRECIP_TYPES[r.nextInt(PRECIP_TYPES.length)],
+        r.nextInt(-10, 36),
+        r.nextInt(-15, 20),
+        r.nextInt(20, 40));
+}</code></pre>
+          <p>JSONB 컬럼에 들어갈 JSON 문자열을 직접 만든다. 실제 엔티티의 <code>WeatherSnapshot</code> 구조와 필드명을 맞추는 것이 중요하다. 필드명이 다르면 <code>jsonb_extract_path_text</code> 쿼리가 빈 결과를 반환해서 벤치마크가 의미 없어진다.</p>
+
+          <h2>시딩 순서와 의존 관계</h2>
+
+          <p>테이블 간 FK 관계 때문에 시딩 순서가 중요하다.</p>
+
+<div class="mermaid">
+flowchart TD
+    U["User 1,000건"] --> F["Feed 1,000,000건"]
+    F --> FC["FeedClothes 3,000,000건"]
+    F --> FL["FeedLike 5,000,000건"]
+    F --> C["Comment 2,000,000건"]
+
+    U --> FL
+    U --> C
+
+    style U fill:#E3F2FD,stroke:#2196F3,stroke-width:2px
+    style F fill:#E8F5E9,stroke:#4CAF50,stroke-width:2px
+    style FC fill:#FFF3E0,stroke:#FF9800,stroke-width:2px
+    style FL fill:#FFF3E0,stroke:#FF9800,stroke-width:2px
+    style C fill:#FFF3E0,stroke:#FF9800,stroke-width:2px
+</div>
+          <p>User → Feed → (FeedClothes, FeedLike, Comment) 순서로 시딩한다. FeedClothes, FeedLike, Comment는 서로 의존이 없으므로 병렬로 시딩할 수도 있다.</p>
+
+<pre><code class="language-java">public void seed(int feedCount) {
+    log.info("시딩 시작: feedCount={}", feedCount);
+    long start = System.nanoTime();
+
+    List&lt;UUID&gt; userIds = seedUsers(1_000);
+    List&lt;UUID&gt; feedIds = seedFeeds(feedCount, userIds);
+    seedFeedClothes(feedIds);
+    seedFeedLikes(feedIds, userIds);
+    seedComments(feedIds, userIds);
+
+    long elapsed = TimeUnit.NANOSECONDS.toSeconds(System.nanoTime() - start);
+    log.info("시딩 완료: {}초 소요", elapsed);
+}</code></pre>
+          <div class="callout callout-tip">
+            <div class="callout-title">시딩 시간 측정</div>
+            <p>시딩에 소요되는 시간을 로그로 남겨두면, 배치 사이즈 조정이나 인덱스 생성 시점 결정에 참고할 수 있다. 100만 건 기준 JDBC 배치 INSERT로 2~5분 정도가 일반적이다.</p>
+          </div>
+
+          <h2>인덱스 생성 시점</h2>
+
+          <p>대량 INSERT 전에 인덱스가 있으면 각 INSERT마다 인덱스를 갱신해야 해서 시딩이 느려진다. 프로덕션에서는 이미 인덱스가 있는 상태에서 데이터가 점진적으로 쌓이지만, 벤치마크 시딩은 한꺼번에 대량을 넣으므로 전략이 다르다.</p>
+
+          <h4>데이터 먼저, 인덱스 나중에</h4>
+
+<pre><code class="language-java">public void seed(int feedCount) {
+    // 1. 인덱스 드랍 (있으면)
+    jdbc.execute("DROP INDEX IF EXISTS idx_feeds_weather_gin");
+
+    // 2. 대량 데이터 INSERT
+    List&lt;UUID&gt; userIds = seedUsers(1_000);
+    List&lt;UUID&gt; feedIds = seedFeeds(feedCount, userIds);
+    // ...
+
+    // 3. 인덱스 생성
+    jdbc.execute("CREATE INDEX idx_feeds_weather_gin " +
+                 "ON feeds USING GIN (weather_snapshot)");
+
+    // 4. 통계 갱신
+    jdbc.execute("ANALYZE feeds");
+}</code></pre>
+          <p>인덱스 없이 데이터를 넣고, 마지막에 인덱스를 생성하면 <mark>30~50% 빠르다</mark>. PostgreSQL이 정렬된 데이터를 한 번에 인덱스 구조로 변환하기 때문이다.</p>
+
+          <p><code>ANALYZE</code>는 테이블 통계를 갱신한다. 쿼리 플래너가 정확한 실행 계획을 세우려면 최신 통계가 필요하다. 100만 건을 한 번에 넣으면 자동 ANALYZE가 아직 동작하지 않았을 수 있으므로 명시적으로 실행한다.</p>
+
+          <h2>벤치마크 시나리오 설계</h2>
+
+          <h3>변수와 상수</h3>
+
+          <p>벤치마크에서 측정하고 싶은 것(변수)과 고정할 것(상수)을 명확히 구분한다.</p>
+
+          <table>
+          <thead>
+          <tr><th>구분</th><th>항목</th><th>설정</th></tr>
+          </thead>
+          <tbody>
+          <tr><td>변수</td><td>조회 방식</td><td>N+1, 배치, Elasticsearch</td></tr>
+          <tr><td>상수</td><td>페이지 크기</td><td>20건</td></tr>
+          <tr><td>상수</td><td>총 데이터</td><td>1,000,000건</td></tr>
+          <tr><td>상수</td><td>정렬 기준</td><td>createdAt DESC</td></tr>
+          <tr><td>상수</td><td>필터</td><td>없음 (전체 조회)</td></tr>
+          <tr><td>상수</td><td>캐시</td><td>비활성화</td></tr>
+          </tbody>
+          </table>
+
+          <p>조회 방식만 바꾸고 나머지는 모두 동일하게 유지한다. 캐시를 비활성화하는 이유는, 캐시가 켜져 있으면 두 번째 반복부터 캐시 히트로 인해 쿼리 성능 차이가 가려지기 때문이다.</p>
+
+          <h3>페이지 크기별 스케일링</h3>
+
+          <p>추가 시나리오로 페이지 크기를 바꿔가며 N+1과 배치의 차이가 어떻게 변하는지 확인할 수 있다.</p>
+
+<pre><code class="language-java">@Param({"10", "20", "50", "100"})
+private int pageSize;</code></pre>
+          <p>JMH의 <code>@Param</code>을 사용하면 여러 값을 자동으로 조합해서 벤치마크를 실행한다. 페이지 크기가 커질수록 N+1의 쿼리 수가 선형으로 증가하므로, 배치와의 차이가 더 극적으로 드러난다.</p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">@Param 조합 폭발</div>
+            <p><code>@Param</code>이 여러 개이면 모든 조합을 실행한다. 4개 페이지 크기 × 3개 조회 방식 × (워밍업 + 측정) × 2 Fork = 수 시간이 걸릴 수 있다. 처음에는 파라미터를 최소화하고, 필요한 것만 추가한다.</p>
+          </div>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">JPA 엔티티로 대량 시딩</div>
+            <p><code>feedRepository.saveAll(millionFeeds)</code>는 영속성 컨텍스트가 100만 개 엔티티를 관리하면서 OOM이 발생한다. <code>entityManager.clear()</code>로 주기적으로 비워도, 더티 체킹과 flush 오버헤드 때문에 JDBC 배치 대비 5~10배 느리다.</p>
+            <p>[!WARNING] FK 순서 무시</p>
+            <p>Feed를 넣기 전에 FeedLike를 넣으면 FK 제약 조건 위반으로 실패한다. DDL에 FK가 없더라도, 조회 쿼리에서 JOIN이 빈 결과를 반환해 벤치마크가 비현실적인 수치를 보여줄 수 있다.</p>
+            <p>[!WARNING] 시딩 데이터와 스키마 불일치</p>
+            <p>JSONB 컬럼에 넣는 JSON의 키 이름이 엔티티의 <code>@JsonProperty</code>와 다르면, <code>jsonb_extract_path_text</code>나 Hibernate 매핑에서 null이 반환된다. 프로덕션 코드의 직렬화 결과를 확인하고 동일한 형태로 시딩한다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#성능테스트</span>
+          <span>#데이터시딩</span>
+          <span>#JDBC</span>
+          <span>#벤치마크설계</span>
+          <span>#대량데이터</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="jmh-2-testcontainers.html">&larr; 이전 글</a>
+          <a href="jmh-4-result-analysis.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

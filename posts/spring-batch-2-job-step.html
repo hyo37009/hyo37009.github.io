@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Spring Batch] 2. Job과 Step 구조 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[Spring Batch] 2. Job과 Step 구조</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">Spring Batch (2/8)</div>
+            <p>이전 편: <a href="spring-batch-1-what-is-batch.html">[Spring Batch] 1. 배치 처리란 무엇인가</a></p>
+            <p>다음 편: <a href="spring-batch-3-chunk.html">[Spring Batch] 3. Chunk 기반 처리</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">Spring Batch 가이드 시리즈</div>
+            <p><strong>01 배치 기초</strong></p>
+            <p>- <a href="spring-batch-1-what-is-batch.html">배치 처리란 무엇인가</a></p>
+            <p>- <mark>Job과 Step 구조</mark> ← 현재 편</p>
+            <p><strong>02 Chunk 처리</strong></p>
+            <p>- <a href="spring-batch-3-chunk.html">Chunk 기반 처리</a></p>
+            <p>- <a href="spring-batch-4-readers-writers.html">다양한 Reader와 Writer</a></p>
+            <p><strong>03 실행 제어</strong></p>
+            <p>- <a href="spring-batch-5-flow.html">실행 제어와 흐름</a></p>
+            <p>- <a href="spring-batch-6-retry-skip.html">재시도와 건너뛰기</a></p>
+            <p><strong>04 운영과 면접</strong></p>
+            <p>- <a href="spring-batch-7-scheduling.html">스케줄링과 운영</a></p>
+            <p>- <a href="spring-batch-8-interview.html">면접 대비</a></p>
+          </div>
+
+          <p><a href="spring-batch-1-what-is-batch.html">이전 편</a>에서 배치 처리의 개념과 Spring Batch의 전체 아키텍처를 살펴봤다. 이제 Spring Batch의 가장 기본적인 구성 단위인 Job과 Step을 파고들어보자. 이 두 개념을 이해하면 Spring Batch의 절반은 안 셈이다.</p>
+
+          <h2>Job — 배치 작업의 최상위 단위</h2>
+
+          <p>Job은 <mark>하나의 완전한 배치 작업</mark>을 정의한다. "월말 정산 Job", "일일 통계 Job"처럼 독립적으로 실행 가능한 배치 작업 하나가 하나의 Job이다.</p>
+
+          <p>Job 자체는 실행 로직을 가지고 있지 않다. 내부에 하나 이상의 Step을 포함하며, Step의 실행 순서와 흐름을 정의하는 <mark>컨테이너</mark> 역할을 한다.</p>
+
+<div class="mermaid">
+flowchart TD
+    subgraph Job["정산 Job"]
+        direction TB
+        S1["Step 1<br/>주문 데이터 조회"] --> S2["Step 2<br/>정산 금액 계산"]
+        S2 --> S3["Step 3<br/>결과 저장 및 알림"]
+    end
+
+    style Job fill:#E8F4F8,stroke:#2196F3
+    style S1 fill:#E8F8E8,stroke:#4CAF50
+    style S2 fill:#E8F8E8,stroke:#4CAF50
+    style S3 fill:#E8F8E8,stroke:#4CAF50
+</div>
+          <p>Job을 정의하는 코드는 다음과 같다.</p>
+
+<pre><code class="language-java">@Configuration
+public class SettlementJobConfig {
+
+    @Bean
+    public Job settlementJob(JobRepository jobRepository,
+                             Step fetchOrdersStep,
+                             Step calculateStep,
+                             Step notifyStep) {
+        return new JobBuilder("settlementJob", jobRepository)
+                .start(fetchOrdersStep)
+                .next(calculateStep)
+                .next(notifyStep)
+                .build();
+    }
+}</code></pre>
+          <p><code>JobBuilder</code>로 Job의 이름을 지정하고, <code>start()</code>와 <code>next()</code>로 Step의 실행 순서를 정의한다. 이 Job을 실행하면 Step 1 → Step 2 → Step 3 순서대로 진행된다.</p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">Job 이름은 고유해야 한다</div>
+            <p>Job 이름은 메타데이터 테이블에서 Job을 식별하는 키다. 같은 이름의 Job이 여러 개 등록되면 충돌이 발생한다. 프로젝트 내에서 <mark>Job 이름의 유일성</mark>을 보장해야 한다.</p>
+          </div>
+
+          <h2>Step — 작업의 실행 단위</h2>
+
+          <p>Step은 <mark>Job 내에서 실제로 작업을 수행하는 단위</mark>다. 데이터를 읽거나, 가공하거나, 저장하는 로직이 Step 안에 들어간다.</p>
+
+          <p>Step은 두 가지 모델 중 하나를 선택한다.</p>
+
+<div class="mermaid">
+flowchart TD
+    Step{"Step"} --> Chunk["Chunk 모델"]
+    Step --> Tasklet["Tasklet 모델"]
+
+    Chunk --> CD["Reader → Processor → Writer<br/>대량 데이터 처리에 적합"]
+    Tasklet --> TD2["단일 작업을 한 번 실행<br/>간단한 작업에 적합"]
+
+    style Chunk fill:#E8F8E8,stroke:#4CAF50
+    style Tasklet fill:#FFF3E0,stroke:#FF9800
+</div>
+          <h4>Chunk 모델</h4>
+
+          <p>데이터를 <mark>일정 크기(chunk)로 나눠서 반복 처리</mark>하는 모델이다. Reader가 데이터를 읽고, Processor가 가공하고, Writer가 저장한다. 대량 데이터 처리의 핵심 모델이다. 자세한 내용은 <a href="spring-batch-3-chunk.html">Chunk 기반 처리</a> 편에서 다룬다.</p>
+
+<pre><code class="language-java">@Bean
+public Step calculateStep(JobRepository jobRepository,
+                           PlatformTransactionManager transactionManager) {
+    return new StepBuilder("calculateStep", jobRepository)
+            .&lt;Order, Settlement&gt;chunk(1000, transactionManager)
+            .reader(orderReader())
+            .processor(settlementProcessor())
+            .writer(settlementWriter())
+            .build();
+}</code></pre>
+          <p><code>chunk(1000)</code>은 1,000건씩 읽어서 처리한다는 뜻이다. 10만 건이면 100번 반복한다.</p>
+
+          <h4>Tasklet 모델</h4>
+
+          <p><mark>단일 작업을 한 번 실행</mark>하는 모델이다. chunk로 나눌 필요 없는 간단한 작업에 적합하다.</p>
+
+<pre><code class="language-java">@Bean
+public Step cleanupStep(JobRepository jobRepository,
+                         PlatformTransactionManager transactionManager) {
+    return new StepBuilder("cleanupStep", jobRepository)
+            .tasklet((contribution, chunkContext) -&gt; {
+                tempFileRepository.deleteExpired();
+                return RepeatStatus.FINISHED;
+            }, transactionManager)
+            .build();
+}</code></pre>
+          <p><code>RepeatStatus.FINISHED</code>를 반환하면 작업이 완료된 것이다. <code>RepeatStatus.CONTINUABLE</code>을 반환하면 같은 Tasklet을 다시 실행한다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">Chunk vs Tasklet 선택 기준</div>
+            <p>- 데이터를 건 by 건으로 읽고 가공해야 한다 → <strong>Chunk</strong></p>
+            <p>- SQL 하나로 끝나는 단순 작업이다 → <strong>Tasklet</strong></p>
+            <p>- 파일 삭제, 테이블 truncate 같은 단발성 작업이다 → <strong>Tasklet</strong></p>
+            <p>- 외부 API를 한 번 호출하면 되는 작업이다 → <strong>Tasklet</strong></p>
+            <p>대부분의 데이터 처리 작업은 Chunk, 나머지 잡일은 Tasklet이라고 생각하면 된다.</p>
+          </div>
+
+          <h2>실행 단위의 계층 구조</h2>
+
+          <p>Spring Batch에서 가장 혼동하기 쉬운 개념이 JobInstance, JobExecution, StepExecution의 관계다. 이 셋을 정확히 이해해야 "재시작"이 어떻게 가능한지 알 수 있다.</p>
+
+<div class="mermaid">
+flowchart TD
+    JI["JobInstance<br/>'정산 Job + 2024-01-15'"]
+    JE1["JobExecution #1<br/>FAILED (에러 발생)"]
+    JE2["JobExecution #2<br/>COMPLETED (재시작 성공)"]
+
+    JI --> JE1
+    JI --> JE2
+
+    SE1["StepExecution #1<br/>Step 1: COMPLETED"]
+    SE2["StepExecution #2<br/>Step 2: FAILED"]
+    SE3["StepExecution #3<br/>Step 2: COMPLETED (재시작)"]
+    SE4["StepExecution #4<br/>Step 3: COMPLETED"]
+
+    JE1 --> SE1
+    JE1 --> SE2
+    JE2 --> SE3
+    JE2 --> SE4
+
+    style JI fill:#E8F4F8,stroke:#2196F3
+    style JE1 fill:#FFE6E6,stroke:#F44336
+    style JE2 fill:#E8F8E8,stroke:#4CAF50
+    style SE2 fill:#FFE6E6,stroke:#F44336
+</div>
+          <h4>JobInstance</h4>
+
+          <p><mark>Job + JobParameters의 조합</mark>으로 식별되는 논리적 실행 단위다.</p>
+
+          <p>"정산 Job"을 2024-01-15 파라미터로 실행하면 하나의 JobInstance가 생긴다. 같은 파라미터로 이미 성공한 JobInstance가 있으면, 같은 파라미터로 다시 실행할 수 없다.</p>
+
+          <p>비유하자면 JobInstance는 "과제"다. "1월 15일자 정산 과제"라는 하나의 과제가 주어진 것이다.</p>
+
+          <h4>JobExecution</h4>
+
+          <p>JobInstance의 <mark>실제 실행 시도</mark> 하나를 나타낸다. 같은 JobInstance에 대해 여러 번 실행을 시도할 수 있다.</p>
+
+          <p>1월 15일 정산을 돌렸는데 Step 2에서 실패했다. 이게 첫 번째 JobExecution이다. 문제를 수정하고 다시 돌리면 두 번째 JobExecution이 생긴다. 같은 "과제"에 대한 두 번째 "시도"인 셈이다.</p>
+
+          <p>JobExecution은 다음 상태를 가진다.</p>
+
+<div class="mermaid">
+stateDiagram-v2
+    [*] --> STARTING
+    STARTING --> STARTED
+    STARTED --> COMPLETED : 모든 Step 성공
+    STARTED --> FAILED : Step 실패
+    STARTED --> STOPPED : 중단 요청
+    FAILED --> STARTING : 재시작
+    STOPPED --> STARTING : 재시작
+    COMPLETED --> [*]
+</div>
+          <ul>
+            <li><strong>COMPLETED</strong> : 성공적으로 완료. 같은 파라미터로 다시 실행 불가.</li>
+            <li><strong>FAILED</strong> : 실패. 재시작 가능.</li>
+            <li><strong>STOPPED</strong> : 사용자에 의해 중단. 재시작 가능.</li>
+          </ul>
+
+          <h4>StepExecution</h4>
+
+          <p>Step의 <mark>실제 실행 시도</mark> 하나를 나타낸다. 각 StepExecution에는 읽은 건수, 쓴 건수, 건너뛴 건수 등의 통계가 기록된다.</p>
+
+<pre><code class="language-java">// StepExecution이 기록하는 정보
+readCount     // 읽은 건수
+writeCount    // 쓴 건수
+commitCount   // 커밋 횟수
+skipCount     // 건너뛴 건수
+rollbackCount // 롤백 횟수
+startTime     // 시작 시간
+endTime       // 종료 시간
+status        // 상태 (COMPLETED, FAILED 등)</code></pre>
+          <div class="callout callout-tip">
+            <div class="callout-title">재시작의 핵심 원리</div>
+            <p>재시작 시 Spring Batch는 메타데이터를 조회해서 <mark>이미 COMPLETED인 Step은 건너뛰고, FAILED인 Step부터 다시 실행</mark>한다. 그래서 메타데이터 테이블이 중요한 것이다. 이 테이블이 없으면 "어디서 실패했는지"를 알 수 없다.</p>
+          </div>
+
+          <h2>JobParameters</h2>
+
+          <p>JobParameters는 <mark>Job 실행 시 전달하는 파라미터</mark>다. 같은 Job이라도 파라미터가 다르면 다른 JobInstance로 취급된다.</p>
+
+<pre><code class="language-java">@Bean
+public Job settlementJob(JobRepository jobRepository, Step calculateStep) {
+    return new JobBuilder("settlementJob", jobRepository)
+            .start(calculateStep)
+            .build();
+}</code></pre>
+          <p>실행 시 파라미터를 전달한다.</p>
+
+<pre><code class="language-java">JobParameters params = new JobParametersBuilder()
+        .addString("targetDate", "2024-01-15")
+        .addLong("version", 1L)
+        .toJobParameters();
+
+jobLauncher.run(settlementJob, params);</code></pre>
+          <p>Step 내부에서 파라미터를 꺼내 쓸 수 있다.</p>
+
+<pre><code class="language-java">@Bean
+@StepScope
+public ItemReader&lt;Order&gt; orderReader(
+        @Value("#{jobParameters['targetDate']}") String targetDate) {
+    // targetDate를 사용해서 해당 날짜의 주문만 조회
+    return new JpaPagingItemReaderBuilder&lt;Order&gt;()
+            .queryString("SELECT o FROM Order o WHERE o.orderDate = :date")
+            .parameterValues(Map.of("date", targetDate))
+            .build();
+}</code></pre>
+          <p><code>@StepScope</code>와 <code>@Value("#{jobParameters['targetDate']}")</code>의 조합으로 파라미터를 주입받는다. <code>@StepScope</code>는 Step이 실행될 때 빈을 생성하므로, 실행 시점의 파라미터 값을 사용할 수 있다.</p>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">@StepScope 없이 jobParameters를 주입받으면 안 된다</div>
+            <p><code>@StepScope</code> 없이 <code>@Value("#{jobParameters[...]}")</code>를 사용하면, 빈이 애플리케이션 시작 시 생성되기 때문에 JobParameters가 아직 없는 상태에서 주입을 시도한다. <mark>반드시 <code>@StepScope</code>를 함께 사용</mark>해야 한다.</p>
+          </div>
+
+          <h2>JobRepository와 메타데이터 테이블</h2>
+
+          <p>JobRepository는 <mark>Job과 Step의 실행 이력을 DB에 저장하고 조회</mark>하는 컴포넌트다. 재시작, 실행 이력 조회, 중복 실행 방지의 핵심이다.</p>
+
+          <p>Spring Batch가 자동으로 생성하는 메타데이터 테이블은 다음과 같다.</p>
+
+          <table>
+          <thead>
+          <tr><th>테이블</th><th>역할</th></tr>
+          </thead>
+          <tbody>
+          <tr><td><code>BATCH_JOB_INSTANCE</code></td><td>JobInstance 정보 (Job 이름 + 파라미터 해시)</td></tr>
+          <tr><td><code>BATCH_JOB_EXECUTION</code></td><td>실행 시도별 상태, 시작/종료 시간</td></tr>
+          <tr><td><code>BATCH_JOB_EXECUTION_PARAMS</code></td><td>실행 시 전달된 파라미터</td></tr>
+          <tr><td><code>BATCH_STEP_EXECUTION</code></td><td>Step별 실행 상태, 읽기/쓰기 건수</td></tr>
+          <tr><td><code>BATCH_STEP_EXECUTION_CONTEXT</code></td><td>Step 실행 중 공유되는 컨텍스트 데이터</td></tr>
+          <tr><td><code>BATCH_JOB_EXECUTION_CONTEXT</code></td><td>Job 실행 중 공유되는 컨텍스트 데이터</td></tr>
+          </tbody>
+          </table>
+
+          <p>개발자가 이 테이블을 직접 조회하거나 조작할 일은 거의 없다. Spring Batch가 내부적으로 관리한다. 하지만 <mark>이 테이블이 어떤 역할을 하는지</mark>는 알고 있어야 재시작이나 실패 분석 시 도움이 된다.</p>
+
+          <h2>JobLauncher</h2>
+
+          <p>JobLauncher는 <mark>Job을 실행하는 진입점</mark>이다. Job과 JobParameters를 받아서 실행한다.</p>
+
+<pre><code class="language-java">@Service
+@RequiredArgsConstructor
+public class BatchScheduler {
+
+    private final JobLauncher jobLauncher;
+    private final Job settlementJob;
+
+    public void runSettlement(String targetDate) {
+        JobParameters params = new JobParametersBuilder()
+                .addString("targetDate", targetDate)
+                .addLong("timestamp", System.currentTimeMillis())
+                .toJobParameters();
+
+        jobLauncher.run(settlementJob, params);
+    }
+}</code></pre>
+          <p><code>timestamp</code>를 파라미터에 추가하면, 같은 <code>targetDate</code>로 여러 번 실행할 수 있다. 파라미터 조합이 달라지면 다른 JobInstance로 취급되기 때문이다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">동기 vs 비동기 실행</div>
+            <p>기본 <code>JobLauncher</code>는 <mark>동기 실행</mark>이다. <code>run()</code> 메서드가 Job이 완료될 때까지 블로킹된다. 비동기로 실행하고 싶다면 <code>TaskExecutor</code>를 설정해야 한다.</p>
+            <p>```java</p>
+            <p>@Bean</p>
+            <p>public JobLauncher asyncJobLauncher(JobRepository jobRepository) {</p>
+            <p>var launcher = new TaskExecutorJobLauncher();</p>
+            <p>launcher.setJobRepository(jobRepository);</p>
+            <p>launcher.setTaskExecutor(new SimpleAsyncTaskExecutor());</p>
+            <p>return launcher;</p>
+            <p>}</p>
+            <p>```</p>
+          </div>
+
+          <h2>전체 실행 흐름</h2>
+
+          <p>지금까지 배운 개념들이 실제로 어떻게 동작하는지 전체 흐름을 정리해보자.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant Scheduler as 스케줄러
+    participant Launcher as JobLauncher
+    participant Repo as JobRepository
+    participant Job as Job
+    participant Step as Step
+
+    Scheduler->>Launcher: run(Job, JobParameters)
+
+    rect rgb(240, 248, 255)
+        Note over Launcher,Repo: 실행 준비
+        Launcher->>Repo: JobInstance 조회/생성
+        Launcher->>Repo: JobExecution 생성
+    end
+
+    Launcher->>Job: execute()
+
+    rect rgb(232, 248, 232)
+        Note over Job,Step: Step 순차 실행
+        Job->>Step: Step 1 실행
+        Step->>Repo: StepExecution 기록
+        Step-->>Job: COMPLETED
+
+        Job->>Step: Step 2 실행
+        Step->>Repo: StepExecution 기록
+        Step-->>Job: COMPLETED
+    end
+
+    Job-->>Launcher: COMPLETED
+    Launcher->>Repo: JobExecution 상태 갱신
+</div>
+          <ol>
+            <li>스케줄러가 <code>JobLauncher.run()</code>을 호출한다</li>
+            <li>JobLauncher가 JobRepository에서 이전 실행 이력을 확인한다</li>
+            <li>새로운 JobExecution을 생성하고 Job을 실행한다</li>
+            <li>Job은 정의된 순서대로 Step을 실행한다</li>
+            <li>각 Step의 실행 결과가 JobRepository에 기록된다</li>
+            <li>모든 Step이 완료되면 Job의 상태가 COMPLETED로 갱신된다</li>
+          </ol>
+
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">같은 파라미터로 성공한 Job을 다시 실행하려는 시도</div>
+            <p>이미 COMPLETED 상태인 JobInstance를 같은 파라미터로 다시 실행하면 <code>JobInstanceAlreadyCompleteException</code>이 발생한다. 다시 실행하려면 <mark>파라미터를 바꾸거나</mark>, <code>timestamp</code> 같은 유니크 값을 추가해야 한다. 또는 <code>allowStartIfComplete(true)</code> 옵션을 Step에 설정할 수 있다.</p>
+            <p>[!DANGER] Step 이름을 중복으로 지정하기</p>
+            <p>같은 Job 안에서 <mark>Step 이름이 중복되면</mark> 메타데이터 테이블에서 Step을 구분할 수 없다. 재시작 시 어떤 Step이 실패했는지 판별이 불가능해진다. Step 이름은 Job 내에서 반드시 고유해야 한다.</p>
+            <p>[!DANGER] JobParameters에 큰 객체를 넣기</p>
+            <p>JobParameters는 <mark>메타데이터 테이블에 직렬화되어 저장</mark>된다. 큰 리스트나 복잡한 객체를 넣으면 DB 컬럼 크기 제한에 걸리거나 성능이 저하된다. 파라미터는 날짜, ID, 파일 경로 같은 단순 값만 넣고, 실제 데이터는 Reader에서 조회하라.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#SpringBatch</span>
+          <span>#Job</span>
+          <span>#Step</span>
+          <span>#JobInstance</span>
+          <span>#JobExecution</span>
+          <span>#JobParameters</span>
+          <span>#Tasklet</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="spring-batch-1-what-is-batch.html">&larr; 이전 글</a>
+          <a href="spring-batch-3-chunk.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>

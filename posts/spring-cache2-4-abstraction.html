@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[캐시 가이드] 4. Spring Cache 추상화 - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../themes/nbuntu/theme.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="../pages/nbuntu.html" class="active">nbuntu</a>
+      <a href="../pages/knitting.html">뜨개 공방</a>
+      <a href="../pages/guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <div class="profile-img">사진 준비중</div>
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+
+        <h1 class="page-header">[캐시 가이드] 4. Spring Cache 추상화</h1>
+        <div class="post-meta">
+          <span class="meta-category">nbuntu</span>
+          2026.05.31
+        </div>
+
+        <div class="post-content">
+
+          <div class="callout callout-info">
+            <div class="callout-title">스프링 캐시 심화 (4/11)</div>
+            <p>이전 편: <a href="spring-cache2-3-patterns.html">[캐시 가이드] 3. 캐시 전략과 패턴</a></p>
+            <p>다음 편: <a href="spring-cache2-5-annotations.html">[캐시 가이드] 5. 캐시 어노테이션 완전 정복</a></p>
+          </div>
+
+
+
+          <div class="callout callout-info">
+            <div class="callout-title">캐시 가이드 시리즈</div>
+            <p><strong>01 캐시 기초</strong></p>
+            <p>- <a href="spring-cache2-1-concept.html">캐시의 개념과 동작 원리</a></p>
+            <p>- <a href="spring-cache2-2-layers.html">캐시 계층과 유형</a></p>
+            <p>- <a href="spring-cache2-3-patterns.html">캐시 전략과 패턴</a></p>
+            <p><strong>02 Spring Cache 핵심</strong></p>
+            <p>- <mark>Spring Cache 추상화</mark> ← 현재 편</p>
+            <p>- <a href="spring-cache2-5-annotations.html">캐시 어노테이션 완전 정복</a></p>
+            <p>- <a href="spring-cache2-6-key-strategy.html">캐시 키 전략과 조건부 캐싱</a></p>
+            <p><strong>03 캐시 저장소</strong></p>
+            <p>- <a href="spring-cache2-7-caffeine.html">CacheManager와 Caffeine</a></p>
+            <p>- <a href="spring-cache2-8-redis.html">Redis 분산 캐시</a></p>
+            <p><strong>04 실전과 운영</strong></p>
+            <p>- <a href="spring-cache2-9-consistency.html">캐시 일관성과 갱신 전략</a></p>
+            <p>- <a href="spring-cache2-10-antipatterns.html">안티패턴과 트러블슈팅</a></p>
+            <p>- <a href="spring-cache2-11-interview.html">면접 대비</a></p>
+          </div>
+
+          <p><a href="spring-cache2-1-concept.html">이전 편</a>에서 캐시의 개념과 동작 원리를 알아봤다. 이제 Spring이 캐시를 어떻게 다루는지 살펴볼 차례다. Spring은 특정 캐시 구현체에 종속되지 않도록 <mark>추상화 계층</mark>을 제공한다. 이 설계 덕분에 캐시 기술을 바꿔도 비즈니스 로직을 수정할 필요가 없다.</p>
+
+          <h2>Spring이 캐시를 추상화하는 이유</h2>
+
+          <p>캐시를 직접 코드에 구현한다고 생각해보자.</p>
+
+<pre><code class="language-java">public WeatherResponse getWeather(String city) {
+    String cacheKey = "weather:" + city;
+
+    // 캐시에서 조회
+    WeatherResponse cached = cacheStore.get(cacheKey);
+    if (cached != null) {
+        return cached;
+    }
+
+    // DB 또는 외부 API 호출
+    WeatherResponse result = weatherApi.fetch(city);
+
+    // 캐시에 저장
+    cacheStore.put(cacheKey, result);
+
+    return result;
+}</code></pre>
+          <p>비즈니스 로직보다 캐시 관련 코드가 더 많다. 게다가 <code>cacheStore</code>가 <code>ConcurrentHashMap</code>이면 나중에 Redis로 바꿀 때 이 코드를 전부 수정해야 한다. 모든 서비스 메서드에 이런 보일러플레이트가 반복된다면 유지보수가 끔찍해진다.</p>
+
+          <p>Spring Cache Abstraction은 이 문제를 해결한다. <mark>캐시 로직을 비즈니스 코드에서 완전히 분리</mark>하는 것이 핵심이다.</p>
+
+<pre><code class="language-java">@Cacheable("weather")
+public WeatherResponse getWeather(String city) {
+    return weatherApi.fetch(city);
+}</code></pre>
+          <p><code>@Cacheable</code> 어노테이션 하나로 동일한 효과를 낸다. 캐시 저장소가 바뀌어도 이 코드는 그대로다.</p>
+
+          <h2>PSA와 캐시 추상화</h2>
+
+          <p>Spring의 캐시 추상화는 PSA의 대표적인 사례다. PSA는 Portable Service Abstraction의 약자로, "이식 가능한 서비스 추상화"를 뜻한다.</p>
+
+          <p>핵심 아이디어는 단순하다. <mark>인터페이스로 기능을 정의하고, 구현체를 갈아끼울 수 있게</mark> 만드는 것이다.</p>
+
+          <p>Spring에서 이미 경험한 PSA 사례가 있다.</p>
+
+          <ul>
+            <li><strong>트랜잭션</strong> : <code>@Transactional</code>을 붙이면 JPA든 JDBC든 트랜잭션이 동작한다. <code>PlatformTransactionManager</code>라는 추상화 덕분이다.</li>
+            <li><strong>데이터 접근</strong> : <code>JpaRepository</code>를 사용하면 Hibernate든 EclipseLink든 코드가 동일하다.</li>
+          </ul>
+
+          <p>캐시도 마찬가지다. <code>CacheManager</code>라는 추상화 뒤에 ConcurrentHashMap, Caffeine, Redis 등 다양한 구현체를 숨긴다.</p>
+
+<div class="mermaid">
+flowchart TB
+    App["@Cacheable / @CacheEvict"]
+    CM["CacheManager 인터페이스"]
+    App --> CM
+    CM --> Impl1["ConcurrentMapCacheManager"]
+    CM --> Impl2["CaffeineCacheManager"]
+    CM --> Impl3["RedisCacheManager"]
+    Impl1 --> S1["ConcurrentHashMap"]
+    Impl2 --> S2["Caffeine"]
+    Impl3 --> S3["Redis Server"]
+</div>
+          <div class="callout callout-tip">
+            <div class="callout-title">PSA의 실질적 이점</div>
+            <p>개발 초기에는 간단한 로컬 캐시로 시작하고, 트래픽이 늘어나면 Redis로 전환하는 일이 흔하다. PSA 덕분에 이 전환이 <mark>설정 변경만으로</mark> 가능하다. 서비스 코드의 <code>@Cacheable</code>은 그대로 둔다.</p>
+          </div>
+
+          <h2>핵심 인터페이스</h2>
+
+          <p>Spring Cache Abstraction은 두 개의 핵심 인터페이스로 구성된다.</p>
+
+<div class="mermaid">
+classDiagram
+    class CacheManager {
+        +getCache(name) Cache
+        +getCacheNames() Collection
+    }
+    class Cache {
+        +getName() String
+        +get(key) ValueWrapper
+        +put(key, value) void
+        +evict(key) void
+        +clear() void
+    }
+    CacheManager "1" --> "*" Cache : 관리
+</div>
+          <h4>CacheManager</h4>
+
+          <p><mark>캐시 저장소를 관리하는 최상위 인터페이스</mark>다. 이름으로 <code>Cache</code> 인스턴스를 가져오는 역할을 한다.</p>
+
+<pre><code class="language-java">public interface CacheManager {
+    Cache getCache(String name);
+    Collection&lt;String&gt; getCacheNames();
+}</code></pre>
+          <p><code>getCache("weather")</code>를 호출하면 "weather"라는 이름의 캐시 영역을 반환한다. 캐시 영역은 논리적으로 분리된 저장 공간이다. 게시글 캐시와 날씨 캐시를 같은 공간에 섞어두면 관리가 어려우니, 이름으로 구분하는 것이다.</p>
+
+          <p>Spring Boot에서 제공하는 주요 CacheManager 구현체는 다음과 같다.</p>
+
+          <ul>
+            <li><strong>ConcurrentMapCacheManager</strong> : JDK의 <code>ConcurrentHashMap</code>을 사용한다. 별도 의존성 없이 바로 쓸 수 있지만, TTL 기능이 없다.</li>
+            <li><strong>CaffeineCacheManager</strong> : Caffeine 라이브러리를 사용한다. TTL, 최대 크기 등 세밀한 제어가 가능하다.</li>
+            <li><strong>RedisCacheManager</strong> : Redis를 캐시 저장소로 사용한다. 분산 환경에 적합하다.</li>
+          </ul>
+
+          <div class="callout callout-warning">
+            <div class="callout-title">CacheManager는 하나만 등록하라</div>
+            <p>여러 CacheManager를 동시에 등록하면 Spring이 어떤 것을 사용할지 결정하지 못해 오류가 발생한다. 두 종류 이상의 캐시 저장소를 함께 쓰고 싶다면 <code>CompositeCacheManager</code>를 사용하거나, <code>@Cacheable</code>의 <code>cacheManager</code> 속성으로 명시적으로 지정해야 한다.</p>
+          </div>
+
+          <h4>Cache</h4>
+
+          <p><mark>실제 캐시 연산을 수행하는 인터페이스</mark>다. 키-값 쌍을 저장하고 조회하고 삭제한다.</p>
+
+<pre><code class="language-java">public interface Cache {
+    String getName();
+    Object getNativeCache();
+    ValueWrapper get(Object key);
+    void put(Object key, Object value);
+    void evict(Object key);
+    void clear();
+}</code></pre>
+          <p>개발자가 이 인터페이스를 직접 호출할 일은 거의 없다. <code>@Cacheable</code> 같은 어노테이션을 사용하면 Spring이 내부적으로 이 인터페이스의 메서드를 호출한다. 하지만 <mark>어노테이션이 내부에서 무엇을 하는지</mark> 알아야 문제가 생겼을 때 디버깅할 수 있다.</p>
+
+          <h2>동작 원리 — AOP 기반 프록시</h2>
+
+          <p>Spring Cache는 AOP를 기반으로 동작한다. AOP는 Aspect-Oriented Programming의 약자로, "관심사를 분리하는 프로그래밍 패러다임"이다.</p>
+
+          <p><code>@Cacheable</code>을 붙인 메서드를 호출하면 실제로는 <mark>프록시 객체</mark>가 먼저 호출을 가로챈다.</p>
+
+          <p>전체 흐름은 다음과 같다.</p>
+
+          <ol>
+            <li>클라이언트가 <code>getWeather("서울")</code>을 호출한다</li>
+            <li>Spring이 만든 <mark>프록시 객체</mark>가 호출을 가로챈다</li>
+            <li>프록시가 CacheManager에서 "weather" 캐시를 가져온다</li>
+            <li>캐시에서 키 "서울"로 조회한다</li>
+            <li>Cache Hit → 캐시 값을 반환하고 원본 메서드는 실행하지 않는다</li>
+            <li>Cache Miss → 원본 메서드를 실행하고, 결과를 캐시에 저장한 뒤 반환한다</li>
+          </ol>
+
+<div class="mermaid">
+sequenceDiagram
+    participant Caller as 호출자
+    participant Proxy as 프록시 객체
+    participant CM as CacheManager
+    participant Cache as Cache
+    participant Target as 실제 객체
+
+    Caller->>Proxy: getWeather("서울")
+    Proxy->>CM: getCache("weather")
+    CM-->>Proxy: Cache 인스턴스
+    Proxy->>Cache: get("서울")
+    alt Cache Hit
+        Cache-->>Proxy: 캐시 값 반환
+        Proxy-->>Caller: 캐시 값 반환
+    else Cache Miss
+        Cache-->>Proxy: null
+        Proxy->>Target: getWeather("서울")
+        Target-->>Proxy: 결과
+        Proxy->>Cache: put("서울", 결과)
+        Proxy-->>Caller: 결과 반환
+    end
+</div>
+          <div class="callout callout-warning">
+            <div class="callout-title">내부 호출은 캐시가 동작하지 않는다</div>
+            <p>같은 클래스 내에서 <code>this.getWeather("서울")</code>처럼 호출하면 프록시를 거치지 않으므로 캐시가 동작하지 않는다. 이것은 Spring AOP의 근본적인 한계이며, 캐시뿐 아니라 <code>@Transactional</code>도 동일한 문제를 가진다. 이 문제의 원인과 해결 방법은 <a href="spring-cache2-10-antipatterns.html">안티패턴과 트러블슈팅</a> 편에서 자세히 다룬다.</p>
+          </div>
+
+          <p>프록시 기반이라는 점을 기억해두자. 이 구조를 이해하면 "왜 캐시가 안 먹히지?"라는 문제의 대부분을 설명할 수 있다.</p>
+
+          <h2>Spring Boot에서 캐시 활성화하기</h2>
+
+          <p>Spring Boot에서 캐시를 사용하려면 두 가지가 필요하다.</p>
+
+          <h4>의존성 추가</h4>
+
+<pre><code class="language-groovy">// build.gradle
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-cache'
+}</code></pre>
+          <p><code>spring-boot-starter-cache</code>는 Spring Cache Abstraction의 핵심 모듈을 포함한다. 별도의 캐시 구현체를 추가하지 않으면 <code>ConcurrentMapCacheManager</code>가 기본으로 사용된다.</p>
+
+          <h4>@EnableCaching 설정</h4>
+
+<pre><code class="language-java">@Configuration
+@EnableCaching
+public class CacheConfig {
+}</code></pre>
+          <p><code>@EnableCaching</code>은 Spring에게 "캐시 어노테이션을 처리할 프록시를 만들어라"라고 알려주는 스위치다. 이 어노테이션이 없으면 <code>@Cacheable</code>을 아무리 붙여도 캐시가 동작하지 않는다.</p>
+
+          <div class="callout callout-tip">
+            <div class="callout-title">@SpringBootApplication에 직접 붙여도 된다</div>
+            <p><code>@EnableCaching</code>은 반드시 별도의 설정 클래스에 있을 필요는 없다. 메인 클래스의 <code>@SpringBootApplication</code> 위에 붙여도 동일하게 동작한다. 다만, 캐시 관련 설정이 늘어나면 별도의 <code>CacheConfig</code> 클래스로 분리하는 편이 관리하기 좋다.</p>
+          </div>
+
+          <h4>최소 동작 예제</h4>
+
+          <p>의존성과 <code>@EnableCaching</code>만 추가하면 바로 캐시를 사용할 수 있다.</p>
+
+<pre><code class="language-java">@Service
+public class WeatherService {
+
+    @Cacheable("weather")
+    public WeatherResponse getWeather(String city) {
+        // 이 메서드는 같은 city로 두 번째 호출부터 실행되지 않는다
+        return weatherApi.fetch(city);
+    }
+}</code></pre>
+          <p>첫 번째 호출에서 <code>weatherApi.fetch("서울")</code>이 실행되고, 결과가 "weather"라는 캐시 영역에 저장된다. 두 번째 호출부터는 캐시에서 바로 반환되므로 <code>weatherApi.fetch</code>는 다시 실행되지 않는다.</p>
+
+          <h2>캐시 어노테이션 한눈에 보기</h2>
+
+          <p>Spring Cache는 네 가지 핵심 어노테이션을 제공한다. 각각의 역할을 간략히 소개하고, 상세한 사용법은 <a href="spring-cache2-5-annotations.html">다음 편</a>에서 다룬다.</p>
+
+          <ul>
+            <li><strong>@Cacheable</strong> : 캐시 조회 → Hit이면 반환, Miss면 실행 후 캐시에 저장</li>
+            <li><strong>@CachePut</strong> : 항상 메서드를 실행하고 결과를 캐시에 저장 (갱신 용도)</li>
+            <li><strong>@CacheEvict</strong> : 캐시에서 항목을 제거</li>
+            <li><strong>@Caching</strong> : 위 세 가지를 하나의 메서드에 조합</li>
+          </ul>
+
+          <p>한 가지 더 있다. <code>@CacheConfig</code>는 클래스 레벨에서 캐시 이름 등 공통 설정을 지정한다. 메서드마다 같은 캐시 이름을 반복 작성하지 않아도 된다.</p>
+
+<div class="mermaid">
+flowchart LR
+    Read["읽기 요청"] --> Cacheable["@Cacheable"]
+    Cacheable -->|Hit| Return["캐시 반환"]
+    Cacheable -->|Miss| Execute["메서드 실행 → 캐시 저장"]
+
+    Update["갱신 요청"] --> CachePut["@CachePut"]
+    CachePut --> Always["항상 실행 → 캐시 저장"]
+
+    Delete["삭제 요청"] --> CacheEvict["@CacheEvict"]
+    CacheEvict --> Remove["캐시 제거"]
+</div>
+          <h2>자주 하는 실수</h2>
+
+          <div class="callout callout-info">
+            <div class="callout-title">@EnableCaching을 빼먹고 캐시가 안 된다고 당황하기</div>
+            <p>가장 흔한 실수다. <code>@Cacheable</code>을 붙였는데 캐시가 전혀 동작하지 않는다면 <mark>가장 먼저 <code>@EnableCaching</code>이 있는지</mark> 확인하라. 이 어노테이션이 없으면 Spring은 캐시 프록시를 생성하지 않으므로 모든 캐시 어노테이션이 무시된다.</p>
+            <p>[!DANGER] 캐시 구현체 없이 운영 환경에 배포하기</p>
+            <p><code>spring-boot-starter-cache</code>만 추가하면 기본적으로 <code>ConcurrentMapCacheManager</code>가 사용된다. 개발 환경에서는 문제없지만, <mark>TTL이 없고 크기 제한도 없으므로</mark> 운영 환경에서는 메모리 누수가 발생할 수 있다. 반드시 Caffeine이나 Redis 같은 전용 캐시 구현체를 함께 추가해야 한다.</p>
+            <p>[!DANGER] private 메서드에 @Cacheable 붙이기</p>
+            <p>Spring AOP는 프록시 기반이므로 <mark>public 메서드에서만 동작</mark>한다. private이나 protected 메서드에 <code>@Cacheable</code>을 붙이면 아무런 효과가 없다. 컴파일 에러도 없고 런타임 예외도 없기 때문에 발견하기 어렵다.</p>
+          </div>
+
+          <hr>
+
+        </div>
+
+        <div class="post-tags">
+          <span>#캐시가이드</span>
+          <span>#SpringCache</span>
+          <span>#PSA</span>
+          <span>#AOP</span>
+          <span>#EnableCaching</span>
+          <span>#CacheManager</span>
+        </div>
+
+        <div class="post-nav">
+          <a href="spring-cache2-3-patterns.html">&larr; 이전 글</a>
+          <a href="spring-cache2-5-annotations.html">다음 글 &rarr;</a>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Prism.js -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-kotlin.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+  <script src="../prism-pseudo.js"></script>
+
+  <!-- Mermaid -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'linear' } });</script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+
+  <script src="../script.js"></script>
+</body>
+</html>
