@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>nbh$tash - nbh의 갠홈</title>
+  <link rel="stylesheet" href="../style.css">
+  <style>
+    .stash-box {
+      border: none;
+      background: #ffffff;
+    }
+    .main { padding: 0; }
+
+    .stash-box .tab-bar {
+      background: var(--bg-color);
+      border-bottom: 1px solid var(--border-color);
+      margin-bottom: 0;
+      padding: 5px 8px 0;
+    }
+    .stash-box .tab-btn {
+      font-size: 12px;
+      padding: 5px 14px;
+    }
+    .stash-box .tab-btn.active {
+      background: #ffffff;
+      color: var(--accent);
+      font-weight: bold;
+    }
+
+    .tab-empty {
+      padding: 40px 20px;
+      text-align: center;
+      color: var(--text-light);
+      font-size: 12px;
+      line-height: 2;
+    }
+
+    .stash-entry {
+      border-bottom: 1px solid var(--border-color);
+      padding: 16px 20px;
+    }
+    .stash-entry:last-child { border-bottom: none; }
+    .stash-date {
+      font-size: 10px;
+      color: var(--text-light);
+      margin-bottom: 6px;
+    }
+    .stash-title {
+      font-size: 13px;
+      font-weight: bold;
+      color: var(--text-color);
+      margin-bottom: 6px;
+    }
+    .stash-body {
+      font-size: 12px;
+      color: #555;
+      line-height: 1.7;
+    }
+
+    /* 메모장 */
+    .memo-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      padding: 16px;
+    }
+    .memo-card {
+      background: #fffef0;
+      border: 1px solid #e8e0a0;
+      padding: 12px;
+      font-size: 11px;
+      line-height: 1.7;
+      color: #555;
+      position: relative;
+    }
+    .memo-card::before {
+      content: '';
+      display: block;
+      height: 3px;
+      background: #e0c840;
+      margin: -12px -12px 10px;
+    }
+    .memo-label {
+      font-size: 9px;
+      color: #aaa;
+      text-align: right;
+      margin-top: 8px;
+    }
+
+    /* 잡담 */
+    .chat-bubble {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      padding: 16px;
+    }
+    .bubble {
+      max-width: 70%;
+      background: #e8f4fd;
+      border: 1px solid #b8d4e3;
+      border-radius: 0 10px 10px 10px;
+      padding: 10px 14px;
+      font-size: 12px;
+      line-height: 1.7;
+      color: #333;
+      align-self: flex-start;
+    }
+    .bubble.right {
+      align-self: flex-end;
+      background: #f0fff0;
+      border-color: #a0d4a0;
+      border-radius: 10px 0 10px 10px;
+    }
+    .bubble-meta {
+      font-size: 9px;
+      color: #aaa;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <div class="banner">
+      <div class="banner-title">nbh</div>
+      <div class="banner-subtitle">B급 개발자의 아지트</div>
+    </div>
+
+    <nav class="nav">
+      <a href="../index.html">home</a>
+      <a href="nbuntu.html">nbuntu</a>
+      <a href="stash.html" class="active">nbh$tash</a>
+      <a href="knitting.html">뜨개 공방</a>
+      <a href="guestbook.html">방명록</a>
+    </nav>
+
+    <div class="content">
+
+      <aside class="sidebar">
+        <img class="profile-img" src="../profile.jpg" alt="nbh">
+        <div class="profile-name">nbh</div>
+        <div class="profile-bio">코드를 짜고<br>뜨개질을 합니다</div>
+      </aside>
+
+      <div class="main">
+        <div class="stash-box">
+
+          <div class="tab-bar">
+            <button class="tab-btn active" data-tab="log">작업일지</button>
+            <button class="tab-btn" data-tab="memo">메모장</button>
+            <button class="tab-btn" data-tab="chat">잡담</button>
+          </div>
+
+          <!-- 작업일지 -->
+          <div class="tab-panel active" id="tab-log">
+            <div class="tab-empty">
+              아직 없음.<br>
+              삽질을 안 한 게 아니라 기록을 안 한 것임.
+            </div>
+          </div>
+
+          <!-- 메모장 -->
+          <div class="tab-panel" id="tab-memo">
+            <div class="tab-empty">
+              텅 빔.<br>
+              메모할 게 없는 게 아니라 적기 귀찮은 것임.
+            </div>
+          </div>
+
+          <!-- 잡담 -->
+          <div class="tab-panel" id="tab-chat">
+            <div class="tab-empty">
+              준비 중... 은 아니고<br>
+              그냥 할 말이 없음.
+            </div>
+          </div>
+
+        </div><!-- /stash-box -->
+      </div>
+    </div>
+
+    <footer class="footer">
+      &copy; 2026 nbh &middot; 이 홈페이지는 버그가 아니라 기능입니다
+    </footer>
+
+  </div>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../firebase-config.js"></script>
+  <script src="../script.js"></script>
+
+</body>
+</html>

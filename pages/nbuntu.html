@@ -238,6 +238,7 @@
     <nav class="nav">
       <a href="../index.html">home</a>
       <a href="nbuntu.html" class="active">nbuntu</a>
+      <a href="stash.html">nbh$tash</a>
       <a href="knitting.html">뜨개 공방</a>
       <a href="guestbook.html">방명록</a>
     </nav>
@@ -255,14 +256,14 @@
         <div class="nbuntu-box">
 
           <div class="tab-bar">
-            <button class="tab-btn active" data-tab="lab">연구소</button>
-            <button class="tab-btn" data-tab="log">작업일지</button>
-            <button class="tab-btn" data-tab="memo">메모장</button>
-            <button class="tab-btn" data-tab="chat">잡담</button>
+            <button class="tab-btn active" data-tab="server">서버실</button>
+            <button class="tab-btn" data-tab="training">훈련장</button>
+            <button class="tab-btn" data-tab="machine">기계실</button>
+            <button class="tab-btn" data-tab="stash">창고</button>
           </div>
 
-        <!-- 연구소 -->
-        <div class="tab-panel active" id="tab-lab">
+        <!-- 서버실 -->
+        <div class="tab-panel active" id="tab-server">
           <div class="lab-panel">
 
             <!-- 좌측: 카테고리 탭 -->
@@ -282,34 +283,6 @@
               <button class="lab-cat-tab" data-cat="jwt">
                 JWT
                 <span class="cat-tab-count">7편</span>
-              </button>
-              <button class="lab-cat-tab" data-cat="codingtest">
-                코딩테스트
-                <span class="cat-tab-count">22편</span>
-              </button>
-              <button class="lab-cat-tab" data-cat="perf">
-                성능 테스트
-                <span class="cat-tab-count">9편</span>
-              </button>
-              <button class="lab-cat-tab" data-cat="docker">
-                Docker
-                <span class="cat-tab-count">9편</span>
-              </button>
-              <button class="lab-cat-tab" data-cat="db">
-                DB
-                <span class="cat-tab-count">4편</span>
-              </button>
-              <button class="lab-cat-tab" data-cat="tools">
-                도구
-                <span class="cat-tab-count">2편</span>
-              </button>
-              <button class="lab-cat-tab" data-cat="aws">
-                AWS
-                <span class="cat-tab-count">1편</span>
-              </button>
-              <button class="lab-cat-tab" data-cat="mistakes">
-                자주하는 실수
-                <span class="cat-tab-count">1편</span>
               </button>
             </div>
 
@@ -741,8 +714,17 @@
 
               </div>
 
+                          </div><!-- /lab-content-panel -->
+          </div><!-- /lab-panel -->
+        </div><!-- /tab-server -->
+
+        <!-- 훈련장 -->
+        <div class="tab-panel" id="tab-training">
+          <div class="lab-panel">
+            <div class="lab-content-panel" style="width:100%;border-left:none">
+
               <!-- 코딩테스트 -->
-              <div class="lab-content-section" id="cat-codingtest">
+              <div class="lab-content-section active" id="cat-codingtest">
                 <div class="lab-content-heading">코딩테스트 <span class="hcount">22편</span></div>
 
                 <div class="lab-series">
@@ -799,8 +781,31 @@
 
               </div>
 
+                          </div><!-- /lab-content-panel -->
+          </div><!-- /lab-panel -->
+        </div><!-- /tab-training -->
+
+        <!-- 기계실 -->
+        <div class="tab-panel" id="tab-machine">
+          <div class="lab-panel">
+            <div class="lab-cat-tabs">
+              <button class="lab-cat-tab active" data-cat="perf">
+                성능 테스트
+                <span class="cat-tab-count">9편</span>
+              </button>
+              <button class="lab-cat-tab" data-cat="docker">
+                Docker
+                <span class="cat-tab-count">9편</span>
+              </button>
+              <button class="lab-cat-tab" data-cat="db">
+                DB
+                <span class="cat-tab-count">4편</span>
+              </button>
+            </div>
+            <div class="lab-content-panel">
+
               <!-- 성능 테스트 -->
-              <div class="lab-content-section" id="cat-perf">
+              <div class="lab-content-section active" id="cat-perf">
                 <div class="lab-content-heading">성능 테스트 <span class="hcount">9편</span></div>
 
                 <div class="lab-series">
@@ -869,8 +874,31 @@
 
               </div>
 
+                          </div><!-- /lab-content-panel -->
+          </div><!-- /lab-panel -->
+        </div><!-- /tab-machine -->
+
+        <!-- 창고 -->
+        <div class="tab-panel" id="tab-stash">
+          <div class="lab-panel">
+            <div class="lab-cat-tabs">
+              <button class="lab-cat-tab active" data-cat="tools">
+                도구
+                <span class="cat-tab-count">2편</span>
+              </button>
+              <button class="lab-cat-tab" data-cat="aws">
+                AWS
+                <span class="cat-tab-count">1편</span>
+              </button>
+              <button class="lab-cat-tab" data-cat="mistakes">
+                자주하는 실수
+                <span class="cat-tab-count">1편</span>
+              </button>
+            </div>
+            <div class="lab-content-panel">
+
               <!-- 도구 -->
-              <div class="lab-content-section" id="cat-tools">
+              <div class="lab-content-section active" id="cat-tools">
                 <div class="lab-content-heading">도구 <span class="hcount">2편</span></div>
                 <div class="lab-series">
                   <div class="lab-series-name-col"><div class="lab-series-name">도구</div><span class="lab-series-count">2편</span></div>
@@ -905,28 +933,9 @@
 
             </div><!-- /lab-content-panel -->
           </div><!-- /lab-panel -->
-        </div><!-- /tab-lab -->
+        </div><!-- /tab-stash -->
 
-        <!-- 작업일지 -->
-        <div class="tab-panel" id="tab-log">
-          <div class="tab-empty">
-            아직 없음. 삽질을 안 한 게 아니라 기록을 안 한 것임.
-          </div>
-        </div>
 
-        <!-- 메모장 -->
-        <div class="tab-panel" id="tab-memo">
-          <div class="tab-empty">
-            텅 빔. 메모할 게 없는 게 아니라 적기 귀찮은 것임.
-          </div>
-        </div>
-
-        <!-- 잡담 -->
-        <div class="tab-panel" id="tab-chat">
-          <div class="tab-empty">
-            준비 중... 은 아니고 그냥 할 말이 없음.
-          </div>
-        </div>
 
         </div><!-- /nbuntu-box -->
 
@@ -1019,15 +1028,13 @@
 
   <script>
     (function() {
-      var catTabs = document.querySelectorAll('.lab-cat-tab');
-      var catSections = document.querySelectorAll('.lab-content-section');
-
-      catTabs.forEach(function(tab) {
+      document.querySelectorAll('.lab-cat-tab').forEach(function(tab) {
         tab.addEventListener('click', function() {
-          catTabs.forEach(function(t) { t.classList.remove('active'); });
+          var panel = tab.closest('.lab-panel');
+          panel.querySelectorAll('.lab-cat-tab').forEach(function(t) { t.classList.remove('active'); });
+          panel.querySelectorAll('.lab-content-section').forEach(function(s) { s.classList.remove('active'); });
           tab.classList.add('active');
-          catSections.forEach(function(s) { s.classList.remove('active'); });
-          var target = document.getElementById('cat-' + tab.dataset.cat);
+          var target = panel.querySelector('#cat-' + tab.dataset.cat);
           if (target) target.classList.add('active');
         });
       });
